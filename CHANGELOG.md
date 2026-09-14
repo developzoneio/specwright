@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **`templates/settings.template.json`** (SW-50, commit 3/6) - adds a prominent `_pwsh_recommended`
+  block showing the exact, empirically-verified opt-in to run hooks under PowerShell 7+ (pwsh)
+  instead of the default Windows PowerShell 5.1. Live-tested against a real Claude Code session:
+  Claude Code's hook `"shell": "powershell"` field genuinely launches pwsh (Core), not Windows
+  PowerShell 5.1 (Desktop), and `${HOME}` still expands correctly when `command` is rewritten to
+  `& "${HOME}/.claude/hooks/sd/<hook>.ps1"` alongside it - simply renaming the executable inside
+  `command` without switching to this form would launch pwsh which then launches ANOTHER nested
+  copy of literal `powershell.exe`, doubling process-startup cost instead of avoiding it. The
+  shipped default is unchanged (still Windows PowerShell 5.1, no new dependency), matching
+  README's documented "PowerShell 5.1+" baseline. Also fixes `_note_powershell_on_unix`, which
+  previously and incorrectly implied the PowerShell command lines "work as-is" on Unix pwsh
+  installs (Unix invokes it as `pwsh`, not `powershell`, with no shim by default).
+- **`install/install.ps1`** (SW-50, commit 3/6) - the printed post-install "Hook wiring" guidance
+  now points to `_pwsh_recommended` in `templates/settings.template.json` for the faster option.
 - **`hooks/powershell/spec-gate.ps1`** (SW-50, commit 2/6) - the `file_path`-empty and
   path-does-not-resolve early exits now run before `Get-ProjectConfig` (a disk read), not after,
   so the common case - a tool call with no gate-relevant path - no longer pays for a config-file
