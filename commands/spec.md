@@ -254,8 +254,9 @@ Behavior:
    - Index row matches frontmatter status.
    - Transition history is legal (see "Transition replay" below).
    - Links resolve and are symmetric (see "Link integrity" below).
-   - Task-block content, when `02-tasks.md` exists (see "Task-block checks" below). This is the
-     only check that reads inside an artifact rather than around it.
+   - Task-block content, when `02-tasks.md` exists (see "Task-block checks" below).
+   - Port task-block content, when `02-tasks.md` exists and `type` is `port` (see "Port task-block
+     checks" below).
    - Port-spec table integrity, when `type` is `port` (see "Port-spec checks" below).
    - Close-out hygiene, when `status` is `done` (see "Close-out hygiene checks" below).
 2. Tree-wide checks (run once, only when the target is `--all`):
@@ -298,6 +299,12 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 | `SL054` | Duplicate entry in `linked_specs` | 🟠 WARN |
 | `SL055` | Spec status `done` but `06-verify.md` is missing or records `result: fail` | 🟠 WARN |
 | `SL060` | Task block in `02-tasks.md` has no `Pattern refs` field | 🟠 WARN |
+| `SL061` | Port-spec task's `Pattern refs` citation does not match the snapshot-member-range shape `<path>:<first>-<last>` | 🔴 BLOCK |
+| `SL062` | Citation matches the shape but its path does not start with `04-artifacts/source/` | 🔴 BLOCK |
+| `SL063` | Citation names a path absent from `04-artifacts/source/MANIFEST.md` | 🔴 BLOCK |
+| `SL064` | Citation's line range falls outside the member range(s) `MANIFEST.md` records for that path | 🔴 BLOCK |
+| `SL065` | Port-spec task's `Acceptance` field carries no `Licensed deviations:` line | 🔴 BLOCK |
+| `SL066` | A `Licensed deviations:` list cites a deviation ID absent from the spec's `## Deviation table` | 🔴 BLOCK |
 | `SL070` | Task carries `Revised-by: R<n>` but `01-plan.md` has no matching `## Revisions` entry `R<n>` | 🔴 BLOCK |
 | `SL071` | A `## Revisions` entry `R<n>` names an `Affected task` that does not carry `Revised-by: R<n>` (or does not exist) | 🔴 BLOCK |
 | `SL072` | Revision numbering is non-contiguous, duplicated, or a prior entry was rewritten (append-only violated) | 🔴 BLOCK |
@@ -308,8 +315,11 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 | `SL083` | Path-mapping row whose `Kind` is not `mirror` and whose `Reason` is empty or `-` | 🔴 BLOCK |
 | `SL090` | Status `done`, the spec body names deferred work, and `## Spawned specs` has no data row (or no such section) | 🟡 SUGGEST |
 
-`SL061`-`SL069` are **reserved** for further task-block content rules. Claim from this band rather
-than extending another one - `SL05x` is link integrity and has nothing to do with task content.
+`SL061`-`SL066` are the **port task-block** band - the anti-drift contract every port task must
+carry (a snapshot-member-range `Pattern refs` citation and a licensed-deviation ID list in
+`Acceptance`), checked at validate time instead of only at `/sd:port` Phase 6 execution. `SL067`-
+`SL069` remain **reserved** for further task-block content rules. Claim from this band rather than
+extending another one - `SL05x` is link integrity and has nothing to do with task content.
 
 `SL070`-`SL079` are the **revision-log integrity** band (the `sd-replan-loop` `## Revisions` log in
 `01-plan.md`, cross-checked against `Revised-by` markers in `02-tasks.md`). It is a distinct band on
@@ -350,6 +360,13 @@ every task authored after the field shipped already carried it (22 of 22), while
 without it predate the field entirely. Blocking would fail old specs for a rule they could not
 have followed, and would gain nothing on new ones.
 
+`SL061`-`SL066` are BLOCK: a port task block that lints clean while citing a fabricated or
+out-of-range snapshot precedent, or an unlicensed deviation, is a registry that **lies** about the
+fidelity contract `sd-port-fidelity` requires it to carry - the same test that makes `SL080`-`SL083`
+BLOCK. Unlike `SL060`, there is no legacy corpus predating the field to protect: a port spec's
+`Pattern refs` is never `none` (every port task cites a snapshot member), so there is no old-spec
+class this would unfairly fail.
+
 `SL070`-`SL072` are BLOCK: a task pointing at a revision that does not exist, a revision pointing at
 a task that does not carry its marker, or a rewritten revision entry, are all a registry that **lies**
 about its own audit trail - the append-only guarantee the `## Revisions` log exists to provide is
@@ -371,6 +388,50 @@ A field's value runs to the next field label, not to the next newline - `Accepta
 Report one `SL060` per offending task block, citing the task heading (e.g. `02-tasks.md` `T01`).
 A block that writes `Pattern refs: none` is **compliant** - the explicit `none` is the assertion
 the rule is asking for. Only an absent field is a finding.
+
+### Port task-block checks
+
+Runs only when `02-tasks.md` exists **and** frontmatter `type` is `port` - a `FEAT`/`BUG`/`REF`/
+`PERF`/`RCA` task is unaffected. Parse task blocks with the same tolerant **Field label grammar**
+used for `SL060`. `Pattern refs` may carry 1-3 citations; check **each citation independently** and
+report one finding per offending citation, not one per task block - the same granularity `SL082`/
+`SL083` use for table rows. Cite the task heading (`02-tasks.md` `T<NN>`) plus the offending
+`Pattern refs` or `Acceptance` line.
+
+This is a cross-artifact check: `Pattern refs` lives in `02-tasks.md`, the ranges it must agree with
+live in `04-artifacts/source/MANIFEST.md`, and the deviation IDs it must agree with live in the
+spec's own `## Deviation table` (`00-spec.md`).
+
+For each `Pattern refs` citation on a port task:
+
+- **`SL061` - malformed citation.** The citation does not match the snapshot-member-range shape
+  `<path>:<first>-<last>` (a path, a colon, two `[0-9]+` values joined by `-`). This includes the
+  literal `none` - a port task's `Pattern refs` is never `none`, every port task cites a snapshot
+  member.
+- **`SL062` - wrong location.** The citation matches the shape, but `<path>` does not start with
+  `04-artifacts/source/` (e.g. it names a host sibling file instead of the frozen snapshot).
+- **`SL063` - unknown snapshot path.** `<path>`, with the `04-artifacts/source/` prefix stripped,
+  does not appear as a `Snapshot path` value in any row of `04-artifacts/source/MANIFEST.md`.
+- **`SL064` - range outside the manifest.** `<first>-<last>` falls outside the **union** of the
+  member ranges `MANIFEST.md` records for that path - the lowest first-line to the highest last-
+  line across every `<ordinal>: <member> <first>-<last>` entry for that `Snapshot path`, per
+  `sd-port-fidelity`'s "Snapshot manifest format". A citation may legitimately span more than one
+  member; this checks the citation stays within the recorded snapshot, not that it matches one
+  member exactly.
+
+  Each check requires the previous one to have resolved: `SL062`-`SL064` require the shape to have
+  parsed first (a citation that already failed `SL061` reports only `SL061`), and `SL064` also
+  requires the path to have resolved in `MANIFEST.md` first (a citation that already failed `SL063`
+  reports only `SL063` - there is no recorded range to compare against for a path that isn't
+  there). Report exactly one of `SL061`/`SL062`/`SL063`/`SL064` per citation, never more than one.
+
+For `Acceptance` on a port task:
+
+- **`SL065` - no licensed-deviation list.** The field carries no `Licensed deviations:` line (see
+  the "Port mode" addendum in **sd-atomic-task-format**). `Licensed deviations: none` is compliant -
+  the explicit `none` is the assertion this rule asks for, same convention as `Pattern refs: none`.
+- **`SL066` - uncited deviation.** A `Licensed deviations:` list names a `D<NN>` ID that does not
+  appear in the spec's `## Deviation table`.
 
 ### Revision-log integrity
 

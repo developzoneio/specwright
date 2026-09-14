@@ -349,6 +349,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     agent stays non-write-capable), and `CL204` added to every fixture manifest's `rules[]` registry
     (root, `_base`, and the nine case-local overlay manifests) to keep `run-selftest.ps1`'s registry
     parity guard - and its own internal one inside each linter - green.
+- **`SL061`-`SL066`: the port task-block band for `/sd:spec validate`** (SW-49) - closes the known
+  gap carried forward from SW-41: `/sd:port`'s anti-drift contract (every port task's `Pattern refs`
+  cites a snapshot member range, `Acceptance` carries a licensed-deviation ID list) was enforced
+  only by `commands/port.md` Phase 6 refusing to execute a defective block at *execution* time,
+  invisible to `validate`. Six new rules, scoped to `type: port` specs only, checked per
+  `Pattern refs` citation and per task, same granularity `SL082`/`SL083` already use for table rows:
+  `SL061` malformed citation shape, `SL062` citation outside `04-artifacts/source/`, `SL063` citation
+  names a path absent from `MANIFEST.md`, `SL064` citation range outside the manifest's recorded
+  member range for that path (checked as a cascade - each rule requires the previous one to have
+  resolved, so a citation reports exactly one of the four, never a stack of them), `SL065` no
+  `Licensed deviations:` line in `Acceptance`, `SL066` a cited deviation ID absent from the spec's
+  deviation table. Reserved band per `commands/spec.md`'s own note (`SL061`-`SL069`); `SL067`-`SL069`
+  remain reserved.
+  - **New convention: `Licensed deviations: D01, D02` (or `none`) inside `Acceptance`.** No prior
+    syntax existed for embedding a deviation-ID list in a port task's free-text `Acceptance` field -
+    documented as a new "Port mode" addendum in `sd-atomic-task-format`, alongside the existing
+    "Refactor mode" / "Re-plan" addenda. Authoring it is `sd-spec-architect`'s job (`/sd:port`,
+    unchanged here); this ticket only adds the reading/checking side.
+  - **`examples/spec-lint-fixture/` gains a third matched clean/broken pair**: `PORT-CLEAN-004` (all
+    six checks PASS) and `PORT-BROKEN-016` (one seeded defect per rule, isolated to its own task so
+    each finding is independently traceable) - same donor scenario, differing only in `02-tasks.md`.
+    Rule coverage in that fixture's README moves from 25/37 to 31/43.
+  - **`contractLint.budgets.commandsBytes` raised 32677 -> 37194** - `commands/spec.md` picked up
+    the new rule table rows and the "Port task-block checks" subsection; the ratchet moves with it,
+    same mechanical consequence every prior SL-band addition (SW-38, SW-40) triggered. This is the
+    only `specwright.manifest.json` edit in this ticket - no `SL0xx` rule itself was registered
+    there (see below).
+  - **Not otherwise touched, and why**: no `SL0xx` rule has ever been registered in
+    `specwright.manifest.json` (that subtree is `contractLint`'s CL-rule registry, consumed only by
+    `scripts/contract-lint.*`; an SL entry there would be inert, matching the precedent set by
+    `SL070`-`SL090`, none of which registered there either). `docs/troubleshooting.md` - the SW-41 "known gap" note lives only
+    in that entry's own CHANGELOG text, which is historical and untouched (`specwright.manifest.json`
+    excludes `CHANGELOG.md` from doc-drift checks by design); there was no corresponding note in
+    `troubleshooting.md` to remove. `commands/port.md` Phase 6 - stays as defense-in-depth for a spec
+    approved before this rule existed.
 
 ### Changed
 - **`README.md` cut from 390 to 282 lines (-28%) with no claim dropped.** The restructure below

@@ -17,7 +17,8 @@
       "bug": "BUG",
       "refactor": "REF",
       "perf": "PERF",
-      "rca": "RCA"
+      "rca": "RCA",
+      "port": "PORT"
     },
     "lifecycle": ["draft", "approved", "in-progress", "done", "archived"],
     "archiveAfterDays": 90

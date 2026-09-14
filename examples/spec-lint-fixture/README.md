@@ -47,6 +47,12 @@ separate spec - but that follow-up carries a reserved ID (`REF-CLEAN-004`) in it
 the table left empty, and `SL090` fires. The two are a second matched pair: any change that makes
 `BUG-CLEAN-003` behave like `FEAT-BROKEN-015` has broken `SL090`.
 
+`clean/PORT-CLEAN-004` and `broken/PORT-BROKEN-016` are a third matched pair, for the `SL061`-
+`SL066` port task-block band (SW-49): identical donor scenario and fidelity tables, differing only
+in `02-tasks.md`. Every task block in the clean half cites an in-range snapshot member and a
+correct `Licensed deviations:` line; the broken half isolates one seeded defect per task (six
+tasks, six rules) so each finding is independently traceable.
+
 ---
 
 ## Expected findings in `broken/`
@@ -82,6 +88,12 @@ can be traced to an intentional seed rather than an accident.
 | `REF-BROKEN-013` | `SL041` | BLOCK | Retro jumps `approved` -> an entry opening at `in-progress` |
 | `FEAT-BROKEN-014` | `SL044` | WARN | `archived -> in-progress` logged with an empty reason |
 | `FEAT-BROKEN-015` | `SL090` | SUGGEST | `done` spec names deferred work; `## Spawned specs` table is empty |
+| `PORT-BROKEN-016` | `SL061` (T01) | BLOCK | `Pattern refs` is prose, not the snapshot-member-range shape |
+| `PORT-BROKEN-016` | `SL062` (T02) | BLOCK | `Pattern refs` shape is right, path is a host sibling, not `04-artifacts/source/` |
+| `PORT-BROKEN-016` | `SL063` (T03) | BLOCK | `Pattern refs` names a path absent from `MANIFEST.md` |
+| `PORT-BROKEN-016` | `SL064` (T04) | BLOCK | `Pattern refs` range (100-120) falls outside the manifest's recorded 10-70 |
+| `PORT-BROKEN-016` | `SL065` (T05) | BLOCK | `Acceptance` carries no `Licensed deviations:` line |
+| `PORT-BROKEN-016` | `SL066` (T06) | BLOCK | `Licensed deviations: D99` - `D99` is not in the Deviation table |
 | _(tree-wide)_ | `SL032` | BLOCK | `BUG-GHOST-006` row in `index.md` has no folder |
 
 `FEAT-BROKEN-011` is the one spec that seeds two rules on purpose. An illegal `status` cannot
@@ -112,9 +124,11 @@ of the rules, which is precisely the drift that SW-1 and SW-3 exist to prevent. 
 trade-off is decided, this fixture makes the acceptance criterion **reproducible**, not
 **enforced**.
 
-**Rule coverage is partial: 25 of the 37 rules are seeded.** The `SL06x` task-content, `SL07x`
-revision-log, and `SL08x` port-fidelity bands are exercised by their own fixtures and are not
-duplicated here. Not seeded in this fixture, and why:
+**Rule coverage is partial: 31 of the 43 rules are seeded.** `SL061`-`SL066` (port task-block) are
+seeded directly in this fixture (`PORT-CLEAN-004` / `PORT-BROKEN-016` above). The `SL07x`
+revision-log and `SL08x` port-fidelity bands are exercised by their own fixtures instead - see
+`tests/revision-log/fixtures/` for `SL07x`; `SL08x` has no fixture anywhere yet, a pre-existing gap
+this ticket does not close. Not seeded in this fixture, and why:
 
 | Rule | Why not seeded |
 |---|---|
