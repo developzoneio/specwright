@@ -690,6 +690,17 @@ if ($toolName -ne 'Edit' -and $toolName -ne 'Write' -and $toolName -ne 'MultiEdi
 $cwd = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 
+# SW-50: these two checks are pure string ops with zero I/O, so they run
+# BEFORE Get-ProjectConfig (which reads project-config.json from disk).
+# Most tool calls in a session never touch a gate-relevant path, so this
+# ordering avoids a config-file read on the common case. Mirrors
+# spec-gate.sh, which already checked file_path before reading config.
+$filePath = $hookInput.tool_input.file_path
+if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
+
+$rel = ConvertTo-RelativePath -Cwd $cwd -FilePath $filePath
+if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
+
 $config = Get-ProjectConfig -Cwd $cwd
 $specPrefixes = Get-SpecPrefixAlternation -Config $config
 $featurePrefix = Get-SpecPrefixValue -Config $config -Key 'feature' -DefaultValue 'FEAT'
@@ -709,12 +720,6 @@ try {
 $mode = 'warn'
 try { if ($config.hooks.specGate.mode) { $mode = [string]$config.hooks.specGate.mode } } catch { }
 if ($mode -eq 'off') { exit 0 }
-
-$filePath = $hookInput.tool_input.file_path
-if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
-
-$rel = ConvertTo-RelativePath -Cwd $cwd -FilePath $filePath
-if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
 
 # Rule 0: verify gate on the spec index. A row transitioning to done requires
 # a passing /sd:verify artifact; a verified close-out is allowed through the

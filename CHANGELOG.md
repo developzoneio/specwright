@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`hooks/powershell/spec-gate.ps1`** (SW-50, commit 2/6) - the `file_path`-empty and
+  path-does-not-resolve early exits now run before `Get-ProjectConfig` (a disk read), not after,
+  so the common case - a tool call with no gate-relevant path - no longer pays for a config-file
+  read it doesn't need. `spec-gate.sh` needed no matching change: it already checked `file_path`
+  before reading config. Measured effect on this machine: within noise (spec-gate p50 530ms ->
+  532ms on pwsh, 1194ms -> 1217ms on Windows PowerShell 5.1) - the win is real but small against
+  process-startup cost, which the SW-50 ADR will need to account for separately.
+
 ### Added
 - **`tests/hooks/measure-latency.ps1`** (SW-50, commit 1/6) - p50/p95 per-invocation latency
   measurement for the three shipped hooks, spawning each as a fresh child process under every
