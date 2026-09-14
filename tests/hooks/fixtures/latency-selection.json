@@ -1,0 +1,16 @@
+{
+  "_comment": "Curated fixture cases sampled by tests/hooks/measure-latency.ps1 (SW-50). Each hook gets one gate-irrelevant/cheap case (the common case most tool calls hit) plus one or two cases that exercise real work, rather than sweeping the full conformance suite on every latency run.",
+  "spec-gate": [
+    "allow-other-tool",
+    "allow-in-progress-spec",
+    "block-protected-path"
+  ],
+  "prompt-router": [
+    "silent-disabled",
+    "route-multi-workflow"
+  ],
+  "subagent-retro": [
+    "silent-disabled",
+    "lessons-surfaced"
+  ]
+}

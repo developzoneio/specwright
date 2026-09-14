@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`tests/hooks/measure-latency.ps1`** (SW-50, commit 1/6) - p50/p95 per-invocation latency
+  measurement for the three shipped hooks, spawning each as a fresh child process under every
+  available PowerShell flavor (`pwsh` and, on Windows, `powershell` 5.1) against a curated fixture
+  subset (`tests/hooks/fixtures/latency-selection.json`). `-CheckBudget` will fail the build once
+  `specwright.manifest.json` gains a `hookLatencyBudgets` baseline (a later SW-50 commit); until
+  then it warns and exits 0. No bash twin, same rationale as `run-conformance.ps1`: it must drive
+  multiple PowerShell flavors from one process to produce comparable numbers.
 - **`## Quickstart` section in `README.md`** (SW-8) - a numbered path (install -> `/sd:setup` ->
   `/sd:feature <slug>`, with the bundled fixture as the fallback for readers with no project handy)
   so a new reader reaches their first spec-approval gate without piecing the flow together from
