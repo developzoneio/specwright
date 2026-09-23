@@ -16,6 +16,7 @@ Each of these shipped, and each was statically detectable the whole time:
 | An input token an invocation never actually passes | CL102 (wave 2) |
 | An `mcp__*` tool name that does not exist | CL202 (wave 3) |
 | README claiming one gate count where `docs/architecture.md` claimed another | CL302 |
+| A command step asserting an artifact write in a read-only agent's block, with no writer named | CL205 (SW-51) |
 
 It is a **script, not a prompt**: deterministic file operations, no subagent, no model, run per PR
 in CI on all three operating systems like every other check.
@@ -104,6 +105,7 @@ cannot auto-fix. That guarantee is only as good as the prompt text agreeing with
 | `CL202` | WARN | an `mcp__*` name in scan scope is absent from `contractLint.knownMcpTools` |
 | `CL203` | WARN | a non-write-capable agent's own frontmatter declares a tool its own body never mentions |
 | `CL204` | BLOCK | a write-capable agent's own frontmatter declares a tool its own body never mentions |
+| `CL205` | BLOCK | a command step inside a read-only agent's invocation block asserts a spec-artifact write and names no main-thread writer |
 
 A **write tool** is exactly `Write`, `Edit` or `MultiEdit` -- never `Bash`, which technically can
 write a file but is a different, harder problem, deliberately out of scope here.
@@ -140,6 +142,30 @@ check can find, so it blocks; the same finding on a read-only agent's unused `Gl
 **`CL204` shipped BLOCK from its introduction on 2026-09-02** (SW-48) -- unlike `CL200`/`CL306`/`CL400`,
 it did not need a WARN-first rollout window, because it is a new rule id rather than a promoted
 existing one: nothing depended on its prior severity.
+
+`CL205` is `CL200`'s command-side twin. `CL200` stops a read-only agent's own body from telling it
+to write; `CL205` stops a *command* from asserting a write that the invoked read-only agent cannot
+perform and that nobody else is told to perform either -- the SW-51 defect, where
+`commands/rca.md` Phase 2 step 3 read "Hypothesis tree written to `00-spec.md`" two steps after
+invoking `sd-debugger`, so Gate 2 could stop on an empty section. Three predicates, all
+structural enough to decide by regex:
+
+- **Window.** From an invocation anchor (the same index CL1xx uses) whose target agent has no
+  write tool on disk, to the next heading or the next anchor. Unlike the CL1xx token span it does
+  **not** end at a numbered step, because the defect lives in a later step of the same block.
+- **Line.** Names a spec artifact (`NN-name.md` or `04-artifacts/`) *and* a word-bounded write
+  form (write/append/save/record/persist/store and their inflections).
+- **Actor.** Passes when `main thread` appears anywhere in the line's enclosing numbered step,
+  joined across line wraps -- `commands/port.md` Phase 3 wraps "Main" / "thread appends" over two
+  lines and names the actor in step 3's opening parenthetical. The phrase is the one every sibling
+  step already uses ("Main thread appends the returned ... (debugger has no write tool)").
+
+Its known blind spots are deliberate: a passive write inside a **write-capable** agent's block
+(`rca.md` Phase 1's evidence step was one, fixed by hand in the same change) and a write that
+names a spec section but no artifact file. Both stay prose-review territory; widening either
+predicate buys false positives on legitimate close-out prose. `CL205` **shipped BLOCK from its
+introduction on 2026-09-23** (SW-51) on the same grounds as `CL204`, and because
+`contractLint.warnBudget` is `0`, a WARN would already have failed validate's Check 8.
 
 ### CL3xx -- gate integrity
 
@@ -321,7 +347,7 @@ implementation, one fixture, one row in the tables above.
 |---|---|---|
 | 1 | CL0xx reference resolution, CL3xx gate integrity, CL9xx suppression hygiene | shipped, BLOCK |
 | 2 | CL1xx invocation contract (agent input declarations) | shipped, BLOCK+WARN |
-| 3a | CL2xx role and tool integrity (CL200-CL204) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02, BLOCK from the start) |
+| 3a | CL2xx role and tool integrity (CL200-CL205) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02 and CL205 2026-09-23, both BLOCK from the start) |
 | 3b | CL4xx stack-agnostic prose, CL306 | shipped 2026-07-30 WARN, now BLOCK (CL400/CL306 promoted 2026-07-31; CL401 stays WARN) |
 | 4 | CL5xx file budgets | shipped 2026-07-30, stays WARN |
 

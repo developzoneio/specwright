@@ -132,6 +132,18 @@ $RE_MCPTOOL   = 'mcp__[A-Za-z0-9_-]+'
 # after a comma) all pass, with no exclusion list, the same way
 # Get-GateClassification needs none for '## Gate activity'.
 $RE_WRITEVERB = '^[ \t]*(-[ \t]+|[0-9]+\.[ \t]+)?(Write|Append|Create)[ \t]'
+# CL205's predicates. A spec artifact is a numbered NN-name.md file or the
+# 04-artifacts/ folder. The write form is word-bounded by hand (the bash twin's
+# ERE has no \b) and case-folded only on its first letter, never via a
+# culture-aware lowercase, so both twins agree byte-for-byte on non-ASCII
+# lines. The actor test is a 'main thread' mention - the phrase every sibling
+# step already uses - matched against the whole enclosing numbered step joined
+# with single spaces, never the one line: commands/port.md Phase 3 wraps
+# 'Main' / 'thread appends ...' across two lines, and names the actor in
+# step 3's opening parenthetical.
+$RE_SPECARTIFACT  = '[0-9]{2}-[a-z][a-z0-9-]*\.md|04-artifacts/'
+$RE_ARTIFACTWRITE = '(^|[^A-Za-z])([Ww]rit(e|es|ing|ten)|[Aa]ppend(s|ed|ing)?|[Ss]av(e|es|ed|ing)|[Rr]ecord(s|ed|ing)?|[Pp]ersist(s|ed|ing)?|[Ss]tor(e|es|ed|ing))([^A-Za-z]|$)'
+$RE_MAINTHREAD    = '[Mm]ain[ \t]+thread'
 # CL4xx stack-agnostic prose. A <<...>> placeholder span is scrubbed from a
 # copy of the line before vocabulary/path matching, so a token that only ever
 # appears inside a project-config-style placeholder never fires.
@@ -214,7 +226,7 @@ foreach ($r in $cl.rules) {
 $dispatchIds = @(
     'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008',
     'CL100', 'CL101', 'CL102', 'CL103', 'CL104',
-    'CL200', 'CL201', 'CL202', 'CL203', 'CL204',
+    'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205',
     'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
     'CL400', 'CL401', 'CL402',
     'CL500',
@@ -985,6 +997,60 @@ foreach ($t in $agentToolRefs) {
     if (-not $used) {
         $rid = if ($writeCapableAgents.Contains($t.Agent)) { 'CL204' } else { 'CL203' }
         Add-Finding $rid $t.File $t.Line "agent '$($t.Agent)' declares tool '$($t.Tool)' but its body never mentions it"
+    }
+}
+
+# CL205 - the command-side twin of CL200. An invocation of an agent with no
+# write tool (read off disk, $writeCapableAgents) opens a window that runs to
+# the next heading or the next anchor. Unlike the CL1xx token span it does NOT
+# stop at a numbered step: the defect this catches (SW-51, rca.md Phase 2) lives
+# in step 3, two steps after step 1's invocation. Inside the window, a line
+# that names a spec artifact and a write form, in a numbered step that never
+# says 'main thread', asserts a write nobody is told to perform - the agent
+# cannot, and the main thread was never asked. The step is [nearest numbered
+# step at or above the line (clamped to the anchor), next numbered step /
+# heading / anchor), fenced lines skipped. Unresolved targets are CL001's
+# problem, not this one.
+function Get-StepText([string]$Rel, [int]$Lo, [int]$Idx) {
+    $lines = $fileLines[$Rel]
+    $fence = $fileFence[$Rel]
+    $s = $Idx
+    while ($s -gt $Lo) {
+        if (-not $fence[$s] -and [regex]::IsMatch($lines[$s], $RE_NUMSTEP)) { break }
+        $s--
+    }
+    $sb = New-Object System.Text.StringBuilder
+    for ($k = $s; $k -lt $lines.Length; $k++) {
+        if ($fence[$k]) { continue }
+        if ($k -gt $s) {
+            if ([regex]::IsMatch($lines[$k], $RE_HEADING)) { break }
+            if ([regex]::IsMatch($lines[$k], $RE_NUMSTEP)) { break }
+            if ($anchorLines.Contains($Rel + ':' + ($k + 1))) { break }
+        }
+        [void]$sb.Append(' ').Append($lines[$k])
+    }
+    return $sb.ToString()
+}
+
+$cl205Seen = New-OrdinalSet
+foreach ($a in $anchors) {
+    if (-not $agentNames.Contains($a.Agent)) { continue }
+    if ($writeCapableAgents.Contains($a.Agent)) { continue }
+    $lines = $fileLines[$a.File]
+    $fence = $fileFence[$a.File]
+    $startIdx = $a.Line - 1
+    for ($j = $startIdx; $j -lt $lines.Length; $j++) {
+        if ($fence[$j]) { continue }
+        $txt = $lines[$j]
+        if ($j -gt $startIdx) {
+            if ([regex]::IsMatch($txt, $RE_HEADING)) { break }
+            if ($anchorLines.Contains($a.File + ':' + ($j + 1))) { break }
+        }
+        if (-not [regex]::IsMatch($txt, $RE_SPECARTIFACT)) { continue }
+        if (-not [regex]::IsMatch($txt, $RE_ARTIFACTWRITE)) { continue }
+        if ([regex]::IsMatch((Get-StepText $a.File $startIdx $j), $RE_MAINTHREAD)) { continue }
+        if (-not $cl205Seen.Add($a.File + ':' + ($j + 1))) { continue }
+        Add-Finding 'CL205' $a.File ($j + 1) "step asserts a spec-artifact write inside the block of '$($a.Agent)', which has no write tool, and names no main-thread writer"
     }
 }
 

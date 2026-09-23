@@ -357,6 +357,7 @@
       { "id": "CL202", "severity": "WARN",  "wave": 3, "summary": "mcp__* name absent from contractLint.knownMcpTools" },
       { "id": "CL203", "severity": "WARN",  "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body, on an agent with no write tool of its own" },
       { "id": "CL204", "severity": "BLOCK", "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body, on a write-capable agent (Write/Edit/MultiEdit present) - CL203's BLOCK sibling" },
+      { "id": "CL205", "severity": "BLOCK", "wave": 3, "summary": "command step asserts a spec-artifact write inside a read-only agent's invocation block and names no main-thread writer" },
 
       { "id": "CL300", "severity": "BLOCK", "wave": 1, "summary": "gate block containing no literal STOP" },
       { "id": "CL301", "severity": "BLOCK", "wave": 1, "summary": "gate block offering no option set" },
