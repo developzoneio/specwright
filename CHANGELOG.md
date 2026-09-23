@@ -463,6 +463,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are now derived from disk like every other published count.
 
 ### Fixed
+- **`commands/rca.md` left three artifact writes with no named writer** (SW-51). Phase 2 step 3
+  said "Hypothesis tree written to `00-spec.md`" - passive, inside a block invoking `sd-debugger`,
+  which has no write tool - so the tree could go unpersisted and Gate 2 would stop on an empty
+  section. It now reads "Main thread appends the returned hypothesis tree ... (debugger has no
+  write tool)", matching `bug.md` and `perf.md`. The same sweep of every command file found two
+  more actor-less steps in `rca.md` (Phase 1 evidence saving, Phase 3 REJECTED documentation);
+  both now name the main thread. No other command had the defect.
 - **Hooks hardcoded the spec-prefix alternation, making `PORT-` specs invisible to enforcement**
   (SW-44). `spec-gate`, `prompt-router`, and `subagent-retro` - both bash and PowerShell - matched
   in-progress specs against a literal `(FEAT|BUG|REF|PERF|RCA)` alternation instead of reading
