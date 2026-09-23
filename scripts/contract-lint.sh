@@ -217,6 +217,17 @@ RE_MCPTOOL='mcp__[A-Za-z0-9_-]+'
 # after a comma) all pass, with no exclusion list, the same way
 # classify_heading needs none for '## Gate activity'.
 RE_WRITEVERB='^[[:blank:]]*(-[[:blank:]]+|[0-9]+\.[[:blank:]]+)?(Write|Append|Create)[[:blank:]]'
+# CL205's predicates. A spec artifact is a numbered NN-name.md file or the
+# 04-artifacts/ folder. The write form is word-bounded by hand (ERE has no \b)
+# and case-folded only on its first letter, never via a locale-aware lowercase,
+# so both twins agree byte-for-byte on non-ASCII lines. The actor test is a
+# 'main thread' mention - the phrase every sibling step already uses - matched
+# against the whole enclosing numbered step joined with single spaces, never
+# the one line: commands/port.md Phase 3 wraps 'Main' / 'thread appends ...'
+# across two lines, and names the actor in step 3's opening parenthetical.
+RE_SPECARTIFACT='[0-9]{2}-[a-z][a-z0-9-]*\.md|04-artifacts/'
+RE_ARTIFACTWRITE='(^|[^A-Za-z])([Ww]rit(e|es|ing|ten)|[Aa]ppend(s|ed|ing)?|[Ss]av(e|es|ed|ing)|[Rr]ecord(s|ed|ing)?|[Pp]ersist(s|ed|ing)?|[Ss]tor(e|es|ed|ing))([^A-Za-z]|$)'
+RE_MAINTHREAD='[Mm]ain[[:blank:]]+thread'
 # CL4xx stack-agnostic prose. A <<...>> placeholder span is scrubbed from a
 # copy of the line before vocabulary/path matching (via a bash glob
 # substitution at the call site, never a per-line sed fork - see
@@ -271,6 +282,7 @@ CL201
 CL202
 CL203
 CL204
+CL205
 CL300
 CL301
 CL302
@@ -1174,6 +1186,62 @@ rule_CL203_CL204() {
     done <<< "$AGENT_TOOL_REFS"
 }
 
+# CL205 - the command-side twin of CL200. An invocation of an agent with no
+# write tool (read off disk, WRITE_CAPABLE_AGENTS) opens a window that runs to
+# the next heading or the next anchor. Unlike the CL1xx token span it does NOT
+# stop at a numbered step: the defect this catches (SW-51, rca.md Phase 2) lives
+# in step 3, two steps after step 1's invocation. Inside the window, a line
+# that names a spec artifact and a write form, in a numbered step that never
+# says 'main thread', asserts a write nobody is told to perform - the agent
+# cannot, and the main thread was never asked. The step is [nearest numbered
+# step at or above the line (clamped to the anchor), next numbered step /
+# heading / anchor), fenced lines skipped. Unresolved targets are CL001's
+# problem, not this one.
+step_text_around() { # startIdx0 idx0 file -> STEP_TEXT (non-fenced lines, space-joined)
+    local _lo="$1" _i="$2" _f="$3" _s _k
+    _s=$_i
+    while [[ $_s -gt $_lo ]]; do
+        [[ "${CUR_FENCE[$_s]}" != "1" && "${CUR_LINES[$_s]}" =~ $RE_NUMSTEP ]] && break
+        _s=$((_s - 1))
+    done
+    STEP_TEXT=""
+    for ((_k = _s; _k < CUR_N; _k++)); do
+        [[ "${CUR_FENCE[$_k]}" == "1" ]] && continue
+        if [[ $_k -gt $_s ]]; then
+            [[ "${CUR_LINES[$_k]}" =~ $RE_HEADING ]] && break
+            [[ "${CUR_LINES[$_k]}" =~ $RE_NUMSTEP ]] && break
+            set_has ANCHOR_LINES "${_f}:$((_k + 1))" && break
+        fi
+        STEP_TEXT="${STEP_TEXT} ${CUR_LINES[$_k]}"
+    done
+}
+
+rule_CL205() {
+    local _agent _file _line _start _j _txt _seen=""
+    while IFS=$'\x1f' read -r _agent _file _line; do
+        [[ -z "$_agent" ]] && continue
+        set_has AGENT_NAMES "$_agent" || continue
+        set_has WRITE_CAPABLE_AGENTS "$_agent" && continue
+        if [[ "$CUR_REL" != "$_file" ]]; then load_file "$_file"; fi
+        _start=$((_line - 1))
+        for ((_j = _start; _j < CUR_N; _j++)); do
+            [[ "${CUR_FENCE[$_j]}" == "1" ]] && continue
+            _txt="${CUR_LINES[$_j]}"
+            if [[ $_j -gt $_start ]]; then
+                [[ "$_txt" =~ $RE_HEADING ]] && break
+                set_has ANCHOR_LINES "${_file}:$((_j + 1))" && break
+            fi
+            [[ "$_txt" =~ $RE_SPECARTIFACT ]] || continue
+            [[ "$_txt" =~ $RE_ARTIFACTWRITE ]] || continue
+            step_text_around "$_start" "$_j" "$_file"
+            [[ "$STEP_TEXT" =~ $RE_MAINTHREAD ]] && continue
+            set_has _seen "${_file}:$((_j + 1))" && continue
+            set_add _seen "${_file}:$((_j + 1))"
+            add_finding CL205 "$_file" "$((_j + 1))" "step asserts a spec-artifact write inside the block of '$_agent', which has no write tool, and names no main-thread writer"
+        done
+    done <<< "$ANCHORS"
+}
+
 # Collect a gate block's selectable OPTIONS: the slash-separated tokens of a
 # parenthetical, plus the backticked leading token of each top-level bullet.
 # Sets OPT_TOKENS (newline-delimited "line<US>token" records) and OPT_HAS_SET.
@@ -1463,6 +1531,7 @@ rule_CL200
 rule_CL201
 rule_CL202
 rule_CL203_CL204
+rule_CL205
 rule_CL300_CL301_CL305_CL306
 rule_CL302_CL303_CL304
 rule_CL400_CL401_CL402

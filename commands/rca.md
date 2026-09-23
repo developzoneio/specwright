@@ -53,7 +53,7 @@ This phase is conversational. The user has the raw evidence; the workflow turns 
    - **Symptoms observed** - specific error rates, status codes, queue depths, customer reports.
    - **Affected scope** - services / endpoints / users / revenue.
    - **Recent changes** - everything deployed or configured in the 72 hours before the incident.
-4. Evidence (logs, screenshots, query results, dashboards) is saved under `.specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/` with descriptive filenames. Each artifact referenced from the timeline.
+4. Main thread saves the evidence (logs, screenshots, query results, dashboards) under `.specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/` with descriptive filenames. Each artifact referenced from the timeline.
 
 ### ⛔ Gate 1 - Evidence gathered
 
@@ -75,7 +75,7 @@ STOP. Display the populated Timeline, Symptoms, Affected scope, Recent changes. 
    - `MODE = incident`
 2. Debugger enumerates hypotheses per the **sd-hypothesis-tree** skill (5 mental models,
    `(Likelihood x Impact) / Cost-to-verify` ranking).
-3. Hypothesis tree written to `00-spec.md` "Hypothesis tree" section.
+3. Main thread appends the returned hypothesis tree to `00-spec.md` "Hypothesis tree" section (debugger has no write tool).
 
 ### ⛔ Gate 2 - Hypotheses enumerated
 
@@ -100,7 +100,7 @@ For each hypothesis in rank order:
 2. Debugger gathers evidence (logs, queries, code reads). Database access (via the project's MCP
    tool or CLI) is **SELECT / EXPLAIN only** - never UPDATE / DELETE / INSERT.
 3. Result: `CONFIRMED` / `REJECTED` / `INCONCLUSIVE`. Main thread appends the result with evidence pointers to "Verification results (Phase 3)" (debugger has no write tool).
-4. Document REJECTED with FULL reasoning. This is knowledge preservation.
+4. Main thread documents each REJECTED result with FULL reasoning. This is knowledge preservation.
 5. Continue until one hypothesis is `CONFIRMED`.
 
 ### ⛔ Gate 3 - Root cause confirmed

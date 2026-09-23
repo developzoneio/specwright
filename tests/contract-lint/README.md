@@ -62,6 +62,7 @@ wording can improve in one commit while a divergence still fails.
 | `cl202-unknown-mcp-tool-name` | CL202 |
 | `cl203-declared-tool-never-mentioned` | CL203 |
 | `cl204-write-capable-agent-block` | CL204 |
+| `cl205-readonly-block-passive-artifact-write` | CL205 |
 | `cl300-gate-without-stop` | CL300 |
 | `cl301-gate-without-options` | CL301 |
 | `cl302-gate-count-disagrees` | CL302 |
@@ -90,6 +91,7 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-substep-before-parent` | a conditional sub-gate authored before its parent | `commands/bug.md` |
 | `fp-hard-gate-prose-escape` | a HARD gate whose PROSE mentions an override, annotated for both CL305 and CL306 | `commands/bug.md`, `commands/release.md` |
 | `fp-negated-write-verb` | a negated ("Do not write") or third-person ("The caller will Create") use of a CL200 verb | `agents/code-explorer.md` |
+| `fp-cl205-main-thread-named` | an artifact write in a read-only agent's block whose step names the main thread, wrapped across lines or in the step's opening parenthetical | `commands/port.md` Phase 3 |
 | `fp-cl400-placeholder-and-fenced-example` | a stack command token inside a `<<placeholder>>` and inside a fenced example | `commands/perf.md`, `commands/verify.md` |
 | `fp-cl401-placeholder-and-fenced-example` | a language name inside a `<<placeholder>>` and inside a fenced example | `commands/setup.md`, `agents/spec-architect.md` |
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |

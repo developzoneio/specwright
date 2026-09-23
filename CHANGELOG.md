@@ -33,6 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   process-startup cost, which the SW-50 ADR will need to account for separately.
 
 ### Added
+- **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
+  an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
+  cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a
+  write form fails unless its enclosing numbered step names the `main thread`, joined across line
+  wraps. Would have caught the `rca.md` Phase 2 defect fixed above; the engine tree is clean under
+  both implementations. New fixtures `cl205-readonly-block-passive-artifact-write` and
+  `fp-cl205-main-thread-named` (the `port.md` Phase 3 wrapped-actor shape). Blind spots - passive
+  writes in a write-capable agent's block, section-only writes - are recorded in
+  `docs/contract-lint.md` as deliberate.
 - **`tests/hooks/measure-latency.ps1`** (SW-50, commit 1/6) - p50/p95 per-invocation latency
   measurement for the three shipped hooks, spawning each as a fresh child process under every
   available PowerShell flavor (`pwsh` and, on Windows, `powershell` 5.1) against a curated fixture
@@ -463,6 +472,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are now derived from disk like every other published count.
 
 ### Fixed
+- **`commands/rca.md` left three artifact writes with no named writer** (SW-51). Phase 2 step 3
+  said "Hypothesis tree written to `00-spec.md`" - passive, inside a block invoking `sd-debugger`,
+  which has no write tool - so the tree could go unpersisted and Gate 2 would stop on an empty
+  section. It now reads "Main thread appends the returned hypothesis tree ... (debugger has no
+  write tool)", matching `bug.md` and `perf.md`. The same sweep of every command file found two
+  more actor-less steps in `rca.md` (Phase 1 evidence saving, Phase 3 REJECTED documentation);
+  both now name the main thread. No other command had the defect.
 - **Hooks hardcoded the spec-prefix alternation, making `PORT-` specs invisible to enforcement**
   (SW-44). `spec-gate`, `prompt-router`, and `subagent-retro` - both bash and PowerShell - matched
   in-progress specs against a literal `(FEAT|BUG|REF|PERF|RCA)` alternation instead of reading

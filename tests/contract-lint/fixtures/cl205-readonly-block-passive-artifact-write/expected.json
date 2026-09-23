@@ -1,0 +1,6 @@
+{
+  "note": "sd-keeper has no write tool; step 3 of its invocation block asserts a write to 00-spec.md and names no main-thread writer (SW-51, commands/rca.md Phase 2 step 3)",
+  "findings": [
+    { "rule": "CL205", "severity": "BLOCK", "file": "commands/alpha.md", "anchor": "seed", "seed": "readonly-block-passive-write" }
+  ]
+}
