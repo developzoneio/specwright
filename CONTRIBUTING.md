@@ -167,6 +167,18 @@ is excluded on purpose - the distinction is "ad-hoc findings snapshot" vs "maint
 document," not file extension. `scripts/selftest-root-guard.{ps1,sh}` proves Check 9 still bites,
 the same posture as `scripts/selftest-docs.{ps1,sh}` for Check 7.
 
+### Bash strict mode (Check 10)
+
+Every `*.sh` in the repo opens with `set -euo pipefail` as its first statement (comments and the
+shebang may come before it; a wider flag cluster such as `-Eeuo` is fine). Check 10 of
+`scripts/validate.{ps1,sh}` enforces this. A script that must not run under strict mode goes in
+`specwright.manifest.json`'s `bashStrictMode.exceptions` with a `reason`. Today that is only the
+bash hooks, which must exit 0 on every failure path. An exception whose path no longer exists
+fails the check, so the list cannot go stale.
+Scripts that need a tool the runner may lack (e.g. `jq`) check for it up front and exit `2` with
+the tool's name. They must not let a missing dependency show up as a failure of the thing under
+test.
+
 ---
 
 ## Threshold re-calibration
@@ -424,7 +436,7 @@ Expected behaviour: every hook exits `0` and either prints a `<context-router>` 
 
 - **Markdown:** ATX headers (`#`, `##`), no trailing colons in headers, fenced code blocks with language hint, 100-char soft wrap.
 - **PowerShell:** PascalCase function names, `$camelCase` variables, explicit `param()` block, pure ASCII.
-- **Bash:** lowercase function names, `snake_case` variables, `set -euo pipefail` at top of non-trivial scripts.
+- **Bash:** lowercase function names, `snake_case` variables, `set -euo pipefail` as the first statement (enforced by validate Check 10; declared exceptions in the manifest).
 - **YAML frontmatter:** keys in lowercase-with-hyphens (`argument-hint`), values unquoted unless they contain special chars.
 - **Commit messages:** imperative mood, 50-char subject, optional body wrapped at 72.
 

@@ -21,6 +21,9 @@
       9. Root-level ad-hoc notes guard: no root-level file matches a declared
          ad-hoc-notes pattern (specwright.manifest.json's adHocNotesGuard),
          e.g. REVIEW-TODO.md, TODO.md, FIXME.md, NOTES.md, *-FINDINGS.md.
+     10. Bash strict mode: every *.sh in the repo opens with
+         `set -euo pipefail` unless declared in specwright.manifest.json's
+         bashStrictMode.exceptions.
 
     Exit code 0 = all checks passed; 1 = at least one check failed.
 
@@ -151,7 +154,7 @@ Write-Host "  Repo root: $repoRoot"
 
 # ---- Check 1: pure-ASCII scan ----------------------------------------------
 
-Write-Section 'Check 1/9: Pure-ASCII scan (*.ps1)'
+Write-Section 'Check 1/10: Pure-ASCII scan (*.ps1)'
 $ps1Files = Get-ChildItem -Path $repoRoot -Recurse -Filter *.ps1 -File |
     Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' }
 $asciiBad = 0
@@ -168,7 +171,7 @@ if ($asciiBad -eq 0) { Write-Ok "$($ps1Files.Count) .ps1 file(s) are pure ASCII"
 
 # ---- Check 2: bash -n syntax -----------------------------------------------
 
-Write-Section 'Check 2/9: bash -n syntax (*.sh)'
+Write-Section 'Check 2/10: bash -n syntax (*.sh)'
 $shFiles = @()
 foreach ($sub in @('hooks\bash', 'install', 'scripts')) {
     $dir = Join-Path $repoRoot $sub
@@ -196,7 +199,7 @@ if ($null -eq $bashExe) {
 
 # ---- Check 3: hook-pair parity ---------------------------------------------
 
-Write-Section 'Check 3/9: Hook-pair parity'
+Write-Section 'Check 3/10: Hook-pair parity'
 $psHooks = Get-ChildItem (Join-Path $repoRoot 'hooks\powershell') -Filter *.ps1 -File |
     ForEach-Object { $_.BaseName }
 $shHooks = Get-ChildItem (Join-Path $repoRoot 'hooks\bash') -Filter *.sh -File |
@@ -220,7 +223,7 @@ if ($parityBad -eq 0) { Write-Ok "$($psHooks.Count) hook pair(s) present on both
 
 # ---- Check 4: agent model aliases ------------------------------------------
 
-Write-Section 'Check 4/9: Agent model aliases'
+Write-Section 'Check 4/10: Agent model aliases'
 $agentFiles = Get-ChildItem (Join-Path $repoRoot 'agents') -Filter *.md -File
 $modelBad = 0
 foreach ($f in $agentFiles) {
@@ -243,7 +246,7 @@ if ($modelBad -eq 0) { Write-Ok "$($agentFiles.Count) agent(s) use a model alias
 
 # ---- Check 5: install-target counts ----------------------------------------
 
-Write-Section 'Check 5/9: Install-target counts'
+Write-Section 'Check 5/10: Install-target counts'
 $installPs1 = Join-Path $repoRoot 'install\install.ps1'
 $tmp = Join-Path $env:TEMP "sd-validate-$PID"
 $tmpNc = Join-Path $env:TEMP "sd-validate-nc-$PID"
@@ -404,7 +407,7 @@ try {
 
 # ---- Check 6: CHANGELOG [Unreleased] non-empty -----------------------------
 
-Write-Section 'Check 6/9: CHANGELOG [Unreleased] gate'
+Write-Section 'Check 6/10: CHANGELOG [Unreleased] gate'
 $changelog = Join-Path $repoRoot 'CHANGELOG.md'
 $lines = Get-Content -LiteralPath $changelog
 $start = -1
@@ -437,7 +440,7 @@ if ($start -lt 0) {
 
 # ---- Check 7: docs consistency ---------------------------------------------
 
-Write-Section 'Check 7/9: Docs consistency (published numbers vs disk)'
+Write-Section 'Check 7/10: Docs consistency (published numbers vs disk)'
 $manifestPath = Join-Path $repoRoot 'specwright.manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath)) {
     Write-FailMsg 'specwright.manifest.json not found at repo root'
@@ -653,7 +656,7 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
 
 # ---- Check 8: cross-file contract lint --------------------------------------
 
-Write-Section 'Check 8/9: Cross-file contract lint (commands / agents / skills)'
+Write-Section 'Check 8/10: Cross-file contract lint (commands / agents / skills)'
 $lintPs1 = Join-Path $scriptDir 'contract-lint.ps1'
 if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
     Write-FailMsg 'scripts/contract-lint.ps1 not found'
@@ -725,7 +728,7 @@ if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
 
 # ---- Check 9: root-level ad-hoc notes guard ---------------------------------
 
-Write-Section 'Check 9/9: Root-level ad-hoc notes guard'
+Write-Section 'Check 9/10: Root-level ad-hoc notes guard'
 if (-not (Test-Path -LiteralPath $manifestPath)) {
     Write-FailMsg 'specwright.manifest.json not found at repo root'
     Add-Failure 'root-guard: manifest missing'
@@ -745,6 +748,63 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
     }
     if ($guardBad -eq 0) {
         Write-Ok "no ad-hoc review-findings files at repo root ($($guardPatterns.Count) pattern(s) checked)"
+    }
+}
+
+# ---- Check 10: bash strict mode --------------------------------------------
+
+Write-Section 'Check 10/10: Bash strict mode (*.sh)'
+if (-not (Test-Path -LiteralPath $manifestPath)) {
+    Write-FailMsg 'specwright.manifest.json not found at repo root'
+    Add-Failure 'strict-mode: manifest missing'
+} else {
+    $strictManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $strictExceptions = @()
+    if ($strictManifest.bashStrictMode -and $strictManifest.bashStrictMode.exceptions) {
+        $strictExceptions = @($strictManifest.bashStrictMode.exceptions | ForEach-Object { $_.path })
+    }
+
+    $strictBad = 0
+    # A declared exception that no longer exists is a stale entry - fail it, or the
+    # list quietly grows into a blanket waiver.
+    foreach ($exc in $strictExceptions) {
+        if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $exc) -PathType Leaf)) {
+            Write-FailMsg "$exc : listed in bashStrictMode.exceptions but does not exist - remove the entry"
+            Add-Failure "strict-mode: stale exception $exc"
+            $strictBad++
+        }
+    }
+
+    $strictCount = 0
+    $gitDir = Join-Path $repoRoot '.git'
+    $shFiles = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter '*.sh' -ErrorAction SilentlyContinue |
+        Where-Object { -not $_.FullName.StartsWith($gitDir) }
+    foreach ($sh in $shFiles) {
+        $rel = (Get-RelPath $sh.FullName) -replace '\\', '/'
+        if ($strictExceptions -contains $rel) { continue }
+        $strictCount++
+
+        # First statement = first line that is not blank, a comment, or the shebang.
+        $firstStmt = ''
+        foreach ($line in (Get-Content -LiteralPath $sh.FullName)) {
+            if ($line -match '^\s*(#|$)') { continue }
+            $firstStmt = $line.TrimEnd("`r")
+            break
+        }
+        # Accepts any flag cluster carrying e, u and o (e.g. install.sh's -Eeuo).
+        # -cmatch: set flags are case-sensitive (-E is not -e).
+        $flags = ''
+        if ($firstStmt -cmatch '^set\s+-([A-Za-z]+)\s+pipefail\s*$') { $flags = $Matches[1] }
+        if (-not ($flags.Contains('e') -and $flags.Contains('u') -and $flags.Contains('o'))) {
+            $got = if ($firstStmt) { $firstStmt } else { '<none>' }
+            Write-FailMsg "$rel : first statement is not 'set -euo pipefail' (got: $got) - add it, or declare an exception with a reason in specwright.manifest.json bashStrictMode"
+            Add-Failure "strict-mode: $rel"
+            $strictBad++
+        }
+    }
+
+    if ($strictBad -eq 0) {
+        Write-Ok "$strictCount .sh file(s) use set -euo pipefail ($($strictExceptions.Count) declared exception(s))"
     }
 }
 

@@ -6,7 +6,10 @@
 # "did not crash". Mirror of scripts/smoke-hooks.ps1 (runs the PowerShell
 # hook twins). Both must agree on the routed workflow for prompt-router.
 #
-# Exit 0 = all cases passed; 1 = at least one failed.
+# Exit 0 = all cases passed; 1 = at least one failed; 2 = cannot run (missing
+# dependency on the runner - reported as such, never blamed on a hook).
+
+set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
@@ -42,6 +45,17 @@ assert_empty() {
     local desc="$1" haystack="$2"
     if [[ -z "$haystack" ]]; then ok "$desc : empty output"; else bad "$desc : expected empty, got: ${haystack:0:200}"; fi
 }
+
+# ---- preflight --------------------------------------------------------------
+# Hooks exit 0 silently without jq so they never block a user. That same silence
+# would make every assertion below fail and blame the hooks for a dependency the
+# RUNNER is missing - so refuse to start instead, and say which dependency.
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${c_red}[FAIL]${c_reset} jq is required to run the hook smoke suite - install jq." >&2
+    echo "         This is a missing runner dependency, not a hook failure." >&2
+    exit 2
+fi
 
 # ---- fixture repo -----------------------------------------------------------
 
@@ -92,8 +106,10 @@ run_hook() {
     local hook="$1" payload="$2"
     local out_file err_file
     out_file="$(mktemp)"; err_file="$(mktemp)"
-    printf '%s' "$payload" | bash "$hook" >"$out_file" 2>"$err_file"
-    CODE=$?
+    # Capture the exit code explicitly: under set -e a non-zero hook exit would
+    # otherwise abort the suite instead of being reported by assert_exit0.
+    CODE=0
+    printf '%s' "$payload" | bash "$hook" >"$out_file" 2>"$err_file" || CODE=$?
     STDOUT="$(cat "$out_file")"
     STDERR="$(cat "$err_file")"
     rm -f "$out_file" "$err_file"
@@ -176,33 +192,29 @@ new_content='| ID | Type | Status | Created | Title |
 | FEAT-big | feature | archived | 2026-08-01 | Big oversized thing |
 | FEAT-big-partA | feature | draft | 2026-08-09 | Part A |'
 payload="$(jq -n --arg cwd "$split_fixture" --arg fp ".specs/index.md" --arg newc "$new_content" \
-    '{tool_name:"Write",cwd:$cwd,tool_input:{file_path:$fp,content:$newc}}' 2>/dev/null)"
+    '{tool_name:"Write",cwd:$cwd,tool_input:{file_path:$fp,content:$newc}}')"
 
-if [[ -n "$payload" ]]; then
-    section "spec-gate (bash): (e) allowed edit with archived parent + registered child -> complexity split metric"
-    cat > "$split_fixture/.claude/project-config.json" <<'JSON'
+section "spec-gate (bash): (e) allowed edit with archived parent + registered child -> complexity split metric"
+cat > "$split_fixture/.claude/project-config.json" <<'JSON'
 {"spec":{"dir":".specs","indexFile":".specs/index.md"},"paths":{"protected":[]}}
 JSON
-    run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
-    assert_exit0 "spec-gate (e) complexity split, allowed" "$CODE"
-    events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null)"
-    assert_contains "spec-gate (e) complexity split, allowed" "$events" '"gate":"complexity","decision":"split"'
-    assert_contains "spec-gate (e) complexity split, allowed" "$events" '"spec_id":"FEAT-big"'
+run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
+assert_exit0 "spec-gate (e) complexity split, allowed" "$CODE"
+events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null || true)"
+assert_contains "spec-gate (e) complexity split, allowed" "$events" '"gate":"complexity","decision":"split"'
+assert_contains "spec-gate (e) complexity split, allowed" "$events" '"spec_id":"FEAT-big"'
 
-    section "spec-gate (bash): (f) blocked edit (default protected index.md) -> no complexity split metric"
-    rm -f "$split_fixture/.specs/_metrics/events.jsonl"
-    rm -f "$split_fixture/.claude/project-config.json"
-    run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
-    assert_exit0 "spec-gate (f) complexity split, blocked" "$CODE"
-    assert_contains "spec-gate (f) complexity split, blocked" "$STDOUT" '"decision":"block"'
-    events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null)"
-    if [[ "$events" == *'"gate":"complexity"'* ]]; then
-        bad "spec-gate (f) complexity split, blocked : split metric wrongly recorded for a denied edit"
-    else
-        ok "spec-gate (f) complexity split, blocked : no split metric recorded"
-    fi
+section "spec-gate (bash): (f) blocked edit (default protected index.md) -> no complexity split metric"
+rm -f "$split_fixture/.specs/_metrics/events.jsonl"
+rm -f "$split_fixture/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
+assert_exit0 "spec-gate (f) complexity split, blocked" "$CODE"
+assert_contains "spec-gate (f) complexity split, blocked" "$STDOUT" '"decision":"block"'
+events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null || true)"
+if [[ "$events" == *'"gate":"complexity"'* ]]; then
+    bad "spec-gate (f) complexity split, blocked : split metric wrongly recorded for a denied edit"
 else
-    echo "  [SKIP] jq not available - cannot build (e)/(f) payload"
+    ok "spec-gate (f) complexity split, blocked : no split metric recorded"
 fi
 rm -rf "$split_fixture"
 

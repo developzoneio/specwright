@@ -18,6 +18,8 @@
 #   9. Root-level ad-hoc notes guard: no root-level file matches a declared
 #      ad-hoc-notes pattern (specwright.manifest.json's adHocNotesGuard), e.g.
 #      REVIEW-TODO.md, TODO.md, FIXME.md, NOTES.md, *-FINDINGS.md.
+#  10. Bash strict mode: every *.sh in the repo opens with `set -euo pipefail`
+#      unless declared in specwright.manifest.json's bashStrictMode.exceptions.
 #
 # Exit 0 = all checks passed; 1 = at least one failed.
 
@@ -73,12 +75,19 @@ warn()    { echo "  ${c_yellow}[WARN]${c_reset} $*"; }
 failures=()
 add_failure() { failures+=("$1"); }
 
+# One wording for "jq is missing" across every manifest-reading check, so a runner
+# without jq gets the same named cause from each of them - never a bare exit code.
+jq_missing() {
+    fail "jq is required to parse specwright.manifest.json - install jq"
+    add_failure "$1: jq not installed"
+}
+
 section "specwright validate"
 echo "  Repo root: $repo_root"
 
 # ---- Check 1: pure-ASCII scan ----------------------------------------------
 
-section "Check 1/9: Pure-ASCII scan (*.ps1)"
+section "Check 1/10: Pure-ASCII scan (*.ps1)"
 ascii_bad=0
 ps1_count=0
 while IFS= read -r -d '' f; do
@@ -95,7 +104,7 @@ if [[ $ascii_bad -eq 0 ]]; then ok "$ps1_count .ps1 file(s) are pure ASCII"; fi
 
 # ---- Check 2: bash -n syntax -----------------------------------------------
 
-section "Check 2/9: bash -n syntax (*.sh)"
+section "Check 2/10: bash -n syntax (*.sh)"
 syn_bad=0
 sh_count=0
 while IFS= read -r -d '' f; do
@@ -112,7 +121,7 @@ if [[ $syn_bad -eq 0 ]]; then ok "$sh_count .sh file(s) pass bash -n"; fi
 
 # ---- Check 3: hook-pair parity ---------------------------------------------
 
-section "Check 3/9: Hook-pair parity"
+section "Check 3/10: Hook-pair parity"
 parity_bad=0
 ps_count=0
 for psf in "$repo_root"/hooks/powershell/*.ps1; do
@@ -138,7 +147,7 @@ if [[ $parity_bad -eq 0 ]]; then ok "$ps_count hook pair(s) present on both plat
 
 # ---- Check 4: agent model aliases ------------------------------------------
 
-section "Check 4/9: Agent model aliases"
+section "Check 4/10: Agent model aliases"
 model_bad=0
 agent_count=0
 for af in "$repo_root"/agents/*.md; do
@@ -166,7 +175,7 @@ if [[ $model_bad -eq 0 ]]; then ok "$agent_count agent(s) use a model alias"; fi
 
 # ---- Check 5: install-target counts ----------------------------------------
 
-section "Check 5/9: Install-target counts"
+section "Check 5/10: Install-target counts"
 install_sh="$repo_root/install/install.sh"
 tmp="${TMPDIR:-/tmp}/sd-validate-$$"
 tmp_nc_src="${TMPDIR:-/tmp}/sd-validate-nc-src-$$"
@@ -339,7 +348,7 @@ trap - EXIT
 
 # ---- Check 6: CHANGELOG [Unreleased] non-empty -----------------------------
 
-section "Check 6/9: CHANGELOG [Unreleased] gate"
+section "Check 6/10: CHANGELOG [Unreleased] gate"
 changelog="$repo_root/CHANGELOG.md"
 block="$(awk '
     /^##[[:space:]]+\[Unreleased\]/ { f=1; next }
@@ -364,7 +373,7 @@ fi
 
 # ---- Check 7: docs consistency ---------------------------------------------
 
-section "Check 7/9: Docs consistency (published numbers vs disk)"
+section "Check 7/10: Docs consistency (published numbers vs disk)"
 manifest="$repo_root/specwright.manifest.json"
 if [[ ! -f "$manifest" ]]; then
     fail "specwright.manifest.json not found at repo root"
@@ -373,8 +382,7 @@ elif ! command -v jq >/dev/null 2>&1; then
     # Hooks exit 0 silently when jq is absent so they never block a user on their own
     # bugs. A validator must do the opposite: a missing jq that passed would turn CI
     # green while checking nothing.
-    fail "jq is required to parse specwright.manifest.json - install jq"
-    add_failure "docs: jq not installed"
+    jq_missing "docs"
 else
     docs_bad=0
     # Plain (non-associative) arrays + linear-scan lookup functions, not `declare -A`:
@@ -642,11 +650,15 @@ fi
 
 # ---- Check 8: cross-file contract lint -------------------------------------
 
-section "Check 8/9: Cross-file contract lint (commands / agents / skills)"
+section "Check 8/10: Cross-file contract lint (commands / agents / skills)"
 lint_sh="$script_dir/contract-lint.sh"
 if [[ ! -f "$lint_sh" ]]; then
     fail "scripts/contract-lint.sh not found"
     add_failure "contract-lint: script missing"
+elif ! command -v jq >/dev/null 2>&1; then
+    # The linter would exit 2 for this too, but its reason goes to stderr, which
+    # is discarded below - name the cause here instead of a bare "exit 2".
+    jq_missing "contract-lint"
 else
     # Spawned as a CHILD PROCESS so its `exit` cannot terminate this validator,
     # and so its stdout stays a clean machine-readable stream. All human
@@ -712,13 +724,12 @@ fi
 
 # ---- Check 9: root-level ad-hoc notes guard --------------------------------
 
-section "Check 9/9: Root-level ad-hoc notes guard"
+section "Check 9/10: Root-level ad-hoc notes guard"
 if [[ ! -f "$manifest" ]]; then
     fail "specwright.manifest.json not found at repo root"
     add_failure "root-guard: manifest missing"
 elif ! command -v jq >/dev/null 2>&1; then
-    fail "jq is required to parse specwright.manifest.json - install jq"
-    add_failure "root-guard: jq not installed"
+    jq_missing "root-guard"
 else
     guard_patterns=()
     while IFS= read -r pat; do
@@ -745,6 +756,67 @@ else
     shopt -u nocasematch
     if [[ $guard_bad -eq 0 ]]; then
         ok "no ad-hoc review-findings files at repo root (${#guard_patterns[@]} pattern(s) checked)"
+    fi
+fi
+
+# ---- Check 10: bash strict mode --------------------------------------------
+
+section "Check 10/10: Bash strict mode (*.sh)"
+if [[ ! -f "$manifest" ]]; then
+    fail "specwright.manifest.json not found at repo root"
+    add_failure "strict-mode: manifest missing"
+elif ! command -v jq >/dev/null 2>&1; then
+    jq_missing "strict-mode"
+else
+    strict_exceptions=()
+    while IFS= read -r exc; do
+        [[ -z "$exc" ]] && continue
+        strict_exceptions+=("$exc")
+    done < <(jq -r '.bashStrictMode.exceptions[]?.path' "$manifest" | tr -d '\r')
+
+    strict_bad=0
+    # A declared exception that no longer exists is a stale entry - fail it, or the
+    # list quietly grows into a blanket waiver.
+    for exc in ${strict_exceptions[@]+"${strict_exceptions[@]}"}; do
+        if [[ ! -f "$repo_root/$exc" ]]; then
+            fail "$exc : listed in bashStrictMode.exceptions but does not exist - remove the entry"
+            add_failure "strict-mode: stale exception $exc"
+            strict_bad=$((strict_bad + 1))
+        fi
+    done
+
+    strict_count=0
+    while IFS= read -r -d '' f; do
+        rel="${f#"$repo_root"/}"
+        is_exception=0
+        for exc in ${strict_exceptions[@]+"${strict_exceptions[@]}"}; do
+            if [[ "$rel" == "$exc" ]]; then is_exception=1; break; fi
+        done
+        [[ $is_exception -eq 1 ]] && continue
+        strict_count=$((strict_count + 1))
+
+        # First statement = first line that is not blank, a comment, or the shebang.
+        first_stmt=""
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%$'\r'}"
+            [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+            first_stmt="$line"
+            break
+        done < "$f"
+        # Accepts any flag cluster carrying e, u and o (e.g. install.sh's -Eeuo).
+        flags=""
+        if [[ "$first_stmt" =~ ^set[[:space:]]+-([A-Za-z]+)[[:space:]]+pipefail[[:space:]]*$ ]]; then
+            flags="${BASH_REMATCH[1]}"
+        fi
+        if [[ -z "$flags" || "$flags" != *e* || "$flags" != *u* || "$flags" != *o* ]]; then
+            fail "$rel : first statement is not 'set -euo pipefail' (got: ${first_stmt:-<none>}) - add it, or declare an exception with a reason in specwright.manifest.json bashStrictMode"
+            add_failure "strict-mode: $rel"
+            strict_bad=$((strict_bad + 1))
+        fi
+    done < <(find "$repo_root" -name .git -prune -o -type f -name '*.sh' -print0 2>/dev/null)
+
+    if [[ $strict_bad -eq 0 ]]; then
+        ok "$strict_count .sh file(s) use set -euo pipefail (${#strict_exceptions[@]} declared exception(s))"
     fi
 fi
 

@@ -88,6 +88,7 @@ Source filenames are unprefixed (`agents/reviewer.md`); the `sd-`/`sd:` namespac
 
 - Markdown: ATX headers, no trailing colons in headers, fenced code blocks with language hint, 100-char soft wrap.
 - PowerShell: PascalCase functions, `$camelCase` variables, explicit `param()` block.
-- Bash: `#!/usr/bin/env bash`, `set -euo pipefail`, snake_case; use `jq` but exit 0 silently if missing; branch `stat -c %Y` (Linux) vs `stat -f %m` (macOS).
+- Bash: `#!/usr/bin/env bash`, `set -euo pipefail` (enforced by validate Check 10; hooks are declared
+  exceptions in manifest `bashStrictMode`), snake_case; use `jq` but exit 0 silently if missing; branch `stat -c %Y` (Linux) vs `stat -f %m` (macOS).
 - YAML frontmatter keys: lowercase-with-hyphens (`argument-hint`).
 - Commits: imperative mood, 50-char subject. Branches: `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `refactor/<slug>`.
