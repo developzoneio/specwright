@@ -541,13 +541,13 @@ function Write-CaseDiff {
 $script:bashExe = Resolve-BashPath
 if ($null -eq $script:bashExe) {
     Write-Host '[FAIL] bash not found; conformance requires both implementations.'
-    exit 1
+    exit 2
 }
 if ($null -eq (Get-Command jq -ErrorAction SilentlyContinue)) {
     # Without jq the bash hooks exit 0 silently, which would make every
     # bash decision look like "allow" and the comparison meaningless.
     Write-Host '[FAIL] jq not found; the bash hooks would silently no-op.'
-    exit 1
+    exit 2
 }
 
 # ---- self-test mode ---------------------------------------------------------

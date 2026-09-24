@@ -243,6 +243,27 @@ Windows:
 .\install\uninstall.ps1            # remove the five sd/ engine directories
 ```
 
+## Local verification
+
+Everything CI checks on a push can be run locally:
+
+```bash
+bash scripts/validate.sh && bash scripts/smoke-hooks.sh    # needs bash + jq
+```
+
+```powershell
+.\scripts\validate.ps1; .\scripts\smoke-hooks.ps1          # Windows
+```
+
+- **Parity harnesses** (hooks, contract lint, installer). These live under `tests/` and are
+  PowerShell 7 only, by design: a single process drives both the bash and the PowerShell
+  implementation, so parity is asserted rather than inferred.
+- **Behavioral e2e suite** (`tests/e2e/`). This drives real `claude -p` sessions and runs on a
+  Claude subscription login. No API key is required.
+
+What each suite needs and covers, and why, is in
+[CONTRIBUTING.md - Test suites and prerequisites](CONTRIBUTING.md#test-suites-and-prerequisites).
+
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) - 3-layer design, agent routing, skills, lifecycle, cost model

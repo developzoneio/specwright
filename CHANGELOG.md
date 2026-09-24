@@ -27,6 +27,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "mirrors install.sh" comment as its twin.
 
 ### Changed
+- **Test-harness prerequisites documented; e2e runs on a subscription** (SW-55) -
+  - **Docs.** `CONTRIBUTING.md` gains a "Test suites and prerequisites" section. It has a per-suite
+    table: what each suite needs, what it covers, how to run it, where CI runs it. It records why
+    the parity harnesses under `tests/` are pwsh-only (one process drives both implementations, so
+    parity is asserted rather than inferred) and gives a minimum local check before a PR.
+    `README.md` gains a short "Local verification" section that points to it.
+  - **e2e auth.** `tests/e2e/run-e2e.ps1` no longer implies it needs `ANTHROPIC_API_KEY`. It
+    accepts `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`), an existing `claude` login in
+    `~/.claude/.credentials.json`, or an API key, and prints which one it used. It warns when an
+    API key would override a subscription credential, and removes empty auth variables from the
+    child's environment.
+  - **Fail-fast preflight.** Before building any sandbox, the e2e runner checks that the `claude`
+    CLI is at least 2.1.196, that some auth is present, and that each selected scenario's commands
+    are on `PATH`. A scenario lists those commands in a new optional `requires.txt`; `01-setup` and
+    `02-feature-happy` declare `node` and `npm`. A missing prerequisite exits `2` and names it.
+  - **Exit codes.** The hook conformance, contract-lint self-test and installer parity harnesses
+    now also exit `2` (was `1`) for a missing bash or `jq`, following the documented convention.
+  - **Nightly workflow.** `e2e-nightly.yml` also passes an optional `CLAUDE_CODE_OAUTH_TOKEN`
+    secret.
+  - **e2e README.** `tests/e2e/README.md` states the per-run cost trade-off: over ~$2.50 on an API
+    key, plan usage on a subscription.
 - **Phase 0 bootstrap guard deduplicated across the seven workflow commands** (SW-54) -
   `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port` and `/sd:adr` now
   apply `sd-bootstrap-guard` as Phase 0 step 1 and keep only their own steps after it. Drift

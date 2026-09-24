@@ -20,16 +20,17 @@ twice gets deleted or rewritten, not retried.
 
 ## Prerequisites
 
+The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the
+dependency; it never shows up as a failed scenario assertion.
+
+- PowerShell 7+ (`pwsh`). This is a single cross-platform runner by design, the same as the other
+  parity harnesses. See [CONTRIBUTING.md "Test suites and
+  prerequisites"](../../CONTRIBUTING.md#test-suites-and-prerequisites) for why.
 - `claude` CLI on `PATH`, **v2.1.196 or later**.
-- `ANTHROPIC_API_KEY` set in the environment.
-- A real, already-authenticated `~/.claude/.credentials.json` on the machine running this locally
-  (see "Isolation and auth" below - CI does not have this and authenticates differently, see the
-  nightly workflow file).
-- PowerShell 7+ (`pwsh`) - this is a single cross-platform runner, same posture as
-  `tests/hooks/run-conformance.ps1` and `tests/contract-lint/run-selftest.ps1`: a test harness, not
-  a `hooks/` file, so the "hooks ship in pairs" rule does not apply.
-- Node.js (only `scenarios/01-setup` and `02-feature-happy` run `npm`/`node --test` inside their
-  fixture).
+- **One** way to authenticate `claude`. **No API key is needed**: a Claude subscription works. See
+  [Auth](#auth) below.
+- Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
+  `02-feature-happy`).
 
 ## Running it
 
@@ -65,19 +66,37 @@ project under test (a throwaway copy of `examples/fixture-project` or
 `--setting-sources project` is passed as a second, independent guarantee that no real user-scope
 settings can merge in. Both directories are deleted after every run.
 
-**Auth is the one piece that cannot be fully sandboxed locally.** Verified directly: `claude -p`
-needs `~/.claude/.credentials.json` (org/identity context) even when billing resolves through
-`ANTHROPIC_API_KEY` - an empty `HOME` alone produces `"Not logged in"` regardless of a valid key.
-`run-e2e.ps1` copies the real `~/.claude/.credentials.json` into each fake home at setup time and
-discards it on cleanup - it is never written anywhere persistent and never committed. If that file
-is absent (a from-scratch CI runner with no prior `claude auth login`), the harness prints one
-warning and headless auth will fail unless the environment authenticates a different way - see the
-nightly workflow file for how CI does this.
-
 Tool-level file access is a **separate** sandbox from the OS-level `HOME` override: Claude Code
 restricts Read/Write/Bash/Glob to the session's working directory plus any `--add-dir` grants, so
 the fake home is explicitly added via `--add-dir` on every invocation - without it, Claude Code
 correctly refuses to read `~/.claude/templates/sd/` even though `HOME` points there.
+
+### Auth
+
+Auth is the one piece that can't be fully sandboxed. The runner accepts any of these, checks them
+in this order, and prints the mode it picked:
+
+| Mode | How to get it | Billing | Where it fits |
+|---|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` (one-time, long-lived) | Claude subscription | Local on any OS; CI as a repo secret |
+| `~/.claude/.credentials.json` | An ordinary `claude` login (`/login`) | Claude subscription | Local on Windows and Linux |
+| `ANTHROPIC_API_KEY` | Anthropic Console | API, per token | CI (the original nightly setup) |
+
+- **Credentials file.** `run-e2e.ps1` copies the real `~/.claude/.credentials.json` into each fake
+  home at setup time and deletes it on cleanup. It is never written anywhere persistent and never
+  committed. On macOS the login is kept in the Keychain rather than in this file, so use
+  `claude setup-token` there instead.
+- **API key precedence.** `claude -p` prefers `ANTHROPIC_API_KEY` over a subscription credential.
+  If both are present, the runner warns that the run will bill the API. Unset the key to run on the
+  subscription.
+- **Empty values.** An auth variable that is set but empty counts as absent. That is what an unset
+  GitHub secret looks like. The runner removes such variables from the child `claude`
+  environment.
+- **Open question.** An earlier local run recorded that `claude -p` failed with `"Not logged in"`
+  when it had a valid `ANTHROPIC_API_KEY` but no `.credentials.json`. The nightly workflow runs in
+  exactly that configuration. Neither result has been re-checked since. If the nightly fails the
+  same way, switch it to the `CLAUDE_CODE_OAUTH_TOKEN` secret. The workflow already passes both
+  secrets.
 
 ## Permission mode - do not default to `acceptEdits`
 
@@ -134,13 +153,22 @@ Each scenario directory may contain: `source.txt` (repo-relative base tree to co
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
 `tests/contract-lint` `_base` + overlay fixture pattern), `prompt.txt` (the literal headless
 prompt), `expect.json` (declarative assertions), and optional `budget.txt` / `permission-mode.txt`
-/ `skip-permissions.txt` / `disallowed-tools.txt` overrides.
+/ `skip-permissions.txt` / `disallowed-tools.txt` overrides. An optional `requires.txt` lists
+commands the scenario needs on `PATH` (one per line, `#` comments allowed). The preflight checks it
+for the selected scenarios only, so `-Case 03-spec-gate-negative` does not demand Node.
 
 ## Cost and CI placement
 
-Not per-PR - a `claude -p` suite costs real API tokens and wall-clock minutes, neither of which
-belongs gating every push. Runs nightly (or on manual `workflow_dispatch`) on a single OS via
+Not per-PR: a `claude -p` suite costs real tokens and minutes of wall clock, and neither belongs
+in a gate on every push. It runs nightly (or on manual `workflow_dispatch`) on a single OS via
 `.github/workflows/e2e-nightly.yml`.
+
+**The cost trade-off per run.** With API-key auth, one full run costs **more than ~$2.50** (see the
+measured table below), plus about **$0.35** for `-SelfTest`. With subscription auth,
+`total_cost_usd` is a notional figure, and the run draws on the plan's usage allowance instead of
+dollars. The measured run below used subscription auth. That makes the suite practical to run
+locally before a PR, one `-Case` at a time for the cheap scenarios (`03`, `04`: about $0.15 each).
+It is no longer only a nightly report to read afterwards.
 
 Measured cost of one full 5-scenario run on this machine (`SD_E2E_DEBUG=1`, per-scenario
 `total_cost_usd` from the `claude -p --output-format json` result), 2026-08-01, `claude` 2.1.220,

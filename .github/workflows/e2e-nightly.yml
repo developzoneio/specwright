@@ -6,6 +6,11 @@ name: E2E behavioral eval (nightly)
 # tests/e2e/README.md for what each scenario asserts, the isolation model,
 # and the permission-mode pitfall (acceptEdits silently ignores a hook's
 # deny - see that file before changing --permission-mode here).
+#
+# Auth: set EITHER repo secret. CLAUDE_CODE_OAUTH_TOKEN (from `claude
+# setup-token`) runs on a Claude subscription; ANTHROPIC_API_KEY bills the
+# API and wins if both are set. An unset secret arrives as "", which the
+# harness treats as absent - with neither, it exits 2 naming what is missing.
 
 on:
   schedule:
@@ -31,6 +36,7 @@ jobs:
 
       - name: Run e2e suite
         env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         shell: pwsh
         run: ./tests/e2e/run-e2e.ps1
@@ -38,6 +44,7 @@ jobs:
       - name: Run e2e self-test (guard-neutering detection)
         if: always()
         env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         shell: pwsh
         run: ./tests/e2e/run-e2e.ps1 -SelfTest

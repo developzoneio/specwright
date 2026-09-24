@@ -151,7 +151,7 @@ function Invoke-Sweep {
 $script:bashExe = Resolve-BashPath
 if ($null -eq $script:bashExe) {
     Write-Host '[FAIL] bash not found; parity requires both implementations.'
-    exit 1
+    exit 2
 }
 $script:pwshExe = (Get-Process -Id $PID).Path
 

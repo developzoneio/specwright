@@ -10,6 +10,7 @@ per-file-type guidelines, and how to test changes locally.
 - [Project goals and non-goals](#project-goals-and-non-goals)
 - [Repo layout](#repo-layout)
 - [The manifest](#the-manifest)
+- [Test suites and prerequisites](#test-suites-and-prerequisites)
 - [Threshold re-calibration](#threshold-re-calibration)
 - [PR process](#pr-process)
 - [Per-file-type guidelines](#per-file-type-guidelines)
@@ -94,8 +95,8 @@ Two constraints on `pattern`: it must be valid in **both** POSIX ERE (bash `[[ =
 `scripts/selftest-docs.{ps1,sh}` proves Check 7 still bites, by corrupting a throwaway copy of the
 repo and asserting the validator catches it. CI runs it on all three OSes.
 
-`tests/hooks/run-conformance.ps1` (single cross-platform pwsh script by design - it must run BOTH
-hook implementations in one process, so a bash twin would itself be a drift risk) pipes every
+`tests/hooks/run-conformance.ps1` (pwsh-only by design, see
+[Why the parity harnesses are pwsh-only](#why-the-parity-harnesses-are-pwsh-only)) pipes every
 golden fixture under `tests/hooks/fixtures/` into the bash and PowerShell implementation of each
 hook and fails if their normalized decisions diverge from each other or from the golden. Add a
 fixture case whenever you add hook behavior; `-SelfTest` proves the harness still detects
@@ -149,9 +150,8 @@ registry entry, a rule function in *both* implementations, a fixture case under
 Each edge of that square is guarded by a different mechanism - the linters' own registry parity
 guard, and invariants C and D in `tests/contract-lint/run-selftest.ps1`.
 
-`tests/contract-lint/run-selftest.ps1` is the fixture suite. Like the hook conformance harness it is
-a single pwsh script by design: it runs both implementations in one process, so parity is asserted
-rather than inferred. `-SelfTest` swaps in a linter that reports nothing and asserts the harness
+`tests/contract-lint/run-selftest.ps1` is the fixture suite. Like the hook conformance harness, it
+is pwsh-only by design ([why](#why-the-parity-harnesses-are-pwsh-only)). `-SelfTest` swaps in a linter that reports nothing and asserts the harness
 notices.
 
 ### Root-level ad-hoc notes guard (Check 9)
@@ -178,6 +178,72 @@ fails the check, so the list cannot go stale.
 Scripts that need a tool the runner may lack (e.g. `jq`) check for it up front and exit `2` with
 the tool's name. They must not let a missing dependency show up as a failure of the thing under
 test.
+
+---
+
+## Test suites and prerequisites
+
+"Testing" in this repo means running the suites below. Every suite checks its own tools up front. A
+missing prerequisite exits `2` and names the dependency; it never shows up as a failed assertion
+against the code under test.
+
+| Suite | Needs | What it covers | Run it | In CI |
+|---|---|---|---|---|
+| `scripts/validate.{sh,ps1}` | bash + `jq`; or pwsh + bash | Every engine invariant: ASCII, hook-pair parity, model aliases, install targets, changelog, docs claims (Check 7), contract lint (Check 8), root notes guard (Check 9), bash strict mode (Check 10) | `bash scripts/validate.sh` / `.\scripts\validate.ps1` | Every OS, per push |
+| `scripts/smoke-hooks.{sh,ps1}` | bash + `jq`; or pwsh | Each hook, fed fixture JSON: exits `0` and emits the expected decision | `bash scripts/smoke-hooks.sh` / `.\scripts\smoke-hooks.ps1` | Every OS, per push |
+| `scripts/selftest-docs.{sh,ps1}` | Same as `validate` | Check 7 still catches a corrupted doc claim | `bash scripts/selftest-docs.sh` | Every OS, per push |
+| `scripts/selftest-root-guard.{sh,ps1}` | Same as `validate` | Check 9 still catches a root-level notes file | `bash scripts/selftest-root-guard.sh` | Every OS, per push |
+| `scripts/contract-lint.{sh,ps1}` | bash + `jq`; or pwsh | Check 8 on its own, for fast iteration on prompts | `bash scripts/contract-lint.sh --root .` | Via `validate` |
+| `tests/hooks/run-conformance.ps1` | **pwsh 7** + bash + `jq` | bash and PowerShell hooks reach identical decisions on every golden fixture | `pwsh tests/hooks/run-conformance.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/contract-lint/run-selftest.ps1` | **pwsh** + bash + `jq` | Both linters produce identical findings on every fixture | `pwsh tests/contract-lint/run-selftest.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/installer/run-prefix-parity.ps1` | **pwsh 7** + bash | All installer scripts agree on which `--prefix` values they accept | `pwsh tests/installer/run-prefix-parity.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/e2e/run-e2e.ps1` | **pwsh 7** + `claude` CLI + claude auth (a subscription works; no API key needed) + Node for some scenarios | Real `claude -p` sessions: the commands and gates *behave* correctly, asserted on produced artifacts | `pwsh tests/e2e/run-e2e.ps1 [-Case <name>] [-SelfTest]` | Nightly, ubuntu only |
+
+`ci.yml` also runs inline checks: the lesson tooling fixtures and the installer's
+argument-validation and partial-install negative cases. It needs nothing beyond bash + `jq` or
+pwsh. `tests/hooks/measure-latency.ps1` is a measurement tool, not a pass/fail suite.
+
+### Why the parity harnesses are pwsh-only
+
+The four `tests/**/*.ps1` runners above have no bash twin. **That is a deliberate decision, not a
+gap.** Each one exists to prove that the bash and PowerShell implementations of something agree.
+That can only be *asserted* when one process drives both implementations and compares their
+outputs directly. Two separate platform-native runners, each green on its own side, only let you
+*infer* parity, and a bash twin of the harness would itself be one more pair that could drift.
+
+- **pwsh runs everywhere.** PowerShell 7 runs on Linux and macOS, and all three CI runner images
+  have it. On a machine without it, `pwsh` fails with the shell's own "command not found" before
+  any assertion runs.
+- **Harnesses aren't shipped.** The "hooks ship in pairs" rule applies to what the installer
+  copies into `~/.claude/`. The harnesses are never installed.
+- **No pwsh? You can still check most of it.** A contributor without pwsh can run every
+  `scripts/*.sh` suite. CI then covers the parity harnesses on every push.
+
+### e2e auth and cost
+
+The e2e suite is the only one that exercises real prompt behavior, so it matters that the
+maintainer can run it. It authenticates with any of the following:
+
+- `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (a subscription).
+- An existing `claude` login in `~/.claude/.credentials.json` (a subscription).
+- `ANTHROPIC_API_KEY` (API billing).
+
+On an API key, one full run costs more than ~$2.50. On a subscription, it draws on plan usage
+instead. The cheap negative scenarios (`-Case 03-spec-gate-negative`, `-Case 04-closeout-negative`)
+are practical to run before a PR. Details, the measured per-scenario costs, and the macOS Keychain
+caveat are in [`tests/e2e/README.md`](tests/e2e/README.md#auth).
+
+### Minimum local check before a PR
+
+```bash
+bash scripts/validate.sh && bash scripts/smoke-hooks.sh          # any OS with bash + jq
+```
+```powershell
+.\scripts\validate.ps1; .\scripts\smoke-hooks.ps1                # Windows
+pwsh tests/hooks/run-conformance.ps1                             # if you touched hooks
+pwsh tests/contract-lint/run-selftest.ps1                        # if you touched a lint rule
+pwsh tests/e2e/run-e2e.ps1 -Case 03-spec-gate-negative           # if you touched a command or gate
+```
 
 ---
 
@@ -217,8 +283,10 @@ first**:
 4. **Run the validator** before opening the PR: `scripts/validate.ps1` (Windows) or
    `scripts/validate.sh` (Unix) runs every engine-invariant check at once (ASCII, hook-pair parity,
    model aliases, install-target counts, changelog gate, docs consistency, root-level notes guard).
-   CI runs the same on Windows + Ubuntu. See also the [Local install test](#local-install-test) for
-   a manual install smoke test, and [The manifest](#the-manifest) for what Check 7 enforces.
+   CI runs the same on Windows, Ubuntu and macOS. [Test suites and
+   prerequisites](#test-suites-and-prerequisites) lists every other suite, what each needs, and the
+   minimum local check. See also the [Local install test](#local-install-test) for a manual install
+   smoke test, and [The manifest](#the-manifest) for what Check 7 enforces.
 
 5. **Update the changelog.** Add a line under `## [Unreleased]` in `CHANGELOG.md`.
 

@@ -28,6 +28,15 @@
       prompt.txt   - the literal prompt fed to `claude -p`.
       expect.json  - declarative assertions evaluated after the run.
       budget.txt   - optional, one line: --max-budget-usd override (default 3).
+      requires.txt - optional, one command name per line that must be on
+                      PATH (e.g. node, npm); checked by the preflight.
+
+    Preflight: before any sandbox is built, the harness checks the claude
+    CLI (present, >= the minimum version), that some claude auth is
+    available (CLAUDE_CODE_OAUTH_TOKEN, ~/.claude/.credentials.json, or
+    ANTHROPIC_API_KEY - subscription auth needs no API key), and every
+    requires.txt command of the selected scenarios. A missing prerequisite
+    exits 2 with the dependency named, never as a failed assertion.
 
     -SelfTest re-runs the negative scenarios (03, 04) with spec-gate's
     installed hook files replaced by an always-allow stub, and asserts they
@@ -64,6 +73,86 @@ function Write-Ok   { param([string]$m) Write-Host "  [OK]   $m"; $script:pass++
 function Write-Bad  { param([string]$m) Write-Host "  [FAIL] $m"; $script:fail++ }
 function Write-Info { param([string]$m) Write-Host "         $m" }
 
+# ---- prerequisites -----------------------------------------------------------
+
+$script:minClaudeVersion = [version]'2.1.196'
+
+function Exit-MissingPrereq {
+    # A missing prerequisite exits 2 and names the dependency, before any
+    # sandbox is built - it must never surface as a failed scenario assertion.
+    param([string]$Message)
+    Write-Host "[FAIL] $Message"
+    Write-Host '       See tests/e2e/README.md "Prerequisites".'
+    exit 2
+}
+
+function Test-EnvSet {
+    # GitHub Actions sets an env var bound to an absent secret to "", so an
+    # empty value counts as unset.
+    param([string]$Name)
+    return (-not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Name)))
+}
+
+function Get-CredentialsPath {
+    return (Join-Path $HOME '.claude' '.credentials.json')
+}
+
+function Get-AuthMode {
+    # First match wins; the order is the order the README recommends.
+    if (Test-EnvSet 'CLAUDE_CODE_OAUTH_TOKEN') { return 'subscription (CLAUDE_CODE_OAUTH_TOKEN)' }
+    if (Test-Path -LiteralPath (Get-CredentialsPath)) { return 'subscription (~/.claude/.credentials.json)' }
+    if (Test-EnvSet 'ANTHROPIC_API_KEY') { return 'API key (ANTHROPIC_API_KEY)' }
+    return $null
+}
+
+function Get-ScenarioRequirements {
+    # Optional requires.txt: one command name per line that must be on PATH
+    # for this scenario (blank lines and # comments ignored).
+    param([string]$ScenarioDir)
+    $p = Join-Path $ScenarioDir 'requires.txt'
+    if (-not (Test-Path -LiteralPath $p)) { return @() }
+    return @(Get-Content -LiteralPath $p |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#') })
+}
+
+function Assert-Prerequisites {
+    param([string[]]$ScenarioDirs)
+
+    if ($null -eq (Get-Command claude -ErrorAction SilentlyContinue)) {
+        Exit-MissingPrereq 'claude CLI not found on PATH; the e2e harness drives real `claude -p` sessions.'
+    }
+    $versionText = (& claude --version 2>$null | Out-String).Trim()
+    if ($versionText -notmatch '(\d+\.\d+\.\d+)') {
+        Exit-MissingPrereq "claude CLI version unreadable ('claude --version' printed '$versionText'); need $($script:minClaudeVersion) or later."
+    }
+    $claudeVersion = [version]$Matches[1]
+    if ($claudeVersion -lt $script:minClaudeVersion) {
+        Exit-MissingPrereq "claude CLI $claudeVersion is older than the required $($script:minClaudeVersion); update the claude CLI."
+    }
+    Write-Host "[INFO] claude CLI: $claudeVersion"
+
+    $authMode = Get-AuthMode
+    if ($null -eq $authMode) {
+        Exit-MissingPrereq ('no claude auth found. Provide one of: ' +
+            'CLAUDE_CODE_OAUTH_TOKEN (subscription - run `claude setup-token`), ' +
+            'a claude.ai login in ~/.claude/.credentials.json (subscription - run `claude` and /login), ' +
+            'or ANTHROPIC_API_KEY (API billing).')
+    }
+    Write-Host "[INFO] auth: $authMode"
+    if ((Test-EnvSet 'ANTHROPIC_API_KEY') -and $authMode -like 'subscription*') {
+        Write-Host '[WARN] ANTHROPIC_API_KEY is also set; claude -p prefers it, so this run bills the API, not the subscription. Unset it to run on the subscription.'
+    }
+
+    foreach ($dir in $ScenarioDirs) {
+        foreach ($cmd in (Get-ScenarioRequirements -ScenarioDir $dir)) {
+            if ($null -eq (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+                Exit-MissingPrereq "'$cmd' not found on PATH; scenario $(Split-Path -Leaf $dir) requires it (requires.txt)."
+            }
+        }
+    }
+}
+
 # ---- sandbox construction ---------------------------------------------------
 
 function New-EmptyTempDir {
@@ -73,8 +162,6 @@ function New-EmptyTempDir {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     return $dir
 }
-
-$script:warnedNoCredentials = $false
 
 function New-FakeHome {
     # Fresh, empty "fake home" with the engine installed into <fakehome>/.claude
@@ -92,15 +179,13 @@ function New-FakeHome {
     # enough (verified directly: without it, every headless run fails with
     # "Not logged in" despite a valid API key). Copied fresh into the
     # throwaway fake home per run and discarded on cleanup; never written
-    # anywhere persistent. CI has no real credentials file to copy - see
-    # tests/e2e/README.md for how the nightly workflow authenticates instead.
-    $realCreds = Join-Path $HOME '.claude' '.credentials.json'
+    # anywhere persistent. When the file is absent, auth comes from an
+    # environment variable instead - the preflight below has already
+    # established that one is present (see Get-AuthMode).
+    $realCreds = Get-CredentialsPath
     if (Test-Path -LiteralPath $realCreds) {
         New-Item -ItemType Directory -Path $basePath -Force | Out-Null
         Copy-Item -LiteralPath $realCreds -Destination (Join-Path $basePath '.credentials.json') -Force
-    } elseif (-not $script:warnedNoCredentials) {
-        Write-Host '  [WARN] no ~/.claude/.credentials.json found to seed the sandbox; headless auth may fail unless CLAUDE_CODE_* CI auth is configured.'
-        $script:warnedNoCredentials = $true
     }
 
     return $fakeHome
@@ -202,6 +287,13 @@ function Invoke-ClaudeHeadless {
     $psi.UseShellExecute        = $false
     $psi.EnvironmentVariables['HOME']        = $FakeHome
     $psi.EnvironmentVariables['USERPROFILE'] = $FakeHome
+    # Drop auth variables that are set but empty (an absent CI secret), so
+    # claude never sees a blank credential alongside the real one.
+    foreach ($authVar in @('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN')) {
+        if ($psi.EnvironmentVariables.ContainsKey($authVar) -and -not (Test-EnvSet $authVar)) {
+            $psi.EnvironmentVariables.Remove($authVar)
+        }
+    }
 
     $proc = [System.Diagnostics.Process]::Start($psi)
     $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
@@ -406,18 +498,32 @@ function Invoke-Scenario {
     }
 }
 
-# ---- preconditions ------------------------------------------------------------
+# ---- scenario selection and preconditions -------------------------------------
 
-if ($null -eq (Get-Command claude -ErrorAction SilentlyContinue)) {
-    Write-Host '[FAIL] claude CLI not found on PATH; the e2e harness requires it (see tests/e2e/README.md).'
-    exit 2
+$negativeScenarios = @('03-spec-gate-negative', '04-closeout-negative')
+
+if ($SelfTest) {
+    $selectedDirs = @($negativeScenarios |
+        ForEach-Object { Join-Path $scenariosDir $_ } |
+        Where-Object { Test-Path -LiteralPath $_ })
+} else {
+    $scenarioDirs = Get-ChildItem -LiteralPath $scenariosDir -Directory | Sort-Object Name
+    if ($Case) {
+        $scenarioDirs = @($scenarioDirs | Where-Object { $_.Name -eq $Case })
+        if ($scenarioDirs.Count -eq 0) {
+            Write-Host "[FAIL] no scenario named '$Case' under $scenariosDir"
+            exit 1
+        }
+    }
+    $selectedDirs = @($scenarioDirs | ForEach-Object { $_.FullName })
 }
+
+Assert-Prerequisites -ScenarioDirs $selectedDirs
 
 # ---- self-test mode ------------------------------------------------------------
 
 if ($SelfTest) {
     Write-Host '=== e2e self-test: harness must DETECT a removed guard ==='
-    $negativeScenarios = @('03-spec-gate-negative', '04-closeout-negative')
     $allDetected = $true
     foreach ($n in $negativeScenarios) {
         $dir = Join-Path $scenariosDir $n
@@ -439,17 +545,8 @@ if ($SelfTest) {
 
 # ---- main -----------------------------------------------------------------------
 
-$scenarioDirs = Get-ChildItem -LiteralPath $scenariosDir -Directory | Sort-Object Name
-if ($Case) {
-    $scenarioDirs = @($scenarioDirs | Where-Object { $_.Name -eq $Case })
-    if ($scenarioDirs.Count -eq 0) {
-        Write-Host "[FAIL] no scenario named '$Case' under $scenariosDir"
-        exit 1
-    }
-}
-
-foreach ($s in $scenarioDirs) {
-    Invoke-Scenario -ScenarioDir $s.FullName | Out-Null
+foreach ($dir in $selectedDirs) {
+    Invoke-Scenario -ScenarioDir $dir | Out-Null
 }
 
 Write-Host ''
