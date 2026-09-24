@@ -209,6 +209,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   process-startup cost, which the SW-50 ADR will need to account for separately.
 
 ### Fixed
+- **CI: the two bash negative-case installer steps could never pass** - GitHub runs `shell: bash`
+  as `bash -e`, and the steps' own `set -uo pipefail` left `-e` on, so the first expected
+  non-zero exit captured by `out="$(...)"; rc=$?` aborted the step before `rc` was read.
+  ubuntu-latest and macos-latest had been red on this since SW-46 (the partial-install step
+  was hidden behind it as `skipped`). Both steps now `set +e` first; their explicit `exit 1`
+  assertions still fail the step.
 - **`agents/debugger.md` promised a "project-provided database MCP tool" it can never call**
   (SW-64). The agent's `tools:` allowlist is fixed in the engine, and no Layer-2 setting can add a
   project's database MCP tool to it, so that path never worked. The Verify, Hotspot A and "Database

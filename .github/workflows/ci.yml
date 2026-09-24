@@ -211,6 +211,11 @@ jobs:
         if: runner.os == 'Linux' || runner.os == 'macOS'
         shell: bash
         run: |
+          # GitHub runs `shell: bash` as `bash -e`; `set -uo pipefail` does not
+          # turn -e back off, so the first expected non-zero `out="$(...)"` below
+          # would abort the step before `rc=$?` runs. These assertions check rc
+          # by hand, so -e must be off.
+          set +e
           set -uo pipefail
           repo_root="$(pwd)"
           scratch="$(mktemp -d)"
@@ -346,6 +351,11 @@ jobs:
         if: runner.os == 'Linux' || runner.os == 'macOS'
         shell: bash
         run: |
+          # GitHub runs `shell: bash` as `bash -e`; `set -uo pipefail` does not
+          # turn -e back off, so the first expected non-zero `out="$(...)"` below
+          # would abort the step before `rc=$?` runs. These assertions check rc
+          # by hand, so -e must be off.
+          set +e
           set -uo pipefail
           repo_root="$(pwd)"
 
