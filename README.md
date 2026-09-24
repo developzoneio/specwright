@@ -1,7 +1,7 @@
 # specwright
 
 > **Claude Code cannot touch your code until a spec is approved.**
-> 14 slash commands, 6 specialized subagents, 3 guard-rail hooks, 10 templates, 10 reusable skills - all under the `sd:` namespace, stack-agnostic, cross-platform, and ready to drop into any project.
+> 14 slash commands, 6 specialized subagents, 3 guard-rail hooks, 10 templates, 11 reusable skills - all under the `sd:` namespace, stack-agnostic, cross-platform, and ready to drop into any project.
 
 [![Release](https://img.shields.io/github/v/release/developzoneio/specwright)](https://github.com/developzoneio/specwright/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -124,7 +124,7 @@ stopping at Gate 1 for your sign-off. No project handy? The bundled
 | **6 specialized subagents** | architect, explorer, debugger, implementer, reviewer, docs-writer |
 | **3 cross-platform hooks** | `prompt-router`, `spec-gate`, `subagent-retro` (PowerShell + bash) |
 | **10 templates** | 4 setup templates + 6 spec templates (feature / bug / refactor / perf / rca / port) |
-| **10 reusable skills** | Shared rule packs loaded from agent frontmatter or read at runtime by commands, never copy-pasted |
+| **11 reusable skills** | Shared rule packs loaded from agent frontmatter or read at runtime by commands, never copy-pasted |
 | **Cross-platform installer** | Content-hash dedup, timestamped backups, dry-run mode |
 | **MCP-friendly** | Atlassian, Context7, sequential-thinking, GitNexus, your database MCP, Playwright, Tavily |
 | **Stack-agnostic** | .NET, Node, Python, Go, Rust - anything with a `CLAUDE.md` |
@@ -166,7 +166,7 @@ Commands do not do the work themselves - they orchestrate 6 subagents, each with
 
 Models use **portable aliases** (`sonnet`, `haiku`) so they auto-update - never a pinned model ID.
 
-Cross-cutting rules live in **10 skills**: markdown rule packs that agents load via a `skills:` list in their frontmatter, rather than copy-pasting the same rule into every agent body that needs it. Commands cannot load skills that way, so they read a `SKILL.md` at runtime instead - every workflow's Phase 0 applies `sd-bootstrap-guard`.
+Cross-cutting rules live in **11 skills**: markdown rule packs that agents load via a `skills:` list in their frontmatter, rather than copy-pasting the same rule into every agent body that needs it. Commands cannot load skills that way, so they read a `SKILL.md` at runtime instead - every workflow's Phase 0 applies `sd-bootstrap-guard`.
 
 Full tool allowlists, the command -> agent routing map, and the skill catalogue:
 [`docs/architecture.md`](docs/architecture.md).

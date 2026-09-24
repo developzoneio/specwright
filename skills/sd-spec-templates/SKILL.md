@@ -108,9 +108,9 @@ task headings as `### T01`, `### ✅ T01`, and other drifted forms. A counter th
 `^### T<NN>` undercounts real specs and the gate silently never fires. Match tolerantly: a task
 heading is an H3 (or deeper) whose text contains a `T<digits>` token.
 
-**A create-time estimate of `L` also escalates models** (aliases only) — `/sd:feature` bumps the
-impact explorer and the planning architect a tier. That is a workflow action, documented in
-`commands/feature.md`; the architect only writes the estimate.
+**A create-time estimate of `L` also escalates models** — `/sd:feature` applies the
+**sd-model-escalation** rules that read it. That is a main-thread action; the architect only writes
+the estimate.
 
 ---
 

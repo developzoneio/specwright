@@ -82,6 +82,12 @@
     "subagent_default": "haiku",
     "subagent_reasoning": "sonnet",
     "subagent_execution": "haiku",
+    "escalation": {
+      "enabled": true,
+      "ceiling": "opus",
+      "_ceiling_use": "Highest alias escalation may reach. Set to 'sonnet' to cap cost on constrained quota.",
+      "_comment": "Per-invocation main-thread override. Agent frontmatter is never edited. Policy, trigger table and retro logging live in the sd-model-escalation skill. An absent block reads as enabled=true, ceiling=opus."
+    },
     "_comment": "Portable aliases (sonnet/haiku) — resolved to the current recommended version by Claude Code at runtime. Agents also use these aliases in frontmatter."
   },
 

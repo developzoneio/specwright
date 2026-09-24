@@ -35,6 +35,10 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Determine state from table above.
+3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 2 step 0, Phase 3 step 0 and Gate 2 `no-split`; this file names only rule IDs
+   and trigger inputs. If that file is unreadable, STOP: "specwright install incomplete - model
+   escalation skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 
 ---
 
@@ -64,12 +68,9 @@ STOP. Present the spec to the user. Ask:
 
 ## Phase 2 - Impact analysis
 
-0. **Complexity escalation check.** Read the `complexity` frontmatter field of
-   `.specs/FEAT-<arg>/00-spec.md`. If it is `L`, invoke the explorer in step 1 with a model
-   override to `sonnet` (overriding its `haiku` default) - a create-time `L` estimate is exactly
-   the multi-subsystem case where the shallow haiku impact map degrades. For `S` / `M`, use the
-   default model. Aliases only - never a full model ID.
-1. Invoke `sd-code-explorer` (model: default, or `sonnet` per step 0) with:
+0. **Model escalation check.** Apply rule `ESC-FEAT-02` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
+1. Invoke `sd-code-explorer` (model: default, or as resolved by step 0) with:
    - `TASK = impact-map`
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
    - `OUTPUT_TARGET = .specs/FEAT-<arg>/03-decisions.md`
@@ -84,11 +85,9 @@ No gate here - impact analysis is informational. User reviews it in Phase 3.
 
 ## Phase 3 - Plan + tasks
 
-0. **Complexity escalation check.** Read the `complexity` frontmatter field of
-   `.specs/FEAT-<arg>/00-spec.md`. If it is `L`, invoke the architect in step 1 with a model
-   override to `opus` (overriding its `sonnet` default) - single-pass planning is where large scope
-   degrades non-linearly. For `S` / `M`, use the default model. Aliases only - never a full model ID.
-1. Invoke `sd-spec-architect` (model: default, or `opus` per step 0) with:
+0. **Model escalation check.** Apply rule `ESC-FEAT-03` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
+1. Invoke `sd-spec-architect` (model: default, or as resolved by step 0) with:
    - `TASK = plan`
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT = .specs/FEAT-<arg>/03-decisions.md`
@@ -144,11 +143,10 @@ If the architect returned a **decompose proposal**, ask:
   never edited to match the split**. Print the child IDs and tell the user to run `/sd:feature
   <child-arg>` on each, respecting the dependency order. Exit this workflow.
 - `no-split <reason>` -> the user judges the work legitimately atomic (large but cohesive, no clean
-  partition). Apply the **sanctioned model escalation** if not already applied: the plan was written
-  by the escalated `opus` architect (Phase 3 step 0) only if `complexity` was `L`; if the estimate
-  under-called it, re-invoke Phase 3 once with the architect overridden to `opus`. Then treat as
-  Face A `yes`: set status=`in-progress`, proceed to Phase 4. Log the no-split decision and its
-  reason to `05-retro.md`.
+  partition). Apply rule `ESC-FEAT-03b` of **sd-model-escalation** - trigger input: whether
+  `ESC-FEAT-03` fired for this plan in Phase 3 step 0. Then treat as Face A `yes`: set
+  status=`in-progress`, proceed to Phase 4. Log the no-split decision and its reason to
+  `05-retro.md`.
 - `refine` -> `sd-spec-architect` `TASK = refine`; loop back through the self-assessment.
 - `abort` -> set status=`archived`, exit.
 
@@ -306,9 +304,9 @@ Treat findings:
   `sd-replan-loop` skill; `02-tasks.md` is re-planned only through it - never by a silent hand-edit.
   Any revision is recorded append-only in `01-plan.md`'s `## Revisions` log with the original plan
   prose left intact.
-- **Model escalation is aliases only.** A create-time `complexity: L` bumps the explorer to
-  `sonnet` (Phase 2) and the architect to `opus` (Phase 3). Never introduce a full model ID; never
-  edit an agent's `model:` frontmatter - the override is per-invocation, from the main thread.
+- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-FEAT-02`, `ESC-FEAT-03` and
+  `ESC-FEAT-03b` are applied where named above; the ladder, precedence, `models.escalation` config
+  and the `05-retro.md` line format live in the skill and are not restated here.
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.

@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`skills/sd-model-escalation/SKILL.md`** (SW-60) - single owner of the model escalation
+  policy: the `haiku -> sonnet -> opus` ladder (`inherit` is not a rung), the three invariants from
+  ADR 0002, a trigger table with stable rule IDs, precedence rules, and a logging contract - every
+  fired decision appends `escalation: <agent> <from> -> <to> (trigger: <rule-id>)` to the spec's
+  `05-retro.md`, with a `capped` suffix when the ceiling limited it and `unapplied` when the
+  invocation tool had no `model` parameter. The override is defined as the Task/Agent tool's
+  `model` parameter, never prompt prose. Loaded by `sd-spec-architect` and `sd-implementer` via
+  `skills:`; read at runtime by `/sd:feature` (new Phase 0 step 3). Skill inventory 10 -> 11.
+- **`models.escalation` in `project-config.template.json`** (SW-60) - `enabled` (default `true`)
+  and `ceiling` (default `"opus"`; `"sonnet"` caps cost). Additive: an absent block or key reads
+  as the defaults, and `/sd:setup` Phase 1.5's field diff offers the block to older configs. An
+  invalid value disables escalation for the run with a WARN rather than guessing.
 - **`scripts/prompt-size-report.{sh,ps1}`** (SW-57) - a release-time report replacing `CL500`. For
   every file in `contractLint.scanScope` it prints the normalized size at the previous `v*` tag (or
   at `--since <ref>`), the size now, the delta and the percentage, plus a total per area. A file
@@ -157,6 +169,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     approved before this rule existed.
 
 ### Changed
+- **`/sd:feature` escalation prose extracted into `sd-model-escalation`** (SW-60) - Phase 2
+  step 0, Phase 3 step 0, the Gate 2 `no-split` branch and the Key Rules line now name rules
+  `ESC-FEAT-02`, `ESC-FEAT-03` and `ESC-FEAT-03b` plus their trigger inputs; the tiers, rationale
+  and aliases-only rule moved into the skill unchanged. `sd-spec-architect`, `sd-spec-templates`,
+  the feature spec template and `docs/usage.md` point to the skill instead of paraphrasing it. No
+  agent `model:` frontmatter changed. Deviations from the ticket: the trigger table ships only the
+  three live `/sd:feature` rows - SW-61 and SW-62 add their rows when they wire them, so no row
+  exists without a command that applies it; and `PROJECT-SNAPSHOT.md` does not exist in this repo,
+  so the inventory bump went to the files Check 7 guards.
 - **1.6.0 changelog condensed; design rationale moved to ADRs** (SW-56). The `[1.6.0]` section
   goes from 476 to about 100 lines of what-changed entries, linking an ADR where one exists. New
   `docs/adr/0005`-`0009` hold the port pipeline, contract lint, version source, e2e + fixture and
