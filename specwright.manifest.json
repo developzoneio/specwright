@@ -545,5 +545,41 @@
     "ticket asks to keep the list explicit and short rather than clever.",
     "ROADMAP.md matches none of these on purpose - it is a maintained project document, not",
     "an ad-hoc findings snapshot; see CONTRIBUTING.md."
-  ]
+  ],
+
+  "$hookLatencyBudgetsComment": [
+    "SW-50's per-invocation latency floor, enforced in CI by",
+    "tests/hooks/measure-latency.ps1 -CheckBudget (every OS measures pwsh; windows-latest also",
+    "measures Windows PowerShell 5.1 as 'powershell'). Milliseconds, nearest-rank percentiles",
+    "pooled over the cases in tests/hooks/fixtures/latency-selection.json.",
+    "",
+    "Raising a number here is a real decision that belongs in the SAME commit as the change",
+    "that needs it, with the reason in its CHANGELOG line - never a reflex to a red CI run.",
+    "Unlike the retired CL500 byte ratchet (ADR 0011), budgets are NOT set at today's exact",
+    "measurement: they carry headroom over the slowest CI runner's p95, so shared-runner noise",
+    "does not force a raise, and they have an external anchor. Every p95 is capped at half the",
+    "hook's 'timeout' in templates/settings.template.json (SW-50 AC-5): measure-latency.ps1",
+    "refuses a budget above that ceiling before it measures anything, so the only way past it",
+    "is to raise the timeout too, in the same commit, and say why.",
+    "",
+    "Every measured (hook, flavor) must have an entry; a missing one fails -CheckBudget rather",
+    "than being skipped. A new hook or flavor declares its budget when it starts being measured."
+  ],
+
+  "hookLatencyBudgets": {
+    "budgets": {
+      "spec-gate": {
+        "pwsh": { "p95": 2500 },
+        "powershell": { "p95": 2500 }
+      },
+      "prompt-router": {
+        "pwsh": { "p95": 2500 },
+        "powershell": { "p95": 2500 }
+      },
+      "subagent-retro": {
+        "pwsh": { "p95": 1500 },
+        "powershell": { "p95": 1500 }
+      }
+    }
+  }
 }

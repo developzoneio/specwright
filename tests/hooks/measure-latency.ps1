@@ -26,9 +26,15 @@
     sample number ceil(P/100 * N), 1-indexed.
 
     -CheckBudget compares the computed numbers against
-    specwright.manifest.json's "hookLatencyBudgets" (when present) and exits
-    non-zero if any (hook, flavor, percentile) exceeds its budget. Without
-    -CheckBudget the script only reports; it never fails the build on its own.
+    specwright.manifest.json's "hookLatencyBudgets" and exits non-zero if any
+    (hook, flavor, percentile) exceeds its budget. It also fails when the budget
+    block is missing, when a measured (hook, flavor) has no declared budget, when
+    an explicitly requested -Flavors entry is not installed, and - before any
+    measuring starts - when a declared p95 budget exceeds half that hook's
+    "timeout" in templates/settings.template.json (the SW-50 AC-5 ceiling: a
+    budget may not be raised past it without raising the timeout in the same
+    commit). Without -CheckBudget the script only reports; it never fails the
+    build on its own.
 
 .NOTES
     PURE ASCII ONLY (see hooks/powershell/prompt-router.ps1 for why).
@@ -62,6 +68,7 @@ $scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot    = (Resolve-Path (Join-Path $scriptDir '..' '..')).Path
 $fixturesDir = Join-Path $scriptDir 'fixtures'
 $manifestPath = Join-Path $repoRoot 'specwright.manifest.json'
+$settingsTemplatePath = Join-Path $repoRoot 'templates' 'settings.template.json'
 
 if (-not $SelectionFile) {
     $SelectionFile = Join-Path $fixturesDir 'latency-selection.json'
@@ -175,6 +182,13 @@ if ($null -eq $Flavors -or $Flavors.Count -eq 0) {
 } else {
     foreach ($f in $Flavors) {
         if ($available -notcontains $f) {
+            if ($CheckBudget) {
+                # A CI job that asks for 'powershell' and silently measures only
+                # pwsh would report green without ever touching 5.1 - the exact
+                # gap this script exists to close.
+                Write-Host "[FAIL] requested flavor '$f' is not available on this machine"
+                exit 1
+            }
             Write-Host "[WARN] requested flavor '$f' is not available on this machine; skipping"
         }
     }
@@ -193,6 +207,73 @@ if (-not (Test-Path -LiteralPath $SelectionFile)) {
 }
 $selection = Get-Content -LiteralPath $SelectionFile -Raw | ConvertFrom-Json
 $hookNames = @($selection.PSObject.Properties.Name | Where-Object { $_ -ne '_comment' })
+
+# ---- budget load + timeout ceiling (before measuring, so a bad budget fails fast)
+
+function Get-HookTimeoutSeconds {
+    # Finds the "timeout" wired for <hookName>.ps1 in the settings template.
+    # Returns $null when the hook is not wired there.
+    param($Settings, [string]$HookName)
+    foreach ($eventProp in $Settings.hooks.PSObject.Properties) {
+        foreach ($matcherEntry in @($eventProp.Value)) {
+            foreach ($h in @($matcherEntry.hooks)) {
+                if ($null -eq $h -or $null -eq $h.command) { continue }
+                if (([string]$h.command) -like "*/$HookName.ps1*") {
+                    return [double]$h.timeout
+                }
+            }
+        }
+    }
+    return $null
+}
+
+$budgets = $null
+if ($CheckBudget) {
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        Write-Host "[FAIL] manifest not found: $manifestPath"
+        exit 1
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $budgets = $manifest.hookLatencyBudgets.budgets
+    if ($null -eq $budgets) {
+        Write-Host '[FAIL] specwright.manifest.json has no hookLatencyBudgets.budgets'
+        exit 1
+    }
+    if (-not (Test-Path -LiteralPath $settingsTemplatePath)) {
+        Write-Host "[FAIL] settings template not found: $settingsTemplatePath"
+        exit 1
+    }
+    $settings = Get-Content -LiteralPath $settingsTemplatePath -Raw | ConvertFrom-Json
+
+    Write-Host '=== budget ceiling (p95 <= timeout / 2) ==='
+    $ceilingViolations = 0
+    foreach ($hookProp in $budgets.PSObject.Properties) {
+        $timeoutSec = Get-HookTimeoutSeconds -Settings $settings -HookName $hookProp.Name
+        if ($null -eq $timeoutSec -or $timeoutSec -le 0) {
+            Write-Host "[FAIL] budgeted hook '$($hookProp.Name)' has no timeout in templates/settings.template.json"
+            $ceilingViolations++
+            continue
+        }
+        $ceilingMs = $timeoutSec * 1000.0 / 2.0
+        foreach ($flavorProp in $hookProp.Value.PSObject.Properties) {
+            $p95Budget = $flavorProp.Value.p95
+            if ($null -eq $p95Budget) {
+                Write-Host "[FAIL] $($hookProp.Name)/$($flavorProp.Name) declares no p95 budget"
+                $ceilingViolations++
+            } elseif ([double]$p95Budget -gt $ceilingMs) {
+                Write-Host ("[FAIL] {0}/{1} p95 budget {2} ms exceeds ceiling {3} ms (timeout {4}s / 2) - raise the timeout in the same commit, or optimise" -f $hookProp.Name, $flavorProp.Name, $p95Budget, $ceilingMs, $timeoutSec)
+                $ceilingViolations++
+            } else {
+                Write-Host ("[OK]   {0}/{1} p95 budget {2} ms <= ceiling {3} ms" -f $hookProp.Name, $flavorProp.Name, $p95Budget, $ceilingMs)
+            }
+        }
+    }
+    if ($ceilingViolations -gt 0) {
+        Write-Host ''
+        Write-Host "=== $ceilingViolations budget ceiling violation(s) ==="
+        exit 1
+    }
+}
 
 # ---- measurement loop ---------------------------------------------------------
 
@@ -279,34 +360,33 @@ if ($OutJson) {
 if ($CheckBudget) {
     Write-Host ''
     Write-Host '=== budget check ==='
-    if (-not (Test-Path -LiteralPath $manifestPath)) {
-        Write-Host "[FAIL] manifest not found: $manifestPath"
-        exit 1
-    }
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $budgets = $manifest.hookLatencyBudgets.budgets
-    if ($null -eq $budgets) {
-        Write-Host '[WARN] specwright.manifest.json has no hookLatencyBudgets.budgets yet; nothing to check (SW-50 commit 1 - budgets land once a baseline is captured)'
-        exit 0
-    }
+    # An unbudgeted (hook, flavor) is a failure, not a skip: a new hook or a new
+    # flavor must declare its budget in the same commit that starts measuring it.
     $overBudget = 0
     foreach ($hookName in $hookNames) {
         $hookBudget = $budgets.$hookName
         if ($null -eq $hookBudget) {
-            Write-Host "[WARN] no budget declared for hook '$hookName'; skipping"
+            Write-Host "[FAIL] no budget declared for hook '$hookName'"
+            $overBudget++
             continue
         }
         foreach ($flavor in $Flavors) {
             $flavorBudget = $hookBudget.$flavor
             if ($null -eq $flavorBudget) {
-                Write-Host "[WARN] no budget declared for '$hookName' / '$flavor'; skipping"
+                Write-Host "[FAIL] no budget declared for '$hookName' / '$flavor'"
+                $overBudget++
                 continue
             }
             $measured = $summary.hooks[$hookName][$flavor]
             foreach ($pct in @('p50', 'p95')) {
                 $budgetVal = $flavorBudget.$pct
                 $measuredVal = $measured.$pct
-                if ($null -eq $budgetVal -or $null -eq $measuredVal) { continue }
+                if ($null -eq $budgetVal) { continue }
+                if ($null -eq $measuredVal) {
+                    Write-Host ("[FAIL] {0}/{1} {2}: no samples measured (every selected case was skipped)" -f $hookName, $flavor, $pct)
+                    $overBudget++
+                    continue
+                }
                 if ($measuredVal -gt $budgetVal) {
                     Write-Host ("[FAIL] {0}/{1} {2}: {3} ms exceeds budget {4} ms" -f $hookName, $flavor, $pct, $measuredVal, $budgetVal)
                     $overBudget++

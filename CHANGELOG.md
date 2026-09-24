@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   phrase from the new `contractLint.bootstrapGuardPhrases` vocabulary fails, including a phrase
   wrapped across two lines. Before the dedupe it fired on all seven copies and on no other
   command. Fixtures `cl009-phase0-restates-bootstrap-guard` and `fp-cl009-phrase-outside-phase0`.
+- **Hook latency floor in CI** (SW-50, commit 4/6) - `specwright.manifest.json` gains
+  `hookLatencyBudgets` (per-hook, per-flavor p95 in ms), and a new `Hook latency budget` CI step
+  runs `tests/hooks/measure-latency.ps1 -CheckBudget` on all three OSes (windows-latest measures
+  Windows PowerShell 5.1 as well as pwsh). `-CheckBudget` is now strict: a missing budget block,
+  an unbudgeted (hook, flavor), a requested flavor that isn't installed, or a hook with zero
+  samples all fail instead of warning. Before measuring, it also refuses any p95 budget above half
+  the hook's `timeout` in `templates/settings.template.json`, so raising a budget past that
+  ceiling means raising the timeout in the same commit. First budgets sit at that ceiling
+  (2500 / 2500 / 1500 ms); commit 5/6 tightens them from measured CI numbers.
 - **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
   an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
   cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a

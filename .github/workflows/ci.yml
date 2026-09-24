@@ -129,6 +129,18 @@ jobs:
         shell: pwsh
         run: ./tests/hooks/run-conformance.ps1 -SelfTest
 
+      # --- Hook latency floor (SW-50): spawn each PowerShell hook as a fresh
+      # process and fail if p95 exceeds specwright.manifest.json's
+      # hookLatencyBudgets. windows-latest names BOTH flavors explicitly, so a
+      # runner that lost powershell.exe fails instead of silently measuring
+      # only pwsh - conformance above never exercises real Windows PowerShell
+      # 5.1, which is the default wiring users actually run ----------------
+      - name: Hook latency budget
+        shell: pwsh
+        run: |
+          $flavors = if ($IsWindows) { @('pwsh', 'powershell') } else { @('pwsh') }
+          ./tests/hooks/measure-latency.ps1 -Flavors $flavors -Iterations 20 -CheckBudget
+
       # --- Contract-lint fixtures: same posture as the hook conformance pair
       # above. One pwsh runner drives BOTH linter implementations per case, so
       # parity is asserted rather than inferred from two green jobs. No `if:`
