@@ -209,7 +209,7 @@ None are required - agents fall back gracefully. Configure per project in `.clau
 | **Context7** | `sd-spec-architect`, `sd-implementer`, `sd-debugger` | Pull current library docs (no stale training-data examples) |
 | **sequential-thinking** | `sd-debugger`, `sd-reviewer` | Structured hypothesis enumeration and verification |
 | **GitNexus** | `sd-code-explorer`, `sd-debugger`, `sd-reviewer` | Fast symbol search, callers, call graph |
-| **Database** (project-provided, e.g. `mssql`, `postgres`) | `sd-debugger` (SELECT/EXPLAIN only) | Inspect schema and query plans during investigation |
+| **Database** (project-provided, e.g. `mssql`, `postgres`) | main thread only (SELECT/EXPLAIN only) | Inspect schema and query plans during investigation. `sd-debugger` cannot call it (fixed `tools:` allowlist); it uses a read-only CLI client via `Bash` |
 | **Playwright** | optional | E2E reproduction for `/sd:bug` |
 | **Tavily** | `sd-debugger` | Web search for error signatures / library issues |
 

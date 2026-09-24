@@ -200,6 +200,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   process-startup cost, which the SW-50 ADR will need to account for separately.
 
 ### Fixed
+- **`agents/debugger.md` promised a "project-provided database MCP tool" it can never call**
+  (SW-64). The agent's `tools:` allowlist is fixed in the engine, and no Layer-2 setting can add a
+  project's database MCP tool to it, so that path never worked. The Verify, Hotspot A and "Database
+  discipline" sections now name a read-only CLI client via `Bash` as the only supported database
+  path, and say that the main thread can collect DB evidence with the project's MCP tool when no
+  CLI client exists. The `mcp.database._use` note in `templates/project-config.template.json`, the
+  README MCP table and the `docs/architecture.md` project-scope table now list that tool as main
+  thread only. A per-project allowlist extension point was rejected: the agent is installed once
+  in user scope, so patching it for one project would change it for every project.
 - **`scripts/smoke-hooks.sh`** (SW-52) - now runs under `set -euo pipefail`. `run_hook` captures
   the hook's exit code explicitly, so an expected non-zero exit is reported rather than aborting
   the suite. A jq preflight runs before any fixture or assertion. With no `jq`, the suite exits `2`

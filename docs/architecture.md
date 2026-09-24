@@ -413,7 +413,7 @@ specwright is built around a small set of MCP servers most useful for spec-drive
 |---|---|---|
 | `atlassian` | Fetch JIRA tickets for `<ID>` arguments + snapshot ticket / related tickets / linked Confluence pages | spec-architect, commands |
 | `gitnexus` | Fast symbol search, callers, call graph | code-explorer, debugger, reviewer |
-| `database` (project-provided, e.g. `mssql`, `postgres`; SELECT/EXPLAIN only) | Inspect schema and query plans | debugger |
+| `database` (project-provided, e.g. `mssql`, `postgres`; SELECT/EXPLAIN only) | Inspect schema and query plans | main thread (debugger uses a read-only CLI client via `Bash`) |
 
 The split exists because user-scope servers are generic (any project benefits from `context7`), while project-scope servers carry project-specific connection strings or credentials.
 

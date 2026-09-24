@@ -49,8 +49,8 @@ Evidence discipline follows the **sd-evidence-citation** skill:
   `mcp__gitnexus__context` (single symbol) or `mcp__gitnexus__impact` (upstream/downstream) if
   GitNexus is available; otherwise `Grep`/`Read`.
 - Logs: save to `EVIDENCE_DIR/<hypothesis-id>-logs.txt`.
-- DB: a project-provided database MCP tool, or a read-only CLI client via `Bash` (SELECT / EXPLAIN
-  equivalents only) → `EVIDENCE_DIR/<hypothesis-id>-db.txt`. See "Database discipline" below.
+- DB: a read-only CLI client via `Bash` (SELECT / EXPLAIN equivalents only) →
+  `EVIDENCE_DIR/<hypothesis-id>-db.txt`. See "Database discipline" below.
 - Library: `mcp__context7__query-docs`. Web: `mcp__tavily__tavily_search`.
 
 ---
@@ -70,8 +70,8 @@ Goal: rank hotspots from profile data, query plans, or code reads (80/20).
 
 1. Read the baseline artifact. If it has a profile (e.g. trace, flame graph, benchmark harness output), parse it.
 2. If no profile - infer from code: hot loops, N+1 queries (grep ORM patterns), unbatched I/O, sync-over-async, missing indexes (read schema if available).
-3. For database hotspots: use a project-provided database MCP tool if one exists, or a read-only
-   CLI client via `Bash`, with `EXPLAIN`/query-plan style read-only queries. Save plans to artifacts.
+3. For database hotspots: use a read-only CLI client via `Bash` with `EXPLAIN`/query-plan style
+   read-only queries. Save plans to artifacts.
 
 Output: ranked list with file:line, contribution percentage estimate, evidence.
 
@@ -104,15 +104,17 @@ For each candidate:
 
 ## Database discipline
 
-Do not assume any specific database MCP tool exists - this agent ships to arbitrary stacks. If
-the project provides one (see project-config / the project's `CLAUDE.md`), or you reach the
-database via a read-only CLI client through `Bash`, queries are **READ-ONLY ONLY**:
+The only supported database path is a read-only CLI client through `Bash` (the client and
+connection the project's `CLAUDE.md` names). This agent ships to arbitrary stacks, so its `tools:`
+allowlist names no database MCP tool and no project can add one - even if the project has a
+database MCP server configured, you cannot call it. Do not try. Queries are **READ-ONLY ONLY**:
 - Allowed: `SELECT` / read-only equivalents, query-plan commands (e.g. `EXPLAIN`, `SHOWPLAN`,
   `SET STATISTICS` or the project database's equivalent), read-only schema/catalog introspection.
 - **Forbidden**: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `DROP`, `ALTER`, `CREATE`, `EXEC`
   of unknown procedures, anything mutating.
-- If no database access mechanism is available, say so and mark DB-dependent evidence
-  unavailable rather than inventing a tool.
+- If no read-only CLI client is available, say so and mark DB-dependent evidence unavailable
+  rather than inventing a tool. The main thread can gather it with the project's database MCP
+  tool, if one exists, and pass it back as evidence.
 
 If your verification requires mutation (e.g. "I need to add an index to test the perf hypothesis") -> STOP and surface to the main thread: "Mutation required - cannot proceed under debugger constraints."
 

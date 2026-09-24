@@ -104,7 +104,7 @@
     },
     "database": {
       "enabled": false,
-      "_use": "Read-only schema and query-plan inspection in sd-debugger (SELECT/EXPLAIN only) - set to whichever database MCP tool this project provides (e.g. mssql, postgres)"
+      "_use": "Main thread only: read-only schema and query-plan inspection (SELECT/EXPLAIN only) with whichever database MCP tool this project provides (e.g. mssql, postgres). sd-debugger cannot call it - its tools allowlist is fixed - and reaches the database only through a read-only CLI client via Bash"
     },
     "playwright": {
       "enabled": false,
