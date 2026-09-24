@@ -173,6 +173,10 @@ RE_TPLPATH='templates/[A-Za-z0-9_./-]+'
 # matches '07-cqrs-read-path.md' inside the ADR filename '0007-cqrs-read-path.md'
 # (agents/docs-writer.md), which is not a spec artifact at all.
 RE_ARTIFACT='(^|[^0-9A-Za-z_.-])[0-9][0-9]-[a-z0-9-]+\.md'
+# CL009 - a command's Phase 0 section: opens at '## Phase 0' (not 'Phase 01'),
+# closes at the next H1/H2 heading outside a fence.
+RE_PHASE0='^## Phase 0([^0-9]|$)'
+RE_SECTION_END='^#{1,2}[[:blank:]]'
 RE_SUPPRESS='<!--[[:blank:]]*contract-lint:[[:blank:]]*allow[[:blank:]]+CL[0-9][0-9][0-9]'
 # An option set: a slash-separated parenthetical carrying no nested parens.
 RE_OPTPAREN='\(([^()/]+/)+[^()]+\)'
@@ -272,6 +276,7 @@ CL005
 CL006
 CL007
 CL008
+CL009
 CL100
 CL101
 CL102
@@ -337,6 +342,11 @@ GATE_PROSE_ESCAPE_TOKENS=""
 while IFS= read -r _t; do
     [[ -n "$_t" ]] && set_add GATE_PROSE_ESCAPE_TOKENS "$_t"
 done < <(mjq '.contractLint.gateProseEscapeTokens[]?')
+
+BOOTSTRAP_GUARD_PHRASES=""
+while IFS= read -r _t; do
+    [[ -n "$_t" ]] && set_add BOOTSTRAP_GUARD_PHRASES "$_t"
+done < <(mjq '.contractLint.bootstrapGuardPhrases[]?')
 
 STACK_COMMANDS=""
 while IFS= read -r _t; do
@@ -1056,6 +1066,52 @@ rule_CL008() {
     done <<< "$REFS"
 }
 
+# CL009 - a command's '## Phase 0' section restates text sd-bootstrap-guard
+# owns. Commands cannot load skills via frontmatter, so they read the skill at
+# runtime; a copy of its messages in Phase 0 is the drift SW-54 removed. A
+# phrase wrapped across two lines is caught by joining each line with the
+# next (trimmed, one space) - reported on the line where it starts, and only
+# when the next line alone does not already carry it, so one occurrence is one
+# finding. Case-sensitive literal match, the same as CL306. Fork-free trim.
+rule_CL009() {
+    local _rel _i _in _s _cur _nxt _phrase _hit _j
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" ]] && continue
+        case "$_rel" in commands/*) ;; *) continue ;; esac
+        load_file "$_rel"
+        _in=0
+        for ((_i = 0; _i < CUR_N; _i++)); do
+            [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
+            if [[ "${CUR_LINES[$_i]}" =~ $RE_PHASE0 ]]; then _in=1; continue; fi
+            if [[ $_in -eq 1 && "${CUR_LINES[$_i]}" =~ $RE_SECTION_END ]]; then _in=0; fi
+            [[ $_in -eq 1 ]] || continue
+            [[ "${CUR_LINES[$_i]}" =~ $RE_SUPPRESS ]] && continue
+            _s="${CUR_LINES[$_i]}"
+            _cur="${_s#"${_s%%[![:blank:]]*}"}"; _cur="${_cur%"${_cur##*[![:blank:]]}"}"
+            _nxt=""
+            _j=$((_i + 1))
+            if [[ $_j -lt $CUR_N && "${CUR_FENCE[$_j]}" != "1" ]] \
+                && ! [[ "${CUR_LINES[$_j]}" =~ $RE_SECTION_END ]] \
+                && ! [[ "${CUR_LINES[$_j]}" =~ $RE_SUPPRESS ]]; then
+                _s="${CUR_LINES[$_j]}"
+                _nxt="${_s#"${_s%%[![:blank:]]*}"}"; _nxt="${_nxt%"${_nxt##*[![:blank:]]}"}"
+            fi
+            _hit=0
+            while IFS= read -r _phrase; do
+                [[ -z "$_phrase" ]] && continue
+                case "$_cur" in *"$_phrase"*) _hit=1; break ;; esac
+                if [[ -n "$_nxt" ]]; then
+                    case "$_nxt" in *"$_phrase"*) continue ;; esac
+                    case "$_cur $_nxt" in *"$_phrase"*) _hit=1; break ;; esac
+                fi
+            done <<< "$BOOTSTRAP_GUARD_PHRASES"
+            if [[ $_hit -eq 1 ]]; then
+                add_finding CL009 "$_rel" "$((_i + 1))" "Phase 0 restates '$_phrase', which sd-bootstrap-guard owns - read the skill instead of copying its text"
+            fi
+        done
+    done <<< "$SCAN_FILES"
+}
+
 # CL100 / CL102 / CL103 - each invocation against the mode it names. A target
 # agent that CL001 already flagged as unresolved gets no CL100 pile-on.
 rule_CL100_CL102_CL103() {
@@ -1525,6 +1581,7 @@ rule_CL005
 rule_CL006
 rule_CL007
 rule_CL008
+rule_CL009
 rule_CL100_CL102_CL103
 rule_CL101
 rule_CL200

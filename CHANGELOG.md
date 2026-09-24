@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "mirrors install.sh" comment as its twin.
 
 ### Changed
+- **Phase 0 bootstrap guard deduplicated across the seven workflow commands** (SW-54) -
+  `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port` and `/sd:adr` now
+  apply `sd-bootstrap-guard` as Phase 0 step 1 and keep only their own steps after it. Drift
+  corrected: `port.md` lacked the "constitution is the binding Layer-2 contract" rationale;
+  `feature.md` alone listed the project-config keys (moved into the skill); `/sd:adr` ran a
+  lighter guard (no CLAUDE.md WARN, no STOP per missing file, no parse check, "abort" instead of
+  STOP) and now applies the full guard, with its lack of state detection stated as step 2.
+  `refactor`/`bug`/`perf`/`rca` print the same messages as before. Two deviations from the ticket:
+  the skill is read at runtime rather than wired via `skills:` frontmatter (commands cannot load
+  skills that way; `commands/spec.md` states the same), so `contractLint.skillConsumers` is
+  unchanged - the body reference already satisfies `CL004`; and `contractLint.budgets.commandsBytes`
+  stays 37194, because the ceiling is the single largest file (`commands/spec.md`, untouched), not
+  the area's sum - every edited command shrank, but none of them sets the ceiling.
 - **`templates/settings.template.json`** (SW-50, commit 3/6) - adds a prominent `_pwsh_recommended`
   block showing the exact, empirically-verified opt-in to run hooks under PowerShell 7+ (pwsh)
   instead of the default Windows PowerShell 5.1. Live-tested against a real Claude Code session:
@@ -60,6 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tab, newline, CR, `..`, `/`, `\`) plus `run-prefix-parity.ps1`, which asserts identical
   accept/reject outcomes across all four installer scripts in dry-run mode, and a `-SelfTest` that
   proves the pre-fix spaces-only guard is caught. Both run in CI on every OS.
+- **`skills/sd-bootstrap-guard/SKILL.md`** (SW-54) - single owner of the Phase 0 bootstrap guard:
+  the CLAUDE.md WARN, the constitution / project-config / index STOPs and the project-config parse
+  STOP. Read at runtime by the workflow commands; if it is unreadable they STOP with an
+  install-incomplete message.
+- **Contract-lint rule `CL009` (BLOCK)** (SW-54) - a command whose `## Phase 0` section restates a
+  phrase from the new `contractLint.bootstrapGuardPhrases` vocabulary fails, including a phrase
+  wrapped across two lines. Before the dedupe it fired on all seven copies and on no other
+  command. Fixtures `cl009-phase0-restates-bootstrap-guard` and `fp-cl009-phrase-outside-phase0`.
 - **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
   an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
   cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a

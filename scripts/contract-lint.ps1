@@ -75,6 +75,10 @@ $RE_TPLPATH   = 'templates/[A-Za-z0-9_./-]+'
 # matches '07-cqrs-read-path.md' inside the ADR filename '0007-cqrs-read-path.md'
 # (agents/docs-writer.md), which is not a spec artifact at all.
 $RE_ARTIFACT  = '(^|[^0-9A-Za-z_.-])[0-9][0-9]-[a-z0-9-]+\.md'
+# CL009 - a command's Phase 0 section: opens at '## Phase 0' (not 'Phase 01'),
+# closes at the next H1/H2 heading outside a fence.
+$RE_PHASE0      = '^## Phase 0([^0-9]|$)'
+$RE_SECTION_END = '^#{1,2}[ \t]'
 $RE_SUPPRESS  = '<!--[ \t]*contract-lint:[ \t]*allow[ \t]+CL[0-9][0-9][0-9]'
 $RE_SUPPARTS  = 'allow[ \t]+(CL[0-9][0-9][0-9])(.*)$'
 # An option set: a slash-separated parenthetical carrying no nested parens.
@@ -224,7 +228,7 @@ foreach ($r in $cl.rules) {
 # below asserts this equals the manifest registry, so a wave-2 rule cannot land
 # in the manifest, the docs or the fixtures without landing here too.
 $dispatchIds = @(
-    'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008',
+    'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008', 'CL009',
     'CL100', 'CL101', 'CL102', 'CL103', 'CL104',
     'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205',
     'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
@@ -271,6 +275,11 @@ if ($cl.PSObject.Properties.Name.Contains('overrideOptionTokens')) {
 $gateProseEscapeTokens = New-Object 'System.Collections.Generic.List[string]'
 if ($cl.PSObject.Properties.Name.Contains('gateProseEscapeTokens')) {
     foreach ($t in $cl.gateProseEscapeTokens) { [void]$gateProseEscapeTokens.Add([string]$t) }
+}
+
+$bootstrapGuardPhrases = New-Object 'System.Collections.Generic.List[string]'
+if ($cl.PSObject.Properties.Name.Contains('bootstrapGuardPhrases')) {
+    foreach ($t in $cl.bootstrapGuardPhrases) { [void]$bootstrapGuardPhrases.Add([string]$t) }
 }
 
 $stackCommands = New-Object 'System.Collections.Generic.List[string]'
@@ -897,6 +906,48 @@ foreach ($r in $refs) {
     if ($r.Kind -cne 'specArtifact') { continue }
     if ($specArtifacts.Contains($r.Target)) { continue }
     Add-Finding 'CL008' $r.File $r.Line "unknown spec artifact filename '$($r.Target)'"
+}
+
+# CL009 - a command's '## Phase 0' section restates text sd-bootstrap-guard
+# owns. Commands cannot load skills via frontmatter, so they read the skill at
+# runtime; a copy of its messages in Phase 0 is the drift SW-54 removed. A
+# phrase wrapped across two lines is caught by joining each line with the
+# next (trimmed, one space) - reported on the line where it starts, and only
+# when the next line alone does not already carry it, so one occurrence is one
+# finding. Ordinal .Contains, the same as CL306. Trim is space/tab ONLY: a bare
+# .Trim() also strips Unicode whitespace and would diverge from the bash twin.
+$blankChars = [char[]]@([char]32, [char]9)
+foreach ($rel in $scanFiles) {
+    if (-not $rel.StartsWith('commands/', [StringComparison]::Ordinal)) { continue }
+    $lines = $fileLines[$rel]
+    $fence = $fileFence[$rel]
+    $inPhase0 = $false
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        if ($fence[$i]) { continue }
+        if ([regex]::IsMatch($lines[$i], $RE_PHASE0)) { $inPhase0 = $true; continue }
+        if ($inPhase0 -and [regex]::IsMatch($lines[$i], $RE_SECTION_END)) { $inPhase0 = $false }
+        if (-not $inPhase0) { continue }
+        if ([regex]::IsMatch($lines[$i], $RE_SUPPRESS)) { continue }
+        $cur = $lines[$i].Trim($blankChars)
+        $nxt = ''
+        $j = $i + 1
+        if ($j -lt $lines.Length -and -not $fence[$j] -and
+            -not [regex]::IsMatch($lines[$j], $RE_SECTION_END) -and
+            -not [regex]::IsMatch($lines[$j], $RE_SUPPRESS)) {
+            $nxt = $lines[$j].Trim($blankChars)
+        }
+        foreach ($phrase in $bootstrapGuardPhrases) {
+            if ($phrase.Length -eq 0) { continue }
+            $hit = $cur.Contains($phrase)
+            if (-not $hit -and $nxt.Length -gt 0 -and -not $nxt.Contains($phrase)) {
+                $hit = ($cur + ' ' + $nxt).Contains($phrase)
+            }
+            if ($hit) {
+                Add-Finding 'CL009' $rel ($i + 1) "Phase 0 restates '$phrase', which sd-bootstrap-guard owns - read the skill instead of copying its text"
+                break
+            }
+        }
+    }
 }
 
 # CL100 / CL102 / CL103 - each invocation against the mode it names. A target

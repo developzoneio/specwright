@@ -14,7 +14,7 @@ specwright is a thin layer on top of Claude Code that enforces spec-driven devel
 |    agents/sd/      6 subagent prompt files                         |
 |    hooks/sd/       3 cross-platform hook scripts                   |
 |    templates/sd/   4 setup + 6 spec templates                      |
-|    skills/sd/      9 reusable rule packs (referenced by agents)    |
+|    skills/sd/      10 reusable rule packs (agents + commands)      |
 |                                                                    |
 |  Generic engine. Never changes per project. Updated by re-running  |
 |  the installer.                                                    |
@@ -58,7 +58,7 @@ The split exists so the **engine is generic** (one install handles every project
 Each command is a markdown file with YAML frontmatter and a phased plan. The plan is read by Claude Code's main thread; it is not executable code. Phases follow a pattern:
 
 ```
-Phase 0 - Bootstrap         (always: read CLAUDE.md + constitution + config)
+Phase 0 - Bootstrap         (always: apply sd-bootstrap-guard - CLAUDE.md + constitution + config + index)
 Phase 1 - <first concern>   [Gate 1]
 Phase 2 - <second concern>  [Gate 2]
 ...
@@ -148,7 +148,7 @@ deterministic.
 
 ## Agent skills
 
-Skills are markdown rule packs that agents reference from their frontmatter. They live in `~/.claude/skills/sd/<skill-name>/SKILL.md`. The rule body is loaded into the agent's context at runtime alongside the agent prompt itself.
+Skills are markdown rule packs that agents reference from their frontmatter. They live in `~/.claude/skills/sd/<skill-name>/SKILL.md`. The rule body is loaded into the agent's context at runtime alongside the agent prompt itself. Commands cannot load skills via frontmatter, so a command that needs one reads its `SKILL.md` at runtime (marked "runtime read" below).
 
 The split exists for three reasons:
 
@@ -166,6 +166,7 @@ The split exists for three reasons:
 | `sd-pattern-discipline` | `sd-spec-architect`, `sd-implementer`, `sd-reviewer` | Pattern discovery and adherence: precedent sampling, `Pattern refs` authoring/following, conformance review. |
 | `sd-replan-loop` | `sd-spec-architect`; `/sd:feature`, `/sd:refactor`, `/sd:spec validate` (runtime read) | Mid-execution re-plan protocol: HARD Gate Re-plan, append-only `## Revisions` log in `01-plan.md`, `Revised-by` task marker. Shared by the two plan+tasks workflows so the revision format is defined once. |
 | `sd-retro-lessons` | `scripts/validate-lessons.*`, `scripts/aggregate-lessons.*` (runtime read) | The `lesson` line format, tag vocabulary, and reusability bar for retro lessons. The one skill with no agent consumer - declared in `contractLint.skillConsumers`. |
+| `sd-bootstrap-guard` | `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port`, `/sd:adr` (runtime read) | Phase 0 Layer-2 reads (`CLAUDE.md`, constitution, project-config, index) and their WARN/STOP messages. Single owner; contract-lint `CL009` blocks a command whose Phase 0 restates them. |
 | `sd-port-fidelity` | `sd-spec-architect`, `sd-reviewer` | Cross-project port fidelity: structural mirror default, four-group deviation allowlist, anti-simplification rules, three gate table schemas, parity artifact layout, closed five-class hunk vocabulary plus the two whole-artifact checks. |
 
 Agents declare the skills they apply via a `skills:` list in YAML frontmatter:

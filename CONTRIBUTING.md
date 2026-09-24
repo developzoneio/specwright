@@ -245,10 +245,8 @@ argument-hint: <ID or slug>
 # /sd:<name>
 
 ## Phase 0 - Bootstrap
-- Read CLAUDE.md
-- Read .specs/constitution.md
-- Read .claude/project-config.json
-- Detect state (resumable?)
+1. Read ~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md and apply it
+2. Detect state (resumable?)
 
 ## Phase 1 - <name>
 ... (with hard gates marked as Gate N)
@@ -258,7 +256,8 @@ argument-hint: <ID or slug>
 ```
 
 **Conventions:**
-- Phase 0 always bootstraps; do not skip.
+- Phase 0 always bootstraps; do not skip. Step 1 applies `sd-bootstrap-guard` and never restates
+  its messages - contract-lint `CL009` blocks a Phase 0 that does.
 - Hard gates use the explicit marker `Gate N` and prose "STOP. Wait for explicit user approval."
 - State machine documented at top of file (what happens on re-invocation).
 - Subagent invocation uses the `sd-` prefix, never bare names.

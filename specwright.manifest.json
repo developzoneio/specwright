@@ -345,6 +345,7 @@
       { "id": "CL006", "severity": "BLOCK", "wave": 1, "summary": "/sd:<name> reference with no matching command file" },
       { "id": "CL007", "severity": "WARN",  "wave": 1, "summary": "agent mentioned by no command body" },
       { "id": "CL008", "severity": "BLOCK", "wave": 1, "summary": "numbered .specs artifact filename absent from specArtifacts" },
+      { "id": "CL009", "severity": "BLOCK", "wave": 1, "summary": "command ## Phase 0 section restates a phrase sd-bootstrap-guard owns (contractLint.bootstrapGuardPhrases)" },
 
       { "id": "CL100", "severity": "BLOCK", "wave": 2, "summary": "invocation sets TASK/WORKFLOW_TYPE/TASK_TYPE to a mode the target agent does not declare" },
       { "id": "CL101", "severity": "WARN",  "wave": 2, "summary": "agent declares a mode no command ever invokes" },
@@ -425,6 +426,17 @@
       "phrases needs a '<!-- contract-lint: allow CL306 - <reason> -->' comment, the same",
       "suppression convention CL305 already uses on commands/perf.md - there is no separate",
       "per-gate declared-exception surface, on purpose."
+    ],
+
+    "bootstrapGuardPhrases": ["No `CLAUDE.md` found", "stack conventions may be incomplete", "binding Layer-2 contract", "No `.specs/` found", "failed to parse"],
+
+    "$bootstrapGuardPhrasesComment": [
+      "CL009's vocabulary. Hand-maintained, same category as gateProseEscapeTokens: distinctive",
+      "fragments of the messages skills/sd-bootstrap-guard/SKILL.md owns. Scanned only inside a",
+      "command's '## Phase 0' section, case-sensitive literal match, with a two-line wrap window.",
+      "'run `/sd:setup` first' is excluded on purpose: release, review, spec and verify say it for",
+      "their own preconditions, which are not the guard. The guard's half of that sentence is",
+      "'No `.specs/` found', which always travels with it. Added by SW-54."
     ],
 
     "stackTokens": {

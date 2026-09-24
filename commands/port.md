@@ -52,29 +52,25 @@ hunk vocabulary this file wires together - it does not restate them.
 
 ## Phase 0 - Bootstrap (always runs)
 
-1. Read `CLAUDE.md`. If missing, WARN and continue - print "No `CLAUDE.md` found; stack
-   conventions may be incomplete."
-2. Read `.specs/constitution.md`. If `.specs/` or this file is missing, STOP: "No `.specs/` found -
-   run `/sd:setup` first."
-3. Read `.claude/project-config.json`. If missing, STOP with the same message. If present but
-   fails to parse as JSON, STOP: "`.claude/project-config.json` failed to parse - fix it or re-run
-   `/sd:setup`."
-4. Read `.specs/index.md`. If missing, STOP with the "run `/sd:setup` first" message.
-5. **Parse arguments**: `<slug>`; `--from <value>`; `--scope <endpoint|module|feature|pattern>`;
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. **Parse arguments**: `<slug>`; `--from <value>`; `--scope <endpoint|module|feature|pattern>`;
    `--snapshot <contract|contract+source>` (default `contract`).
    - `--scope` absent or not one of the four values -> ask the user to pick one. Never infer it.
    - `--from` absent -> STOP: "`--from` is required: a bridged contract artifact (cross-repo) or an
      in-repo path/symbol (intra-repo)."
    - `--snapshot` present and not one of the two values -> STOP naming the two legal forms.
-6. **Select topology from `--from`** - the rest of the pipeline is identical either way:
+3. **Select topology from `--from`** - the rest of the pipeline is identical either way:
    - Resolves to a directory or file containing a `contract.md` with frontmatter `type:
      port-extraction` -> topology = `bridged`.
    - Resolves to a path or symbol inside this working tree -> topology = `in-repo`.
    - Neither -> STOP naming both accepted forms.
-7. Compute the UTC date and the spec ID `PORT-<slug>-<YYYYMMDD>`.
-8. **Read the port policy.** Scan `.specs/constitution.md` for the first heading (any level) whose
+4. Compute the UTC date and the spec ID `PORT-<slug>-<YYYYMMDD>`.
+5. **Read the port policy.** Scan `.specs/constitution.md` for the first heading (any level) whose
    text contains "Port policy" (case-insensitive). Effective policy = that section's body.
-9. **State the effective policy in output, always** - including the fallback:
+6. **State the effective policy in output, always** - including the fallback:
    ```
    Effective port policy: <constitution heading> "<section body, or a one-line summary of it>"
    -- or, when no such section exists --
@@ -82,7 +78,7 @@ hunk vocabulary this file wires together - it does not restate them.
    policy" section found in .specs/constitution.md
    Scope: <scope>   Topology: <bridged|in-repo>   Snapshot mode: <contract|contract+source>
    ```
-10. Detect state from the table above. Print the resume plan.
+7. Detect state from the table above. Print the resume plan.
 
 ---
 

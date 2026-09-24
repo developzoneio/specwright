@@ -52,6 +52,7 @@ wording can improve in one commit while a divergence still fails.
 | `cl006-unknown-command-reference` | CL006 |
 | `cl007-agent-invoked-by-no-command` | CL007 |
 | `cl008-unknown-spec-artifact` | CL008 |
+| `cl009-phase0-restates-bootstrap-guard` | CL009, wrapped and single-line |
 | `cl100-invocation-sets-undeclared-mode` | CL100 |
 | `cl101-mode-invoked-by-nobody` | CL101 |
 | `cl102-invocation-omits-required-input` | CL102 |
@@ -95,6 +96,7 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-cl400-placeholder-and-fenced-example` | a stack command token inside a `<<placeholder>>` and inside a fenced example | `commands/perf.md`, `commands/verify.md` |
 | `fp-cl401-placeholder-and-fenced-example` | a language name inside a `<<placeholder>>` and inside a fenced example | `commands/setup.md`, `agents/spec-architect.md` |
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |
+| `fp-cl009-phrase-outside-phase0` | bootstrap guard text inside the skill that owns it, in a fenced example, and outside Phase 0; a Phase 0 that reads the skill at runtime | `skills/sd-bootstrap-guard/SKILL.md`, the Phase 0 of every workflow command |
 | `fp-cl500-file-at-budget-ceiling` | a file just under `contractLint.budgets.commandsBytes` must not trip CL500 | - |
 
 ## The case that must still BITE

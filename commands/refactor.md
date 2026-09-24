@@ -41,16 +41,13 @@ Spec ID = `REF-<slug>-<YYYYMMDD>`.
 
 ## Phase 0 - Bootstrap
 
-1. Read `CLAUDE.md`. If missing, WARN and continue - print "No `CLAUDE.md` found; stack
-   conventions may be incomplete." (the constitution is the binding Layer-2 contract, not
-   `CLAUDE.md`).
-2. Read `.specs/constitution.md`, `.claude/project-config.json`, `.specs/index.md`. If `.specs/`
-   or any of these is missing, STOP: "No `.specs/` found - run `/sd:setup` first." If
-   `.claude/project-config.json` is present but fails to parse as JSON, STOP:
-   "`.claude/project-config.json` failed to parse - fix it or re-run `/sd:setup`."
-3. Compute UTC date for spec ID.
-4. Read coverage threshold from project-config or default to 80%.
-5. Detect state. Print resume plan.
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. Compute UTC date for spec ID.
+3. Read coverage threshold from project-config or default to 80%.
+4. Detect state. Print resume plan.
 
 ---
 

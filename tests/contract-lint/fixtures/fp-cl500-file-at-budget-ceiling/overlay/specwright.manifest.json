@@ -65,6 +65,12 @@
         "summary": "numbered .specs artifact filename absent from specArtifacts"
       },
       {
+        "id": "CL009",
+        "severity": "BLOCK",
+        "wave": 1,
+        "summary": "command ## Phase 0 section restates a phrase sd-bootstrap-guard owns (contractLint.bootstrapGuardPhrases)"
+      },
+      {
         "id": "CL100",
         "severity": "BLOCK",
         "wave": 2,

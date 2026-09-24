@@ -65,9 +65,23 @@ code, so a BLOCK/WARN divergence between the two implementations is structurally
 | `CL006` | BLOCK | a `/sd:<name>` reference has no `commands/<name>.md` |
 | `CL007` | WARN | an agent is mentioned by no command body |
 | `CL008` | BLOCK | a numbered spec-artifact filename is absent from `contractLint.specArtifacts` |
+| `CL009` | BLOCK | a command's `## Phase 0` section restates a phrase from `contractLint.bootstrapGuardPhrases` -- text `sd-bootstrap-guard` owns |
 
 CL001 and CL003 split on whether the offending line mentions a skill; both BLOCK, so the split is
 about the message a reader gets, not about severity.
+
+`CL009` is the inverse of the rules above it: text that must be a reference, not a copy. The
+workflow commands' Phase 0 bootstrap guard lives in `skills/sd-bootstrap-guard/SKILL.md`, which
+each command reads at runtime (commands cannot load skills via frontmatter). The rule scans every
+`commands/*.md`, not a consumer list, so a new workflow that copies the guard is caught too. Its
+window opens at a `## Phase 0` heading and closes at the next H1/H2 heading; fenced lines and
+suppression comments are skipped. Each line is also joined with the next one, so a phrase wrapped
+across two lines still matches -- reported once, on the line where it starts. The vocabulary
+deliberately omits "run `/sd:setup` first": `/sd:release`, `/sd:review`, `/sd:spec` and
+`/sd:verify` say it for their own preconditions, and the guard's half of that sentence ("No
+`.specs/` found") always travels with it. Blind spots, by design: a paraphrase, a phrase wrapped
+over three or more lines, and a restatement outside Phase 0. `CL009` **shipped BLOCK from its
+introduction on 2026-09-24** (SW-54), on the same `warnBudget` grounds as `CL205`.
 
 ### CL1xx -- invocation contract
 
@@ -170,7 +184,7 @@ introduction on 2026-09-23** (SW-51) on the same grounds as `CL204`, and because
 ### CL3xx -- gate integrity
 
 A **gate block** runs from its heading to the next heading of any level, or end of file. That
-window is why the roughly twenty literal `STOP`s in Phase 0 bootstrap error paths never satisfy or
+window is why the literal `STOP`s in Phase 0 bootstrap error paths never satisfy or
 trip a gate rule -- they all sit under a `## Phase 0` heading.
 
 | Rule | Severity | Fires when |
@@ -310,6 +324,7 @@ and never touch `areas`, `derived` or `docClaims`.
 | `skillConsumers` | skills whose only consumers live outside scan scope, with the reason |
 | `overrideOptionTokens` | the vocabulary CL305 treats as an escape hatch |
 | `gateProseEscapeTokens` | the phrase vocabulary CL306 scans HARD gate prose for |
+| `bootstrapGuardPhrases` | the phrase vocabulary CL009 scans a command's `## Phase 0` section for |
 | `stackTokens.commands` / `.languages` | the CL400 / CL401 stack vocabulary |
 | `readOnlyAgents` | agent names CL201 checks for a write tool gained since being declared read-only |
 | `knownMcpTools` | the `mcp__*` allowlist CL202 checks scan-scope tokens against |
@@ -345,7 +360,7 @@ implementation, one fixture, one row in the tables above.
 
 | Wave | Band | Status |
 |---|---|---|
-| 1 | CL0xx reference resolution, CL3xx gate integrity, CL9xx suppression hygiene | shipped, BLOCK |
+| 1 | CL0xx reference resolution, CL3xx gate integrity, CL9xx suppression hygiene | shipped, BLOCK (CL009 added 2026-09-24, BLOCK from the start) |
 | 2 | CL1xx invocation contract (agent input declarations) | shipped, BLOCK+WARN |
 | 3a | CL2xx role and tool integrity (CL200-CL205) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02 and CL205 2026-09-23, both BLOCK from the start) |
 | 3b | CL4xx stack-agnostic prose, CL306 | shipped 2026-07-30 WARN, now BLOCK (CL400/CL306 promoted 2026-07-31; CL401 stays WARN) |
