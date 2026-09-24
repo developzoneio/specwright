@@ -281,7 +281,7 @@ What each suite needs and covers, and why, is in
 ## Roadmap
 
 Shipped work is in [`CHANGELOG.md`](CHANGELOG.md); the latest release is
-[v1.5.0](https://github.com/developzoneio/specwright/releases). Next up, per [`ROADMAP.md`](ROADMAP.md):
+[v1.6.0](https://github.com/developzoneio/specwright/releases). Next up, per [`ROADMAP.md`](ROADMAP.md):
 GitHub Issue auto-fetch (`gh issue view`) to match the existing JIRA snapshot path, plus - exploratory -
 local-only, opt-in usage analytics. Have a workflow you wish existed?
 [Open an issue](https://github.com/developzoneio/specwright/issues/new) - the roadmap follows what people actually hit.

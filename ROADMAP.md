@@ -4,7 +4,7 @@ Planned and exploratory work for specwright. Shipped items live in [`CHANGELOG.m
 this file is forward-looking only and intentionally non-binding - priorities shift as the engine is
 dogfooded on real projects.
 
-Current released version: **1.5.0** (see the [changelog](CHANGELOG.md) for what shipped).
+Current released version: **1.6.0** (see the [changelog](CHANGELOG.md) for what shipped).
 
 ## Near-term
 

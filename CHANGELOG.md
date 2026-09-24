@@ -9,22 +9,123 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- **`scripts/smoke-hooks.sh`** (SW-52) - now runs under `set -euo pipefail`. `run_hook` captures
-  the hook's exit code explicitly, so an expected non-zero exit is reported rather than aborting
-  the suite. A jq preflight runs before any fixture or assertion. With no `jq`, the suite exits `2`
-  and names `jq` as a missing runner dependency. Before, every hook exited 0 silently, 7 assertions
-  failed, and the hooks took the blame. The `[SKIP]` branch for cases (e)/(f) is gone, so both
-  cases always run. `smoke-hooks.ps1` needs no twin change: the PowerShell hooks parse JSON
-  natively and do not depend on `jq`. Closes REVIEW-TODO items 7 and 8.
-- **`scripts/validate.sh`** (SW-52) - Check 8 now reports a missing `jq` with the same message as
-  Checks 7 and 9, through one shared `jq_missing` helper. Before, it printed only
-  "contract-lint could not run (exit 2)", because the linter's stderr reason was discarded.
-- **`install/install.sh`, `install/uninstall.sh`** (SW-53) - the `--prefix` emptiness check now
-  strips `[[:space:]]` instead of spaces only (`${PREFIX// /}`), matching `IsNullOrWhiteSpace` in
-  the `.ps1` installers. A tab, newline or CR prefix was accepted on Unix (creating e.g.
-  `commands/<TAB>/`) while Windows rejected it. `uninstall.sh`'s guard now carries the same
-  "mirrors install.sh" comment as its twin.
+### Added
+- **validate Check 10: bash strict mode** (SW-52) - `scripts/validate.{ps1,sh}` fail when any
+  `*.sh` in the repo does not open with `set -euo pipefail`. Exceptions are declared with a reason
+  in the new `specwright.manifest.json` `bashStrictMode.exceptions` block (the 3 bash hooks, which
+  must exit 0 on every failure path). A stale exception path also fails. This turns the
+  CONTRIBUTING bash convention into a gate. The sweep across `scripts/` and `tests/` found
+  `smoke-hooks.sh` to be the only violation.
+- **`tests/installer/`** (SW-53) - `prefix-cases.json` shared case table (valid, empty, spaces,
+  tab, newline, CR, `..`, `/`, `\`) plus `run-prefix-parity.ps1`, which asserts identical
+  accept/reject outcomes across all four installer scripts in dry-run mode, and a `-SelfTest` that
+  proves the pre-fix spaces-only guard is caught. Both run in CI on every OS.
+- **`skills/sd-bootstrap-guard/SKILL.md`** (SW-54) - single owner of the Phase 0 bootstrap guard:
+  the CLAUDE.md WARN, the constitution / project-config / index STOPs and the project-config parse
+  STOP. Read at runtime by the workflow commands; if it is unreadable they STOP with an
+  install-incomplete message.
+- **Contract-lint rule `CL009` (BLOCK)** (SW-54) - a command whose `## Phase 0` section restates a
+  phrase from the new `contractLint.bootstrapGuardPhrases` vocabulary fails, including a phrase
+  wrapped across two lines. Before the dedupe it fired on all seven copies and on no other
+  command. Fixtures `cl009-phase0-restates-bootstrap-guard` and `fp-cl009-phrase-outside-phase0`.
+- **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
+  an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
+  cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a
+  write form fails unless its enclosing numbered step names the `main thread`, joined across line
+  wraps. Would have caught the `rca.md` Phase 2 defect fixed above; the engine tree is clean under
+  both implementations. New fixtures `cl205-readonly-block-passive-artifact-write` and
+  `fp-cl205-main-thread-named` (the `port.md` Phase 3 wrapped-actor shape). Blind spots - passive
+  writes in a write-capable agent's block, section-only writes - are recorded in
+  `docs/contract-lint.md` as deliberate.
+- **`tests/hooks/measure-latency.ps1`** (SW-50, commit 1/6) - p50/p95 per-invocation latency
+  measurement for the three shipped hooks, spawning each as a fresh child process under every
+  available PowerShell flavor (`pwsh` and, on Windows, `powershell` 5.1) against a curated fixture
+  subset (`tests/hooks/fixtures/latency-selection.json`). `-CheckBudget` will fail the build once
+  `specwright.manifest.json` gains a `hookLatencyBudgets` baseline (a later SW-50 commit); until
+  then it warns and exits 0. No bash twin, same rationale as `run-conformance.ps1`: it must drive
+  multiple PowerShell flavors from one process to produce comparable numbers.
+- **Check 9: root-level ad-hoc notes guard** (SW-47) - `scripts/validate.{sh,ps1}` now fails when
+  a root-level file matches a declared ad-hoc-notes pattern (`specwright.manifest.json`'s new
+  `adHocNotesGuard.patterns`: `REVIEW-TODO.md`, `TODO.md`, `FIXME.md`, `NOTES.md`,
+  `*-FINDINGS.md`, matched case-insensitively - NTFS/APFS are case-insensitive filesystems, so a
+  case-sensitive guard would let a differently-cased file through on most contributors' machines);
+  `ROADMAP.md` is deliberately excluded as a maintained project document, not an ad-hoc findings
+  snapshot. `scripts/selftest-root-guard.{sh,ps1}` proves the check bites, same posture as
+  `selftest-docs.{sh,ps1}`. `CONTRIBUTING.md` now states explicitly that review findings become
+  Jira issues, not files in the tree.
+- **`CL204` (BLOCK): an unused declared tool on a write-capable agent** (SW-48) - `CL203` narrows to
+  agents with no write tool of their own (stays WARN); `CL204` is its new BLOCK sibling for agents
+  whose own `tools:` line carries `Write`/`Edit`/`MultiEdit`, checked off disk the same way `CL200`
+  decides write-capability - never `contractLint.readOnlyAgents`, a declared promise about a fixed
+  three agents, not a live predicate. A new rule id, not a conditional severity inside `CL203`:
+  severity is looked up from the manifest per rule id and never computed by a rule, the invariant
+  that keeps the bash/PowerShell twins from diverging on BLOCK vs WARN.
+  - **All 12 standing warnings from v1.6.0 resolved, each decided individually, not blanket-suppressed.**
+    `sd-spec-architect`'s unused `Edit`/`Write` (the two `CL203` findings on the one agent that holds
+    write power - the original motivation for this ticket) now have explicit body mentions, since
+    the agent genuinely writes and edits spec files. `sd-docs-writer`'s `Glob`/`Grep` and
+    `sd-debugger`'s and `sd-implementer`'s `Glob` were genuinely unused and dropped (minimal tool
+    allowlists, CLAUDE.md rule 5). `sd-code-explorer`'s five `TASK = callers/definition/trace/
+    pattern/structure` headings are sub-routines reached only through `TASK = standalone`'s internal
+    `DETECTED_INTENT` routing, never invoked directly by a command - each now carries a
+    `contract-lint: allow CL101` suppression naming that reason. `sd-reviewer`'s `per-task` task
+    type was dead: `/sd:feature` and `/sd:refactor` deliberately review the whole changeset via
+    `holistic` instead of once per task (a documented cost decision), so nothing ever set
+    `TASK_TYPE = per-task`. Its checklist wasn't dead, though - `holistic` builds on it - so it moved
+    into a non-invocable "Baseline checklist" section rather than being deleted outright.
+  - **AC-2's `(file, rule, token)`-keyed exception list was not built.** After the above, no `CL203`/
+    `CL204` finding needed one: the only same-line collision case (`spec-architect.md`'s Edit and
+    Write sharing one `tools:` line) is exactly the one AC-3 already forced a real fix for. The five
+    `CL101` items that did need an exception are each on their own line, so the existing
+    `<!-- contract-lint: allow -->` suppression convention already gives per-item granularity - and
+    `docs/contract-lint.md` had already recorded once (for `CL306`) that a second declared-exception
+    surface duplicating that convention was rejected. Building an unused mechanism was skipped.
+  - **`contractLint.warnBudget` (0): a standing-warning ratchet in `scripts/validate.{sh,ps1}` Check
+    8.** Counts every WARN finding except `CL500` and `CL202`, which stay WARN permanently by design
+    (a byte-budget ratchet and a hand-maintained tool allowlist, respectively) and would otherwise
+    fail the build through rules explicitly meant not to. Exceeding the budget fails validate;
+    lowering the actual count requires lowering the budget in the same commit - the point is that a
+    13th warning next release is exactly as visible as the first one was.
+  - Fixture coverage: `tests/contract-lint/fixtures/cl204-write-capable-agent-block/` (new, must
+    FIRE), the existing `cl203-declared-tool-never-mentioned` case re-verified as still WARN (its
+    agent stays non-write-capable), and `CL204` added to every fixture manifest's `rules[]` registry
+    (root, `_base`, and the nine case-local overlay manifests) to keep `run-selftest.ps1`'s registry
+    parity guard - and its own internal one inside each linter - green.
+- **`SL061`-`SL066`: the port task-block band for `/sd:spec validate`** (SW-49) - closes the known
+  gap carried forward from SW-41: `/sd:port`'s anti-drift contract (every port task's `Pattern refs`
+  cites a snapshot member range, `Acceptance` carries a licensed-deviation ID list) was enforced
+  only by `commands/port.md` Phase 6 refusing to execute a defective block at *execution* time,
+  invisible to `validate`. Six new rules, scoped to `type: port` specs only, checked per
+  `Pattern refs` citation and per task, same granularity `SL082`/`SL083` already use for table rows:
+  `SL061` malformed citation shape, `SL062` citation outside `04-artifacts/source/`, `SL063` citation
+  names a path absent from `MANIFEST.md`, `SL064` citation range outside the manifest's recorded
+  member range for that path (checked as a cascade - each rule requires the previous one to have
+  resolved, so a citation reports exactly one of the four, never a stack of them), `SL065` no
+  `Licensed deviations:` line in `Acceptance`, `SL066` a cited deviation ID absent from the spec's
+  deviation table. Reserved band per `commands/spec.md`'s own note (`SL061`-`SL069`); `SL067`-`SL069`
+  remain reserved.
+  - **New convention: `Licensed deviations: D01, D02` (or `none`) inside `Acceptance`.** No prior
+    syntax existed for embedding a deviation-ID list in a port task's free-text `Acceptance` field -
+    documented as a new "Port mode" addendum in `sd-atomic-task-format`, alongside the existing
+    "Refactor mode" / "Re-plan" addenda. Authoring it is `sd-spec-architect`'s job (`/sd:port`,
+    unchanged here); this ticket only adds the reading/checking side.
+  - **`examples/spec-lint-fixture/` gains a third matched clean/broken pair**: `PORT-CLEAN-004` (all
+    six checks PASS) and `PORT-BROKEN-016` (one seeded defect per rule, isolated to its own task so
+    each finding is independently traceable) - same donor scenario, differing only in `02-tasks.md`.
+    Rule coverage in that fixture's README moves from 25/37 to 31/43.
+  - **`contractLint.budgets.commandsBytes` raised 32677 -> 37194** - `commands/spec.md` picked up
+    the new rule table rows and the "Port task-block checks" subsection; the ratchet moves with it,
+    same mechanical consequence every prior SL-band addition (SW-38, SW-40) triggered. This is the
+    only `specwright.manifest.json` edit in this ticket - no `SL0xx` rule itself was registered
+    there (see below).
+  - **Not otherwise touched, and why**: no `SL0xx` rule has ever been registered in
+    `specwright.manifest.json` (that subtree is `contractLint`'s CL-rule registry, consumed only by
+    `scripts/contract-lint.*`; an SL entry there would be inert, matching the precedent set by
+    `SL070`-`SL090`, none of which registered there either). `docs/troubleshooting.md` - the SW-41 "known gap" note lives only
+    in that entry's own CHANGELOG text, which is historical and untouched (`specwright.manifest.json`
+    excludes `CHANGELOG.md` from doc-drift checks by design); there was no corresponding note in
+    `troubleshooting.md` to remove. `commands/port.md` Phase 6 - stays as defense-in-depth for a spec
+    approved before this rule existed.
 
 ### Changed
 - **Test-harness prerequisites documented; e2e runs on a subscription** (SW-55) -
@@ -83,41 +184,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   532ms on pwsh, 1194ms -> 1217ms on Windows PowerShell 5.1) - the win is real but small against
   process-startup cost, which the SW-50 ADR will need to account for separately.
 
+### Fixed
+- **`scripts/smoke-hooks.sh`** (SW-52) - now runs under `set -euo pipefail`. `run_hook` captures
+  the hook's exit code explicitly, so an expected non-zero exit is reported rather than aborting
+  the suite. A jq preflight runs before any fixture or assertion. With no `jq`, the suite exits `2`
+  and names `jq` as a missing runner dependency. Before, every hook exited 0 silently, 7 assertions
+  failed, and the hooks took the blame. The `[SKIP]` branch for cases (e)/(f) is gone, so both
+  cases always run. `smoke-hooks.ps1` needs no twin change: the PowerShell hooks parse JSON
+  natively and do not depend on `jq`. Closes REVIEW-TODO items 7 and 8.
+- **`scripts/validate.sh`** (SW-52) - Check 8 now reports a missing `jq` with the same message as
+  Checks 7 and 9, through one shared `jq_missing` helper. Before, it printed only
+  "contract-lint could not run (exit 2)", because the linter's stderr reason was discarded.
+- **`install/install.sh`, `install/uninstall.sh`** (SW-53) - the `--prefix` emptiness check now
+  strips `[[:space:]]` instead of spaces only (`${PREFIX// /}`), matching `IsNullOrWhiteSpace` in
+  the `.ps1` installers. A tab, newline or CR prefix was accepted on Unix (creating e.g.
+  `commands/<TAB>/`) while Windows rejected it. `uninstall.sh`'s guard now carries the same
+  "mirrors install.sh" comment as its twin.
+- **`commands/rca.md` left three artifact writes with no named writer** (SW-51). Phase 2 step 3
+  said "Hypothesis tree written to `00-spec.md`" - passive, inside a block invoking `sd-debugger`,
+  which has no write tool - so the tree could go unpersisted and Gate 2 would stop on an empty
+  section. It now reads "Main thread appends the returned hypothesis tree ... (debugger has no
+  write tool)", matching `bug.md` and `perf.md`. The same sweep of every command file found two
+  more actor-less steps in `rca.md` (Phase 1 evidence saving, Phase 3 REJECTED documentation);
+  both now name the main thread. No other command had the defect.
+- **Hooks hardcoded the spec-prefix alternation, making `PORT-` specs invisible to enforcement**
+  (SW-44). `spec-gate`, `prompt-router`, and `subagent-retro` - both bash and PowerShell - matched
+  in-progress specs against a literal `(FEAT|BUG|REF|PERF|RCA)` alternation instead of reading
+  `spec.prefixes` from `.claude/project-config.json`, even though the template has shipped a
+  `port: "PORT"` entry since `/sd:port` landed in SW-41. A `PORT-` spec was therefore invisible to
+  `spec-gate`'s in-progress check, `prompt-router`'s context injection, and `subagent-retro`'s
+  lesson scoping - the four HARD gates `/sd:port` documents had no hook backing. Both
+  implementations now derive the alternation from `spec.prefixes` at runtime (each config-declared
+  value validated against `^[A-Z][A-Z0-9]{1,9}$`; invalid entries are dropped individually rather
+  than invalidating the whole set), falling back to a built-in six-prefix default
+  (`FEAT|BUG|REF|PERF|RCA|PORT`) when the config is absent, unreadable, or has nothing valid
+  declared - hooks still never fail noisily. Five new fixtures cover a `PORT-` spec detected by
+  `spec-gate`, `port`-scoped lesson selection in `subagent-retro`, a custom seventh prefix, and
+  both branches of the malformed-prefix fallback. Removes the now-stale `docs/troubleshooting.md`
+  entry describing this gap.
+- **`install.sh`/`install.ps1` did not validate `BASE_PATH`** (SW-45) - an empty or
+  whitespace-only `--base-path`/`-BasePath` silently resolved path building against filesystem
+  root (bash) or the caller's CWD (PowerShell, confirmed empirically), writable on a permissive
+  environment (container, CI as root, WSL). A new guard in all four install/uninstall scripts
+  rejects empty/whitespace `BASE_PATH` with a clear error and exit 2 (bash uses `[[:space:]]`,
+  not the PREFIX guard's spaces-only idiom, so the check agrees with PowerShell's
+  `IsNullOrWhiteSpace` on tabs/CR/LF). Separately, `--base-path`/`--prefix` given with no
+  following value used to abort inside `shift 2` under `set -euo pipefail` with zero diagnostic
+  output; both bash scripts now check argument count before consuming it and print usage + exit
+  2. PowerShell's native parameter binder already rejects a missing `-BasePath` value before the
+  script body runs (exit 1, its own message, zero files written) - documented as an accepted
+  deviation from bash's exit 2 rather than replacing the idiomatic `param()` block. CI gains
+  negative-case coverage on both platforms for both install/uninstall pairs: empty,
+  whitespace-only, and missing-value, asserting exit code and zero files written. Relative
+  `BASE_PATH` normalization and the `--base-path --force`-value-looks-like-a-flag case are
+  deliberately out of scope, deferred to a follow-up ticket.
+- **`install.sh`'s partial-install guard never fired** (SW-46) - `on_error()` was registered via
+  `trap on_error ERR`, but the script ran under `set -euo pipefail` (no `-E`/errtrace), and bash
+  does not propagate an ERR trap into shell functions without `-E`. Every copy happens inside
+  `copy_one()`, so a failure there produced a bare non-zero exit with no partial-install warning
+  and no cleanup instructions - exactly the half-populated `~/.claude/` the guard existed to
+  prevent. `install.sh` now runs under `set -Eeuo pipefail`; the existing `$STAMP_TMP` `EXIT`
+  trap (`install.sh:339`) is untouched and continues to fire independently. `install.ps1` had no
+  equivalent guard at all - it gains one now: the copy phase (main loop plus the version-stamp
+  write) is wrapped in `try`/`catch`, and an unexpected mid-copy failure prints the same
+  three-line remedy as bash's `on_error()` (installed-file count, base path + prefix, and the
+  exact `uninstall.ps1` command to run), gated on `-not $DryRun -and $installed -gt 0` to match.
+  CI gains a negative case on both platforms: a plain file pre-created at `<base>/agents/sd`
+  blocks that plan area's directory creation (`commands/`, plan position 1, has already installed
+  successfully by then), asserting the guard message fires with the exact remedy on the sabotaged
+  run. `uninstall.sh`/`uninstall.ps1` have no partial-state guard either - out of scope here.
+
+### Removed
+- **`REVIEW-TODO.md`** (SW-47) - its ten items are each fixed or tracked: items 1/2 by SW-45/SW-46,
+  item 3 verified fixed in place (`hooks/bash/subagent-retro.sh:533` already parses the UTC
+  timestamp with `date -u -j -f`), item 4 by SW-51, items 7/8 by SW-52, item 9 by SW-54, item 10 by
+  SW-53, item 6 already closed by SW-3's manifest, and item 5's residual `agents/debugger.md` gap
+  tracked under new child issue SW-64. Nothing is carried forward as a markdown file; Check 9 above
+  guards against recurrence.
+
+## [1.6.0] - 2026-08-10
+
 ### Added
-- **validate Check 10: bash strict mode** (SW-52) - `scripts/validate.{ps1,sh}` fail when any
-  `*.sh` in the repo does not open with `set -euo pipefail`. Exceptions are declared with a reason
-  in the new `specwright.manifest.json` `bashStrictMode.exceptions` block (the 3 bash hooks, which
-  must exit 0 on every failure path). A stale exception path also fails. This turns the
-  CONTRIBUTING bash convention into a gate. The sweep across `scripts/` and `tests/` found
-  `smoke-hooks.sh` to be the only violation.
-- **`tests/installer/`** (SW-53) - `prefix-cases.json` shared case table (valid, empty, spaces,
-  tab, newline, CR, `..`, `/`, `\`) plus `run-prefix-parity.ps1`, which asserts identical
-  accept/reject outcomes across all four installer scripts in dry-run mode, and a `-SelfTest` that
-  proves the pre-fix spaces-only guard is caught. Both run in CI on every OS.
-- **`skills/sd-bootstrap-guard/SKILL.md`** (SW-54) - single owner of the Phase 0 bootstrap guard:
-  the CLAUDE.md WARN, the constitution / project-config / index STOPs and the project-config parse
-  STOP. Read at runtime by the workflow commands; if it is unreadable they STOP with an
-  install-incomplete message.
-- **Contract-lint rule `CL009` (BLOCK)** (SW-54) - a command whose `## Phase 0` section restates a
-  phrase from the new `contractLint.bootstrapGuardPhrases` vocabulary fails, including a phrase
-  wrapped across two lines. Before the dedupe it fired on all seven copies and on no other
-  command. Fixtures `cl009-phase0-restates-bootstrap-guard` and `fp-cl009-phrase-outside-phase0`.
-- **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
-  an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
-  cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a
-  write form fails unless its enclosing numbered step names the `main thread`, joined across line
-  wraps. Would have caught the `rca.md` Phase 2 defect fixed above; the engine tree is clean under
-  both implementations. New fixtures `cl205-readonly-block-passive-artifact-write` and
-  `fp-cl205-main-thread-named` (the `port.md` Phase 3 wrapped-actor shape). Blind spots - passive
-  writes in a write-capable agent's block, section-only writes - are recorded in
-  `docs/contract-lint.md` as deliberate.
-- **`tests/hooks/measure-latency.ps1`** (SW-50, commit 1/6) - p50/p95 per-invocation latency
-  measurement for the three shipped hooks, spawning each as a fresh child process under every
-  available PowerShell flavor (`pwsh` and, on Windows, `powershell` 5.1) against a curated fixture
-  subset (`tests/hooks/fixtures/latency-selection.json`). `-CheckBudget` will fail the build once
-  `specwright.manifest.json` gains a `hookLatencyBudgets` baseline (a later SW-50 commit); until
-  then it warns and exits 0. No bash twin, same rationale as `run-conformance.ps1`: it must drive
-  multiple PowerShell flavors from one process to produce comparable numbers.
 - **`## Quickstart` section in `README.md`** (SW-8) - a numbered path (install -> `/sd:setup` ->
   `/sd:feature <slug>`, with the bundled fixture as the fallback for readers with no project handy)
   so a new reader reaches their first spec-approval gate without piecing the flow together from
@@ -410,88 +557,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `implementer`, `reviewer`, `spec-architect`; `docs-writer` has no mode dispatch) - prerequisite
   for the invocation-contract validator in SW-26 (SW-25). Format documented in `CONTRIBUTING.md`
   under "Agents". No agent behaviour changed.
-- **Check 9: root-level ad-hoc notes guard** (SW-47) - `scripts/validate.{sh,ps1}` now fails when
-  a root-level file matches a declared ad-hoc-notes pattern (`specwright.manifest.json`'s new
-  `adHocNotesGuard.patterns`: `REVIEW-TODO.md`, `TODO.md`, `FIXME.md`, `NOTES.md`,
-  `*-FINDINGS.md`, matched case-insensitively - NTFS/APFS are case-insensitive filesystems, so a
-  case-sensitive guard would let a differently-cased file through on most contributors' machines);
-  `ROADMAP.md` is deliberately excluded as a maintained project document, not an ad-hoc findings
-  snapshot. `scripts/selftest-root-guard.{sh,ps1}` proves the check bites, same posture as
-  `selftest-docs.{sh,ps1}`. `CONTRIBUTING.md` now states explicitly that review findings become
-  Jira issues, not files in the tree.
-- **`CL204` (BLOCK): an unused declared tool on a write-capable agent** (SW-48) - `CL203` narrows to
-  agents with no write tool of their own (stays WARN); `CL204` is its new BLOCK sibling for agents
-  whose own `tools:` line carries `Write`/`Edit`/`MultiEdit`, checked off disk the same way `CL200`
-  decides write-capability - never `contractLint.readOnlyAgents`, a declared promise about a fixed
-  three agents, not a live predicate. A new rule id, not a conditional severity inside `CL203`:
-  severity is looked up from the manifest per rule id and never computed by a rule, the invariant
-  that keeps the bash/PowerShell twins from diverging on BLOCK vs WARN.
-  - **All 12 standing warnings from v1.6.0 resolved, each decided individually, not blanket-suppressed.**
-    `sd-spec-architect`'s unused `Edit`/`Write` (the two `CL203` findings on the one agent that holds
-    write power - the original motivation for this ticket) now have explicit body mentions, since
-    the agent genuinely writes and edits spec files. `sd-docs-writer`'s `Glob`/`Grep` and
-    `sd-debugger`'s and `sd-implementer`'s `Glob` were genuinely unused and dropped (minimal tool
-    allowlists, CLAUDE.md rule 5). `sd-code-explorer`'s five `TASK = callers/definition/trace/
-    pattern/structure` headings are sub-routines reached only through `TASK = standalone`'s internal
-    `DETECTED_INTENT` routing, never invoked directly by a command - each now carries a
-    `contract-lint: allow CL101` suppression naming that reason. `sd-reviewer`'s `per-task` task
-    type was dead: `/sd:feature` and `/sd:refactor` deliberately review the whole changeset via
-    `holistic` instead of once per task (a documented cost decision), so nothing ever set
-    `TASK_TYPE = per-task`. Its checklist wasn't dead, though - `holistic` builds on it - so it moved
-    into a non-invocable "Baseline checklist" section rather than being deleted outright.
-  - **AC-2's `(file, rule, token)`-keyed exception list was not built.** After the above, no `CL203`/
-    `CL204` finding needed one: the only same-line collision case (`spec-architect.md`'s Edit and
-    Write sharing one `tools:` line) is exactly the one AC-3 already forced a real fix for. The five
-    `CL101` items that did need an exception are each on their own line, so the existing
-    `<!-- contract-lint: allow -->` suppression convention already gives per-item granularity - and
-    `docs/contract-lint.md` had already recorded once (for `CL306`) that a second declared-exception
-    surface duplicating that convention was rejected. Building an unused mechanism was skipped.
-  - **`contractLint.warnBudget` (0): a standing-warning ratchet in `scripts/validate.{sh,ps1}` Check
-    8.** Counts every WARN finding except `CL500` and `CL202`, which stay WARN permanently by design
-    (a byte-budget ratchet and a hand-maintained tool allowlist, respectively) and would otherwise
-    fail the build through rules explicitly meant not to. Exceeding the budget fails validate;
-    lowering the actual count requires lowering the budget in the same commit - the point is that a
-    13th warning next release is exactly as visible as the first one was.
-  - Fixture coverage: `tests/contract-lint/fixtures/cl204-write-capable-agent-block/` (new, must
-    FIRE), the existing `cl203-declared-tool-never-mentioned` case re-verified as still WARN (its
-    agent stays non-write-capable), and `CL204` added to every fixture manifest's `rules[]` registry
-    (root, `_base`, and the nine case-local overlay manifests) to keep `run-selftest.ps1`'s registry
-    parity guard - and its own internal one inside each linter - green.
-- **`SL061`-`SL066`: the port task-block band for `/sd:spec validate`** (SW-49) - closes the known
-  gap carried forward from SW-41: `/sd:port`'s anti-drift contract (every port task's `Pattern refs`
-  cites a snapshot member range, `Acceptance` carries a licensed-deviation ID list) was enforced
-  only by `commands/port.md` Phase 6 refusing to execute a defective block at *execution* time,
-  invisible to `validate`. Six new rules, scoped to `type: port` specs only, checked per
-  `Pattern refs` citation and per task, same granularity `SL082`/`SL083` already use for table rows:
-  `SL061` malformed citation shape, `SL062` citation outside `04-artifacts/source/`, `SL063` citation
-  names a path absent from `MANIFEST.md`, `SL064` citation range outside the manifest's recorded
-  member range for that path (checked as a cascade - each rule requires the previous one to have
-  resolved, so a citation reports exactly one of the four, never a stack of them), `SL065` no
-  `Licensed deviations:` line in `Acceptance`, `SL066` a cited deviation ID absent from the spec's
-  deviation table. Reserved band per `commands/spec.md`'s own note (`SL061`-`SL069`); `SL067`-`SL069`
-  remain reserved.
-  - **New convention: `Licensed deviations: D01, D02` (or `none`) inside `Acceptance`.** No prior
-    syntax existed for embedding a deviation-ID list in a port task's free-text `Acceptance` field -
-    documented as a new "Port mode" addendum in `sd-atomic-task-format`, alongside the existing
-    "Refactor mode" / "Re-plan" addenda. Authoring it is `sd-spec-architect`'s job (`/sd:port`,
-    unchanged here); this ticket only adds the reading/checking side.
-  - **`examples/spec-lint-fixture/` gains a third matched clean/broken pair**: `PORT-CLEAN-004` (all
-    six checks PASS) and `PORT-BROKEN-016` (one seeded defect per rule, isolated to its own task so
-    each finding is independently traceable) - same donor scenario, differing only in `02-tasks.md`.
-    Rule coverage in that fixture's README moves from 25/37 to 31/43.
-  - **`contractLint.budgets.commandsBytes` raised 32677 -> 37194** - `commands/spec.md` picked up
-    the new rule table rows and the "Port task-block checks" subsection; the ratchet moves with it,
-    same mechanical consequence every prior SL-band addition (SW-38, SW-40) triggered. This is the
-    only `specwright.manifest.json` edit in this ticket - no `SL0xx` rule itself was registered
-    there (see below).
-  - **Not otherwise touched, and why**: no `SL0xx` rule has ever been registered in
-    `specwright.manifest.json` (that subtree is `contractLint`'s CL-rule registry, consumed only by
-    `scripts/contract-lint.*`; an SL entry there would be inert, matching the precedent set by
-    `SL070`-`SL090`, none of which registered there either). `docs/troubleshooting.md` - the SW-41 "known gap" note lives only
-    in that entry's own CHANGELOG text, which is historical and untouched (`specwright.manifest.json`
-    excludes `CHANGELOG.md` from doc-drift checks by design); there was no corresponding note in
-    `troubleshooting.md` to remove. `commands/port.md` Phase 6 - stays as defense-in-depth for a spec
-    approved before this rule existed.
 
 ### Changed
 - **`README.md` cut from 390 to 282 lines (-28%) with no claim dropped.** The restructure below
@@ -541,28 +606,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are now derived from disk like every other published count.
 
 ### Fixed
-- **`commands/rca.md` left three artifact writes with no named writer** (SW-51). Phase 2 step 3
-  said "Hypothesis tree written to `00-spec.md`" - passive, inside a block invoking `sd-debugger`,
-  which has no write tool - so the tree could go unpersisted and Gate 2 would stop on an empty
-  section. It now reads "Main thread appends the returned hypothesis tree ... (debugger has no
-  write tool)", matching `bug.md` and `perf.md`. The same sweep of every command file found two
-  more actor-less steps in `rca.md` (Phase 1 evidence saving, Phase 3 REJECTED documentation);
-  both now name the main thread. No other command had the defect.
-- **Hooks hardcoded the spec-prefix alternation, making `PORT-` specs invisible to enforcement**
-  (SW-44). `spec-gate`, `prompt-router`, and `subagent-retro` - both bash and PowerShell - matched
-  in-progress specs against a literal `(FEAT|BUG|REF|PERF|RCA)` alternation instead of reading
-  `spec.prefixes` from `.claude/project-config.json`, even though the template has shipped a
-  `port: "PORT"` entry since `/sd:port` landed in SW-41. A `PORT-` spec was therefore invisible to
-  `spec-gate`'s in-progress check, `prompt-router`'s context injection, and `subagent-retro`'s
-  lesson scoping - the four HARD gates `/sd:port` documents had no hook backing. Both
-  implementations now derive the alternation from `spec.prefixes` at runtime (each config-declared
-  value validated against `^[A-Z][A-Z0-9]{1,9}$`; invalid entries are dropped individually rather
-  than invalidating the whole set), falling back to a built-in six-prefix default
-  (`FEAT|BUG|REF|PERF|RCA|PORT`) when the config is absent, unreadable, or has nothing valid
-  declared - hooks still never fail noisily. Five new fixtures cover a `PORT-` spec detected by
-  `spec-gate`, `port`-scoped lesson selection in `subagent-retro`, a custom seventh prefix, and
-  both branches of the malformed-prefix fallback. Removes the now-stale `docs/troubleshooting.md`
-  entry describing this gap.
 - **`README.md`'s BMAD acknowledgement pointed at `https://github.com/`** - a placeholder URL that
   had shipped since the section was written. Now links to `bmad-code-org/BMAD-METHOD`.
 - **`README.md`'s compatibility matrix claimed "Latest as of Jan 2026"** for the Claude Code CLI row,
@@ -694,45 +737,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   established for corruption targets. The ticket's secondary finding (a hand-maintained
   `PROJECT-SNAPSHOT.md` needing generation or trimming) does not apply - that file does not exist
   in this repo and never has.
-- **`install.sh`/`install.ps1` did not validate `BASE_PATH`** (SW-45) - an empty or
-  whitespace-only `--base-path`/`-BasePath` silently resolved path building against filesystem
-  root (bash) or the caller's CWD (PowerShell, confirmed empirically), writable on a permissive
-  environment (container, CI as root, WSL). A new guard in all four install/uninstall scripts
-  rejects empty/whitespace `BASE_PATH` with a clear error and exit 2 (bash uses `[[:space:]]`,
-  not the PREFIX guard's spaces-only idiom, so the check agrees with PowerShell's
-  `IsNullOrWhiteSpace` on tabs/CR/LF). Separately, `--base-path`/`--prefix` given with no
-  following value used to abort inside `shift 2` under `set -euo pipefail` with zero diagnostic
-  output; both bash scripts now check argument count before consuming it and print usage + exit
-  2. PowerShell's native parameter binder already rejects a missing `-BasePath` value before the
-  script body runs (exit 1, its own message, zero files written) - documented as an accepted
-  deviation from bash's exit 2 rather than replacing the idiomatic `param()` block. CI gains
-  negative-case coverage on both platforms for both install/uninstall pairs: empty,
-  whitespace-only, and missing-value, asserting exit code and zero files written. Relative
-  `BASE_PATH` normalization and the `--base-path --force`-value-looks-like-a-flag case are
-  deliberately out of scope, deferred to a follow-up ticket.
-- **`install.sh`'s partial-install guard never fired** (SW-46) - `on_error()` was registered via
-  `trap on_error ERR`, but the script ran under `set -euo pipefail` (no `-E`/errtrace), and bash
-  does not propagate an ERR trap into shell functions without `-E`. Every copy happens inside
-  `copy_one()`, so a failure there produced a bare non-zero exit with no partial-install warning
-  and no cleanup instructions - exactly the half-populated `~/.claude/` the guard existed to
-  prevent. `install.sh` now runs under `set -Eeuo pipefail`; the existing `$STAMP_TMP` `EXIT`
-  trap (`install.sh:339`) is untouched and continues to fire independently. `install.ps1` had no
-  equivalent guard at all - it gains one now: the copy phase (main loop plus the version-stamp
-  write) is wrapped in `try`/`catch`, and an unexpected mid-copy failure prints the same
-  three-line remedy as bash's `on_error()` (installed-file count, base path + prefix, and the
-  exact `uninstall.ps1` command to run), gated on `-not $DryRun -and $installed -gt 0` to match.
-  CI gains a negative case on both platforms: a plain file pre-created at `<base>/agents/sd`
-  blocks that plan area's directory creation (`commands/`, plan position 1, has already installed
-  successfully by then), asserting the guard message fires with the exact remedy on the sabotaged
-  run. `uninstall.sh`/`uninstall.ps1` have no partial-state guard either - out of scope here.
-
-### Removed
-- **`REVIEW-TODO.md`** (SW-47) - its ten items are each fixed or tracked: items 1/2 by SW-45/SW-46,
-  item 3 verified fixed in place (`hooks/bash/subagent-retro.sh:533` already parses the UTC
-  timestamp with `date -u -j -f`), item 4 by SW-51, items 7/8 by SW-52, item 9 by SW-54, item 10 by
-  SW-53, item 6 already closed by SW-3's manifest, and item 5's residual `agents/debugger.md` gap
-  tracked under new child issue SW-64. Nothing is carried forward as a markdown file; Check 9 above
-  guards against recurrence.
 
 ## [1.5.0] - 2026-07-23
 
@@ -1645,7 +1649,8 @@ Each hook ships in two flavours:
 - Operating systems: Windows 11 + PowerShell 5.1 / 7.x, macOS 13+, Ubuntu 22.04+.
 - Optional MCP servers: Atlassian, Context7, sequential-thinking, GitNexus, MSSQL, Playwright, Tavily.
 
-[Unreleased]: https://github.com/developzoneio/specwright/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/developzoneio/specwright/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/developzoneio/specwright/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/developzoneio/specwright/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/developzoneio/specwright/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/developzoneio/specwright/compare/v1.2.0...v1.3.0
