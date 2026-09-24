@@ -13,6 +13,7 @@ per-file-type guidelines, and how to test changes locally.
 - [Test suites and prerequisites](#test-suites-and-prerequisites)
 - [Threshold re-calibration](#threshold-re-calibration)
 - [PR process](#pr-process)
+  - [Changelog vs ADR](#changelog-vs-adr)
 - [Per-file-type guidelines](#per-file-type-guidelines)
   - [Commands (`commands/*.md`)](#commands-commandsmd)
   - [Agents (`agents/*.md`)](#agents-agentsmd)
@@ -288,12 +289,52 @@ first**:
    minimum local check. See also the [Local install test](#local-install-test) for a manual install
    smoke test, and [The manifest](#the-manifest) for what Check 7 enforces.
 
-5. **Update the changelog.** Add a line under `## [Unreleased]` in `CHANGELOG.md`.
+5. **Update the changelog.** Add a line under `## [Unreleased]` in `CHANGELOG.md`. Say what
+   changed; put why in an ADR - see [Changelog vs ADR](#changelog-vs-adr).
 
 6. **Open the PR** with:
    - A short description.
    - Screenshots or terminal output if behaviour changes.
    - A note on whether docs were updated.
+
+### Changelog vs ADR
+
+The two answer different questions, for different readers:
+
+- **`CHANGELOG.md` says what changed** and whether it affects the reader: the new command, flag,
+  file, rule or behavior, and what a user or contributor has to do about it. One entry, a few
+  lines, then a link to the ADR if one exists.
+- **An ADR in `docs/adr/` says why, and what was rejected**: the context that forced the decision,
+  the alternatives considered, what was deliberately not built, known gaps, and consequences.
+  One ADR per substantive decision, numbered `NNNN-<slug>.md`, following the existing ones.
+
+**The test.** If a sentence would still be true had the change been built differently, it is
+rationale and belongs in the ADR. If it describes what now exists, it belongs in the changelog.
+"Deliberately not built", "known gap", "X instead of Y because" and "found while building it" are
+always ADR material. If the rationale already lives in a doc (for example `docs/contract-lint.md`
+for a lint rule), link to it rather than copying it into a second place.
+
+**Worked example** (SW-42, from 1.6.0). The original changelog entry carried this:
+
+```markdown
+- **`## Spawned specs` in the feature, bug, refactor, and perf spec templates** (SW-42) - ...
+  prompts for the section when the retro names deferred work - a prompt, not a gate: gate counts
+  are unchanged, since hard-gating hygiene would tax every spec for a minority's benefit.
+  - **The section ships with no `<<...>>` token.** It is filled at close-out, i.e. after
+    `approved`, so an author-fill placeholder there would be an `SL010` BLOCK on every spec ...
+```
+
+Split along the test, the changelog keeps what exists:
+
+```markdown
+- **`## Spawned specs` in the feature, bug, refactor and perf spec templates** (SW-42), using the
+  RCA template's reserved-ID table. Close-out prompts for it when the retro names deferred work;
+  gate counts are unchanged. New `SL090` ... See [ADR 0009](docs/adr/0009-...md).
+```
+
+and `docs/adr/0009-spawned-specs-and-suggest-band.md` takes the "why": prompt rather than gate
+because hard-gating taxes every spec, no `<<...>>` token because of `SL010`, a reserved ID is not an
+index row because of `SL032`.
 
 ---
 
