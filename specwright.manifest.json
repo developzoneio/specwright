@@ -556,8 +556,10 @@
     "Raising a number here is a real decision that belongs in the SAME commit as the change",
     "that needs it, with the reason in its CHANGELOG line - never a reflex to a red CI run.",
     "Unlike the retired CL500 byte ratchet (ADR 0011), budgets are NOT set at today's exact",
-    "measurement: they carry headroom over the slowest CI runner's p95, so shared-runner noise",
-    "does not force a raise, and they have an external anchor. Every p95 is capped at half the",
+    "measurement: each is about 2x the worst CI p95 seen for that (hook, flavor), rounded up",
+    "to 100 ms (SW-50 measurements and rationale: docs/architecture.md 'Hook invocation",
+    "latency', ADR 0012), so shared-runner noise does not force a raise. They also have an",
+    "external anchor: every p95 is capped at half the",
     "hook's 'timeout' in templates/settings.template.json (SW-50 AC-5): measure-latency.ps1",
     "refuses a budget above that ceiling before it measures anything, so the only way past it",
     "is to raise the timeout too, in the same commit, and say why.",
@@ -569,16 +571,16 @@
   "hookLatencyBudgets": {
     "budgets": {
       "spec-gate": {
-        "pwsh": { "p95": 2500 },
-        "powershell": { "p95": 2500 }
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1100 }
       },
       "prompt-router": {
-        "pwsh": { "p95": 2500 },
-        "powershell": { "p95": 2500 }
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
       },
       "subagent-retro": {
-        "pwsh": { "p95": 1500 },
-        "powershell": { "p95": 1500 }
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1100 }
       }
     }
   }

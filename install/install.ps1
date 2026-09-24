@@ -364,6 +364,6 @@ Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Byp
 Write-Info '     }'
 Write-Info '   (Or run /sd:setup in your project - it generates settings.json automatically.)'
 Write-Info '   (Have PowerShell 7+ (pwsh) installed? See templates/settings.template.json ->'
-Write-Info '    "_pwsh_recommended" for a faster, empirically-verified hook wiring option.)'
+Write-Info '    "_pwsh_recommended" for the pwsh hook wiring - measure first; it is not faster everywhere.)'
 
 exit 0

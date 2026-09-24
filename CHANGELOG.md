@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   phrase from the new `contractLint.bootstrapGuardPhrases` vocabulary fails, including a phrase
   wrapped across two lines. Before the dedupe it fired on all seven copies and on no other
   command. Fixtures `cl009-phase0-restates-bootstrap-guard` and `fp-cl009-phrase-outside-phase0`.
+- **Hook latency budgets and measurements** (SW-50, commit 6/6) - `hookLatencyBudgets` now holds
+  real p95 budgets (ms, pwsh / powershell): `spec-gate` 1300 / 1100, `prompt-router` 1300 / 1000,
+  `subagent-retro` 1300 / 1100, each about 2x the worst CI p95 measured. Timeouts are unchanged.
+  `docs/architecture.md` gains "Hook invocation latency" (method, measured p95 on
+  windows/macos/ubuntu CI and a Linux container, how to reproduce). On windows-latest, Windows
+  PowerShell 5.1 was about 20% faster than pwsh, the reverse of an earlier workstation
+  measurement. The `_pwsh_recommended` note in `templates/settings.template.json` therefore now
+  says to measure with `measure-latency.ps1` before switching, not that pwsh is faster. Decision
+  and alternatives: [ADR 0012](docs/adr/0012-hook-latency-budget.md).
 - **`measure-latency.ps1` verifies every timed run** (SW-50, commit 5/6) - each run's exit code,
   stderr and stdout are checked against the case's `expected.json` golden (block vs allow for
   `spec-gate`, routed workflows for `prompt-router`, surfaced lessons for `subagent-retro`), and a
@@ -48,8 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an unbudgeted (hook, flavor), a requested flavor that isn't installed, or a hook with zero
   samples all fail instead of warning. Before measuring, it also refuses any p95 budget above half
   the hook's `timeout` in `templates/settings.template.json`, so raising a budget past that
-  ceiling means raising the timeout in the same commit. First budgets sit at that ceiling
-  (2500 / 2500 / 1500 ms); commit 5/6 tightens them from measured CI numbers.
+  ceiling means raising the timeout in the same commit.
 - **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
   an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
   cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a
@@ -62,9 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tests/hooks/measure-latency.ps1`** (SW-50, commit 1/6) - p50/p95 per-invocation latency
   measurement for the three shipped hooks, spawning each as a fresh child process under every
   available PowerShell flavor (`pwsh` and, on Windows, `powershell` 5.1) against a curated fixture
-  subset (`tests/hooks/fixtures/latency-selection.json`). `-CheckBudget` will fail the build once
-  `specwright.manifest.json` gains a `hookLatencyBudgets` baseline (a later SW-50 commit); until
-  then it warns and exits 0. No bash twin, same rationale as `run-conformance.ps1`: it must drive
+  subset (`tests/hooks/fixtures/latency-selection.json`). `-CheckBudget` compares the result
+  against `hookLatencyBudgets` (see the CI floor entry above). No bash twin, same rationale as `run-conformance.ps1`: it must drive
   multiple PowerShell flavors from one process to produce comparable numbers.
 - **Check 9: root-level ad-hoc notes guard** (SW-47) - `scripts/validate.{sh,ps1}` now fails when
   a root-level file matches a declared ad-hoc-notes pattern (`specwright.manifest.json`'s new
@@ -204,14 +211,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   previously and incorrectly implied the PowerShell command lines "work as-is" on Unix pwsh
   installs (Unix invokes it as `pwsh`, not `powershell`, with no shim by default).
 - **`install/install.ps1`** (SW-50, commit 3/6) - the printed post-install "Hook wiring" guidance
-  now points to `_pwsh_recommended` in `templates/settings.template.json` for the faster option.
+  now points to `_pwsh_recommended` in `templates/settings.template.json`, with a note to measure
+  first: pwsh is not faster on every machine (see the SW-50 6/6 entry).
 - **`hooks/powershell/spec-gate.ps1`** (SW-50, commit 2/6) - the `file_path`-empty and
   path-does-not-resolve early exits now run before `Get-ProjectConfig` (a disk read), not after,
   so the common case - a tool call with no gate-relevant path - no longer pays for a config-file
   read it doesn't need. `spec-gate.sh` needed no matching change: it already checked `file_path`
   before reading config. Measured effect on this machine: within noise (spec-gate p50 530ms ->
   532ms on pwsh, 1194ms -> 1217ms on Windows PowerShell 5.1) - the win is real but small against
-  process-startup cost, which the SW-50 ADR will need to account for separately.
+  process-startup cost; see ADR 0012.
 
 ### Fixed
 - **CI: the two bash negative-case installer steps could never pass** - GitHub runs `shell: bash`

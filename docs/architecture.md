@@ -392,6 +392,63 @@ Heavy reasoning (architecture, investigation, holistic review) uses `sonnet`. Me
 
 These are rough ballparks. Actual cost depends on file sizes, MCP usage, and conversation length. The point is that workflow design - not aggressive prompting alone - keeps cost predictable.
 
+## Hook invocation latency
+
+Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
+`Edit|Write|MultiEdit`, `prompt-router` on every prompt, `subagent-retro` after every subagent,
+and each one is a fresh process: interpreter start-up, script parse, then the hook's own work.
+The PowerShell twins pay far more start-up than the bash ones.
+
+**Method.** `tests/hooks/measure-latency.ps1` spawns each PowerShell hook as a fresh child process
+(`<flavor> -NoProfile -ExecutionPolicy Bypass -File <hook>.ps1`, the shipped wiring) against the
+cases in `tests/hooks/fixtures/latency-selection.json`: for each hook, one gate-irrelevant case
+(the common case) plus one or two that do real work. Each run gets a fresh copy of the case
+workspace; the stopwatch covers process start to exit only. Two warm-up runs per case are
+discarded. Every run, warm-up included, must match the case's `expected.json` outcome, or the
+script fails rather than timing a hook that died early. Percentiles are nearest-rank, pooled
+across a hook's cases. Reproduce with:
+
+```powershell
+./tests/hooks/measure-latency.ps1 -Iterations 30          # every flavor installed here
+./tests/hooks/measure-latency.ps1 -Flavors powershell     # Windows PowerShell 5.1 only
+```
+
+**Measured p95, milliseconds** (2026-09-24, SW-50; CI rows are 20 iterations per case, two runs
+each on commits `0ddb2b4` and `01cb099`; "powershell" is Windows PowerShell 5.1):
+
+| Where | Flavor | `spec-gate` | `prompt-router` | `subagent-retro` |
+|---|---|---|---|---|
+| windows-latest (CI) | powershell | 490 / 510 | 465 / 474 | 522 / 534 |
+| windows-latest (CI) | pwsh | 641 / 629 | 604 / 608 | 603 / 650 |
+| macos-latest (CI) | pwsh | 575 / 510 | 468 / 471 | 558 / 518 |
+| ubuntu-latest (CI) | pwsh | 360 / 509 | 316 / 425 | 375 / 536 |
+| Linux container, 4 vCPU | pwsh | 548 | 446 | 578 |
+
+For comparison, the bash `spec-gate` on the same Linux container measured p50 104 ms and p95
+119 ms on the `block-protected-path` case (a shell loop timing 30 runs; the bash twins are not
+covered by `measure-latency.ps1`).
+
+**What the numbers say.**
+
+- **No hook comes near its timeout.** The worst p95 anywhere is 650 ms, against 5 s
+  (`spec-gate`, `prompt-router`) and 3 s (`subagent-retro`). An implement phase touching 40 files
+  pays roughly 40 x 0.5 s = 20 s of `spec-gate` overhead, which is real but not a timeout risk.
+- **pwsh is not faster everywhere.** On windows-latest, Windows PowerShell 5.1 beat pwsh by about
+  20% on every hook. On a developer workstation measured earlier in SW-50, it was the reverse:
+  `spec-gate` p50 was 1217 ms on 5.1 and 532 ms on pwsh. Start-up cost depends on the machine
+  (native-image caches, antivirus scanning of the pwsh install, disk), so
+  `templates/settings.template.json`'s `_pwsh_recommended` wiring is an option to measure, not a
+  guaranteed win: run the script above with both flavors before switching.
+- **Run-to-run noise is large.** The same ubuntu-latest runner type moved `spec-gate` p95 from
+  360 to 509 ms between two consecutive runs. Budgets have to absorb that.
+
+**The CI floor.** `specwright.manifest.json`'s `hookLatencyBudgets` declares a p95 budget per
+hook and flavor, and the `Hook latency budget` CI step fails any run over it. Each budget is about
+twice the worst CI p95 seen for that pair, rounded up to 100 ms: loose enough that shared-runner
+noise never forces a raise, tight enough that a hook which doubles its cost fails. No budget may
+exceed half the hook's `timeout`; the script checks that before measuring anything. The timeout
+decision and its alternatives are in `docs/adr/0012-hook-latency-budget.md`.
+
 ---
 
 ## MCP integration
