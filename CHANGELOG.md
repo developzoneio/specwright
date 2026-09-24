@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   phrase from the new `contractLint.bootstrapGuardPhrases` vocabulary fails, including a phrase
   wrapped across two lines. Before the dedupe it fired on all seven copies and on no other
   command. Fixtures `cl009-phase0-restates-bootstrap-guard` and `fp-cl009-phrase-outside-phase0`.
+- **`measure-latency.ps1` verifies every timed run** (SW-50, commit 5/6) - each run's exit code,
+  stderr and stdout are checked against the case's `expected.json` golden (block vs allow for
+  `spec-gate`, routed workflows for `prompt-router`, surfaced lessons for `subagent-retro`), and a
+  mismatch fails the script outright. Hooks exit 0 on every failure path, so a hook that died early
+  under one PowerShell flavor would otherwise have been timed and reported as a speedup.
 - **Hook latency floor in CI** (SW-50, commit 4/6) - `specwright.manifest.json` gains
   `hookLatencyBudgets` (per-hook, per-flavor p95 in ms), and a new `Hook latency budget` CI step
   runs `tests/hooks/measure-latency.ps1 -CheckBudget` on all three OSes (windows-latest measures

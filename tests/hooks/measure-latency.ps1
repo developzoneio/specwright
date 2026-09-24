@@ -145,11 +145,56 @@ function Invoke-TimedHookRun {
     } catch [System.IO.IOException] {
         # Child exited without reading stdin - not a measurement failure.
     }
-    $null = $proc.StandardOutput.ReadToEnd()
-    $null = $proc.StandardError.ReadToEnd()
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
     $proc.WaitForExit()
     $sw.Stop()
-    return $sw.Elapsed.TotalMilliseconds
+    return [pscustomobject]@{
+        Ms       = $sw.Elapsed.TotalMilliseconds
+        ExitCode = $proc.ExitCode
+        Stdout   = $stdout
+        Stderr   = $stderr
+    }
+}
+
+function Test-HookRunMatchesGolden {
+    # Coarse fingerprint of a run against the case's expected.json golden.
+    # Hooks exit 0 on every failure path, so a hook that dies early (a parse
+    # error under one flavor, a missing cmdlet) still "succeeds" - and is
+    # FASTER. Timing such a run would report a broken hook as a speedup.
+    # Full decision parity is run-conformance.ps1's job; this only proves
+    # the hook reached the same visible outcome. Returns $null when the run
+    # matches, else a one-line reason.
+    param([string]$HookName, $Expected, $Run)
+    if ($Run.ExitCode -ne 0) { return "exit code $($Run.ExitCode)" }
+    if ($Run.Stderr.Trim().Length -gt 0) {
+        return 'unexpected stderr: ' + ($Run.Stderr.Trim() -split "`n")[0]
+    }
+    $out = $Run.Stdout
+    switch ($HookName) {
+        'spec-gate' {
+            $blocked = $out.Contains('"block"')
+            if ($Expected.decision -eq 'block' -and -not $blocked) { return 'expected a block decision on stdout' }
+            if ($Expected.decision -eq 'allow' -and $blocked) { return 'expected allow, got a block decision' }
+        }
+        'prompt-router' {
+            if ($Expected.emitted -and $out.Trim().Length -eq 0) { return 'expected routing context on stdout, got none' }
+            if (-not $Expected.emitted -and $out.Trim().Length -gt 0) { return 'expected silence, got stdout' }
+            foreach ($w in @($Expected.workflows)) {
+                if ($w -and -not $out.Contains($w)) { return "expected workflow '$w' on stdout" }
+            }
+        }
+        'subagent-retro' {
+            $lessons = @($Expected.lessons | Where-Object { $_ })
+            foreach ($l in $lessons) {
+                if (-not $out.Contains($l)) { return 'expected a surfaced lesson on stdout' }
+            }
+            if (-not $Expected.emitted -and $lessons.Count -eq 0 -and $out.Trim().Length -gt 0) {
+                return 'expected silence, got stdout'
+            }
+        }
+    }
+    return $null
 }
 
 function Get-Percentile {
@@ -302,6 +347,7 @@ foreach ($hookName in $hookNames) {
             }
             $inputPath = Join-Path $caseDir 'input.json'
             $rawPayload = Get-Content -LiteralPath $inputPath -Raw
+            $expected = Get-Content -LiteralPath (Join-Path $caseDir 'expected.json') -Raw | ConvertFrom-Json
 
             $total = $WarmupIterations + $Iterations
             for ($i = 0; $i -lt $total; $i++) {
@@ -309,9 +355,16 @@ foreach ($hookName in $hookNames) {
                 try {
                     $wsForward = $ws.Replace('\', '/')
                     $payload = $rawPayload.Replace('{{CWD}}', $wsForward)
-                    $elapsedMs = Invoke-TimedHookRun -Exe $flavor -HookScript $hookScript -Payload $payload
+                    $run = Invoke-TimedHookRun -Exe $flavor -HookScript $hookScript -Payload $payload
+                    $mismatch = Test-HookRunMatchesGolden -HookName $hookName -Expected $expected -Run $run
+                    if ($null -ne $mismatch) {
+                        # Unconditional, not only under -CheckBudget: a number
+                        # measured off a broken run is wrong, not just slow.
+                        Write-Host "[FAIL] $hookName/$caseName under ${flavor}: $mismatch - the run did not do the hook's real work, so its latency is not a measurement"
+                        exit 1
+                    }
                     if ($i -ge $WarmupIterations) {
-                        $results[$hookName][$flavor].Add($elapsedMs)
+                        $results[$hookName][$flavor].Add($run.Ms)
                     }
                 } finally {
                     Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue
