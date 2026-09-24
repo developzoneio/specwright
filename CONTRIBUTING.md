@@ -198,6 +198,7 @@ against the code under test.
 | `tests/hooks/run-conformance.ps1` | **pwsh 7** + bash + `jq` | bash and PowerShell hooks reach identical decisions on every golden fixture | `pwsh tests/hooks/run-conformance.ps1 [-SelfTest]` | Every OS, per push |
 | `tests/contract-lint/run-selftest.ps1` | **pwsh** + bash + `jq` | Both linters produce identical findings on every fixture | `pwsh tests/contract-lint/run-selftest.ps1 [-SelfTest]` | Every OS, per push |
 | `tests/installer/run-prefix-parity.ps1` | **pwsh 7** + bash | All installer scripts agree on which `--prefix` values they accept | `pwsh tests/installer/run-prefix-parity.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/prompt-size-report/run-parity.ps1` | **pwsh 7** + bash + git | Both prompt size reports print identical output, matching a hand-computed table | `pwsh tests/prompt-size-report/run-parity.ps1` | Every OS, per push |
 | `tests/e2e/run-e2e.ps1` | **pwsh 7** + `claude` CLI + claude auth (a subscription works; no API key needed) + Node for some scenarios | Real `claude -p` sessions: the commands and gates *behave* correctly, asserted on produced artifacts | `pwsh tests/e2e/run-e2e.ps1 [-Case <name>] [-SelfTest]` | Nightly, ubuntu only |
 
 `ci.yml` also runs inline checks: the lesson tooling fixtures and the installer's
@@ -206,7 +207,7 @@ pwsh. `tests/hooks/measure-latency.ps1` is a measurement tool, not a pass/fail s
 
 ### Why the parity harnesses are pwsh-only
 
-The four `tests/**/*.ps1` runners above have no bash twin. **That is a deliberate decision, not a
+The five `tests/**/*.ps1` runners above have no bash twin. **That is a deliberate decision, not a
 gap.** Each one exists to prove that the bash and PowerShell implementations of something agree.
 That can only be *asserted* when one process drives both implementations and compares their
 outputs directly. Two separate platform-native runners, each green on its own side, only let you
@@ -263,6 +264,20 @@ first**:
    change a threshold without a stated measurement behind it.
 3. Where a threshold's rationale in `templates/project-config.template.json` is still a judgement
    call (no measured basis), leave its `_..._use` caveat in place rather than removing it.
+
+### Prompt size report
+
+Run it in the same pass, at each minor release, before the tag is cut:
+
+```bash
+bash scripts/prompt-size-report.sh          # compares against the previous release tag
+```
+
+Each `FLAG` row (a file that grew more than `promptSizeReport.flagGrowthPercent`) needs one line in
+the release's `CHANGELOG.md` section: either "trimmed" or why the growth is worth its cost. There is
+no budget number to raise; that ratchet (`CL500`) was retired, see
+`docs/adr/0011-retire-cl500-byte-ratchet.md`. `docs/contract-lint.md` ("Prompt size report")
+describes what a normal release looks like and the signs that this check has stopped working.
 
 ---
 

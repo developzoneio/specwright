@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`scripts/prompt-size-report.{sh,ps1}`** (SW-57) - a release-time report replacing `CL500`. For
+  every file in `contractLint.scanScope` it prints the normalized size at the previous `v*` tag (or
+  at `--since <ref>`), the size now, the delta and the percentage, plus a total per area. A file
+  that grew more than the new `promptSizeReport.flagGrowthPercent` (15) is marked `FLAG`. Advisory:
+  exit 0 whatever it finds, 2 only when it cannot run. It runs at each minor release (new
+  CONTRIBUTING "Prompt size report" step); the cadence and failure signals are in
+  `docs/contract-lint.md`. `tests/prompt-size-report/run-parity.ps1` asserts both twins match each
+  other and a hand-computed table, and runs in CI on every OS.
 - **validate Check 10: bash strict mode** (SW-52) - `scripts/validate.{ps1,sh}` fail when any
   `*.sh` in the repo does not open with `set -euo pipefail`. Exceptions are declared with a reason
   in the new `specwright.manifest.json` `bashStrictMode.exceptions` block (the 3 bash hooks, which
@@ -268,6 +276,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SW-53, item 6 already closed by SW-3's manifest, and item 5's residual `agents/debugger.md` gap
   tracked under new child issue SW-64. Nothing is carried forward as a markdown file; Check 9 above
   guards against recurrence.
+- **Contract-lint rule `CL500` and `contractLint.budgets`** (SW-57) - the per-area byte ratchet
+  fired 8 times at authoring time and 0 times on 37 pushed commits. All 8 fires were settled by
+  raising the budget to the file's exact new size, and none led to a trim. Because only an area's
+  largest file set the ceiling, it never saw `commands/explore.md` grow 179%. Removed from both
+  linters, the manifest registry, every fixture manifest and validate's Check 8 `warnBudget`
+  exemption (now `CL202` only); fixtures `cl500-file-over-budget` and
+  `fp-cl500-file-at-budget-ceiling` deleted. Superseded by the prompt size report above. See
+  [ADR 0011](docs/adr/0011-retire-cl500-byte-ratchet.md).
 
 ## [1.6.0] - 2026-08-10
 

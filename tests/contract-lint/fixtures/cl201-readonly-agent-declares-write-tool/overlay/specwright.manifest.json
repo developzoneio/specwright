@@ -197,12 +197,6 @@
         "summary": "hardcoded absolute filesystem path (Windows drive letter or POSIX multi-segment) in scan scope"
       },
       {
-        "id": "CL500",
-        "severity": "WARN",
-        "wave": 4,
-        "summary": "file exceeds contractLint.budgets.<area>Bytes (stays WARN permanently - a ratchet, not a build gate)"
-      },
-      {
         "id": "CL900",
         "severity": "BLOCK",
         "wave": 1,

@@ -233,7 +233,6 @@ $dispatchIds = @(
     'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205',
     'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
     'CL400', 'CL401', 'CL402',
-    'CL500',
     'CL900', 'CL901', 'CL902'
 )
 $dispatchSet = New-OrdinalSet
@@ -301,26 +300,6 @@ if ($cl.PSObject.Properties.Name.Contains('readOnlyAgents')) {
 $knownMcpTools = New-OrdinalSet
 if ($cl.PSObject.Properties.Name.Contains('knownMcpTools')) {
     foreach ($t in $cl.knownMcpTools) { [void]$knownMcpTools.Add([string]$t) }
-}
-
-# CL500's per-area byte ceilings. $null (not 0) when unconfigured, so a
-# manifest with no budgets subtree makes CL500 a structural no-op rather than
-# firing on every file with a phantom zero ceiling.
-$budgetCommands = $null
-$budgetAgents = $null
-$budgetSkills = $null
-if ($cl.PSObject.Properties.Name.Contains('budgets') -and $null -ne $cl.budgets) {
-    $b = $cl.budgets
-    if ($b.PSObject.Properties.Name.Contains('commandsBytes')) { $budgetCommands = [int]$b.commandsBytes }
-    if ($b.PSObject.Properties.Name.Contains('agentsBytes')) { $budgetAgents = [int]$b.agentsBytes }
-    if ($b.PSObject.Properties.Name.Contains('skillsBytes')) { $budgetSkills = [int]$b.skillsBytes }
-}
-
-function Get-BudgetForFile([string]$Rel) {
-    if ($Rel.StartsWith('commands/')) { return $budgetCommands }
-    if ($Rel.StartsWith('agents/')) { return $budgetAgents }
-    if ($Rel.StartsWith('skills/')) { return $budgetSkills }
-    return $null
 }
 
 # Write/Edit/MultiEdit, and nothing else - matches docs/architecture.md's own
@@ -1241,27 +1220,6 @@ foreach ($rel in $scanFiles) {
                 Add-Finding 'CL402' $rel ($i + 1) "hardcoded absolute path '$($mp.Groups[2].Value)'"
             }
         }
-    }
-}
-
-# CL500 - file budgets. Byte count is NORMALIZED (sum of each line's UTF-8
-# byte length, plus one separator per line boundary), never a raw disk read:
-# this repo's *.md scanScope is 'text=auto', checking out LF on Linux CI and
-# CRLF on Windows, so [System.IO.File]::ReadAllBytes(...).Length would make
-# CL500 disagree with itself across platforms for byte-identical content -
-# see the manifest's $budgetsComment.
-foreach ($rel in $scanFiles) {
-    $budget = Get-BudgetForFile $rel
-    if ($null -eq $budget) { continue }
-    $lines = $fileLines[$rel]
-    $bytes = 0
-    for ($i = 0; $i -lt $lines.Length; $i++) {
-        $bytes += [System.Text.Encoding]::UTF8.GetByteCount($lines[$i])
-    }
-    if ($lines.Length -gt 1) { $bytes += ($lines.Length - 1) }
-    if ($bytes -gt $budget) {
-        $over = $bytes - $budget
-        Add-Finding 'CL500' $rel 1 "file is $bytes bytes, $over over the $budget-byte budget"
     }
 }
 

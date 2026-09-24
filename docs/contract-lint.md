@@ -256,33 +256,57 @@ clean under both implementations**, the same rollout `CL200`/`CL306` used. `CL40
 not follow this schedule: `CL401` is permanent WARN by design, and `CL402` shipped BLOCK
 immediately since a hardcoded absolute path is a structural fact, not prose intent.
 
-### CL5xx -- file budgets
+### CL5xx -- retired (prompt size moved to a release-time report)
 
-Prompt files only ever grow, and a file that grows past the point where the model reliably reads
-all of it fails quietly -- the instructions at the bottom just stop being followed, with no error
-and no signal in a diff. This band makes that growth visible in review instead.
+The band held one rule, `CL500`: a WARN when a file exceeded `contractLint.budgets.<area>Bytes`,
+a ceiling set at each area's largest file. SW-57 retired it on 2026-09-24. The id stays
+unused so an old reference cannot silently mean something else. The measured reasons are in
+[ADR 0011](adr/0011-retire-cl500-byte-ratchet.md). In short: it had 8 budget raises in 6 commits
+and 0 fires on any pushed commit. Every local fire was settled by raising the budget to the
+file's exact new size in the same commit, and none led to a trim. Because only an area's largest
+file set its ceiling, `commands/explore.md` grew 179% since the rule landed without ever being
+checked.
 
-| Rule | Severity | Fires when |
-|---|---|---|
-| `CL500` | WARN (permanent) | a file exceeds `contractLint.budgets.<area>Bytes` for its scan-scope area |
+The concern it guarded is real. A prompt file that grows past the point where the model
+reliably reads all of it fails quietly: the instructions at the bottom stop being followed, with
+no error. So that concern now lives in a report instead of a per-run check.
 
-There is exactly one rule here on purpose. `CL500` stays WARN forever -- promoting it to BLOCK
-would turn a judgement call (is this growth worth it?) into a build failure, and the judgement is
-the point. The finding reports how far over budget the file is, in bytes, not a bare "over budget":
-`file is 27510 bytes, 1532 over the 25978-byte budget`.
+### Prompt size report
 
-**The byte count is normalized, never a raw disk read.** `contractLint.scanScope` is `text=auto`
-(see `.gitattributes`), so identical content checks out as LF on a Linux CI runner and CRLF on a
-native Windows checkout -- confirmed on this repo: `commands/spec.md` is 25979 bytes as a git blob
-but 26521 bytes checked out on Windows, a 542-byte difference for the same content. A raw byte count
-would make `CL500` disagree with itself between platforms. Instead, both implementations sum each
-line's byte length (already available from the same per-line cache every other rule reads) plus one
-separator per line boundary -- a measure that does not depend on which OS checked the file out.
+`scripts/prompt-size-report.{sh,ps1}` (twins, parity-tested by
+`tests/prompt-size-report/run-parity.ps1`) compares every file in `contractLint.scanScope` with
+the same path at a git ref. The default ref is the highest `v*` tag. The report prints one TSV
+row per file (bytes before, bytes after, delta, percent), then a total for each area. A file
+that grew more than `promptSizeReport.flagGrowthPercent` (15) is marked `FLAG`. The report is
+advisory: it exits `0` whatever it finds, and `2` only when it cannot run.
 
-**Budgets are a ratchet, set at today's largest file per area**, so the repo passes clean on day one
-and every later `CL500` hit is real growth, never a paragraph someone happened to write before the
-rule existed. Raising a ceiling in `contractLint.budgets` is a real decision that belongs in a PR
-description, never a reflex to a red CI run.
+```bash
+bash scripts/prompt-size-report.sh                 # since the latest release tag
+bash scripts/prompt-size-report.sh --since v1.5.0  # any ref
+```
+
+**The byte count is normalized, never a raw disk read.** This is the measure `CL500` used: CR
+bytes are dropped and one trailing LF is not counted. `contractLint.scanScope` is `text=auto`
+(see `.gitattributes`), so identical content checks out as LF on Linux and as CRLF on a native
+Windows checkout. On this repo, `commands/spec.md` measured 25979 bytes as a git blob and 26521
+bytes on Windows. A raw count would make the two twins disagree.
+
+**Cadence.**
+
+- **When:** at every minor release, in the same pass as the threshold calibration
+  (`CONTRIBUTING.md`, "Threshold re-calibration" and "Prompt size report"). There is no
+  per-PR run and nothing to bump.
+- **What is normal:** most files show less than 5% change, and a few grow because a feature
+  landed in them. A release that adds a whole workflow can move one area's total by 20-40%.
+- **What needs action:** each `FLAG` row needs one line in that release's `CHANGELOG.md`
+  section: either "trimmed" (with the follow-up ticket) or the reason the growth is worth
+  its cost. The same applies to a file that has grown in three releases in a row, which you
+  can see by re-running `--since` against the older tags.
+- **Signs the mechanism has stopped working**, and a new ADR should revisit it:
+  - the report is skipped for two releases in a row;
+  - every `FLAG` across two releases is justified and none is ever trimmed, which is the
+    same reflexive-bump pattern that retired `CL500`;
+  - the threshold is raised to make a release come out clean.
 
 ### CL9xx -- suppression hygiene
 
@@ -328,8 +352,7 @@ and never touch `areas`, `derived` or `docClaims`.
 | `stackTokens.commands` / `.languages` | the CL400 / CL401 stack vocabulary |
 | `readOnlyAgents` | agent names CL201 checks for a write tool gained since being declared read-only |
 | `knownMcpTools` | the `mcp__*` allowlist CL202 checks scan-scope tokens against |
-| `budgets.commandsBytes` / `.agentsBytes` / `.skillsBytes` | the per-area byte ceiling CL500 checks a file's normalized size against |
-| `warnBudget` | max standing WARN count (excluding CL500/CL202) `scripts/validate.{sh,ps1}` Check 8 allows before failing - a ratchet, checked by validate, not by the linter itself |
+| `warnBudget` | max standing WARN count (excluding CL202) `scripts/validate.{sh,ps1}` Check 8 allows before failing - a ratchet, checked by validate, not by the linter itself |
 
 `scanScope` is load-bearing. `CLAUDE.md` and `CONTRIBUTING.md` use `sd-test` as a sandbox path and
 `docs/architecture.md` carries a `name: sd-debugger` frontmatter example, so widening the scope to
@@ -364,7 +387,7 @@ implementation, one fixture, one row in the tables above.
 | 2 | CL1xx invocation contract (agent input declarations) | shipped, BLOCK+WARN |
 | 3a | CL2xx role and tool integrity (CL200-CL205) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02 and CL205 2026-09-23, both BLOCK from the start) |
 | 3b | CL4xx stack-agnostic prose, CL306 | shipped 2026-07-30 WARN, now BLOCK (CL400/CL306 promoted 2026-07-31; CL401 stays WARN) |
-| 4 | CL5xx file budgets | shipped 2026-07-30, stays WARN |
+| 4 | CL5xx file budgets | shipped 2026-07-30, retired 2026-09-24 (SW-57) - see the prompt size report |
 
 Four scope decisions were made deliberately and are recorded here so they read as decisions
 rather than oversights:

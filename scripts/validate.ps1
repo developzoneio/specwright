@@ -689,11 +689,11 @@ if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
         } else {
             Write-WarnMsg $text
             $clWarns++
-            # CL500/CL202 are permanent-WARN ratchets by design (byte
-            # budgets, unrecognized MCP tool names) - never counted against
-            # the standing-warning budget below, or a legitimate CL500 bump
-            # would fail the build through a rule explicitly meant not to.
-            if ($parts[0] -cne 'CL500' -and $parts[0] -cne 'CL202') { $clWarnsBudgeted++ }
+            # CL202 is a permanent-WARN ratchet by design (unrecognized MCP
+            # tool names) - never counted against the standing-warning budget
+            # below, or a legitimate new tool name would fail the build
+            # through a rule explicitly meant not to.
+            if ($parts[0] -cne 'CL202') { $clWarnsBudgeted++ }
         }
     }
     if ($lintExit -ge 2) {
@@ -703,7 +703,7 @@ if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
         Add-Failure "contract-lint: exit $lintExit"
     } else {
         # Ratchet, not a ceiling: contractLint.warnBudget is the max standing
-        # WARN count (excluding CL500/CL202). Lowering it below actual requires
+        # WARN count (excluding CL202). Lowering it below actual requires
         # lowering it in the SAME commit that resolves the warnings - never
         # raise it to make a new warning pass quietly.
         $warnBudget = 0

@@ -298,7 +298,6 @@ CL306
 CL400
 CL401
 CL402
-CL500
 CL900
 CL901
 CL902"
@@ -400,27 +399,6 @@ KNOWN_MCP_TOOLS=""
 while IFS= read -r _t; do
     [[ -n "$_t" ]] && set_add KNOWN_MCP_TOOLS "$_t"
 done < <(mjq '.contractLint.knownMcpTools[]?')
-
-# CL500's per-area byte ceilings. Empty (not zero) when unconfigured, so a
-# manifest with no budgets subtree makes CL500 a structural no-op rather than
-# firing on every file with a phantom zero ceiling.
-BUDGET_COMMANDS="$(mjq '.contractLint.budgets.commandsBytes // empty')"
-BUDGET_AGENTS="$(mjq '.contractLint.budgets.agentsBytes // empty')"
-BUDGET_SKILLS="$(mjq '.contractLint.budgets.skillsBytes // empty')"
-
-budget_for_file() { # rel_path -> echoes the configured ceiling, or nothing
-    case "$1" in
-        commands/*) [[ -n "$BUDGET_COMMANDS" ]] && printf '%s' "$BUDGET_COMMANDS" ;;
-        agents/*)   [[ -n "$BUDGET_AGENTS" ]] && printf '%s' "$BUDGET_AGENTS" ;;
-        skills/*)   [[ -n "$BUDGET_SKILLS" ]] && printf '%s' "$BUDGET_SKILLS" ;;
-    esac
-    # Explicit, unconditional: under 'set -e', a bare '[[ cond ]] && cmd' that
-    # takes the false branch leaves this function's exit status at 1, and
-    # '_budget="$(budget_for_file ...)"' is an assignment-via-command-
-    # substitution - bash treats that failure as fatal, silently killing the
-    # whole script the moment it reaches a file with no configured budget.
-    return 0
-}
 
 # Write/Edit/MultiEdit, and nothing else - matches docs/architecture.md's own
 # definition of a read-only agent. Bash CAN write a file, but that is a
@@ -1475,36 +1453,6 @@ rule_CL400_CL401_CL402() {
     done <<< "$SCAN_FILES"
 }
 
-# CL500 - file budgets. Byte count is NORMALIZED (sum of each line's byte
-# length, plus one separator per line boundary), never a raw disk read: this
-# repo's *.md scanScope is 'text=auto', checking out LF on Linux CI and CRLF on
-# Windows, so ReadAllBytes().Length / `wc -c` would make CL500 disagree with
-# itself across platforms for byte-identical content. LC_ALL=C at the top of
-# this script already makes bash's ${#line} a true byte count, not a
-# multibyte character count, so no extra decode is needed here - see the
-# manifest's $budgetsComment.
-rule_CL500() {
-    local _rel _budget _bytes _i _over
-    while IFS= read -r _rel; do
-        [[ -z "$_rel" ]] && continue
-        _budget="$(budget_for_file "$_rel")"
-        [[ -z "$_budget" ]] && continue
-        load_file "$_rel"
-        _bytes=0
-        for ((_i = 0; _i < CUR_N; _i++)); do
-            _bytes=$((_bytes + ${#CUR_LINES[$_i]}))
-        done
-        if ((CUR_N > 1)); then
-            _bytes=$((_bytes + CUR_N - 1))
-        fi
-        if ((_bytes > _budget)); then
-            _over=$((_bytes - _budget))
-            add_finding CL500 "$_rel" 1 \
-                "file is $_bytes bytes, $_over over the $_budget-byte budget"
-        fi
-    done <<< "$SCAN_FILES"
-}
-
 rule_CL302_CL303_CL304() {
     local _rel _f _l _kind _label _hard _end
     local _count _labels _decl_hard _decl_cond _c _want _dup _seen _n
@@ -1592,7 +1540,6 @@ rule_CL205
 rule_CL300_CL301_CL305_CL306
 rule_CL302_CL303_CL304
 rule_CL400_CL401_CL402
-rule_CL500
 
 # ---- Phase C: suppressions, sort, emit -------------------------------------
 #

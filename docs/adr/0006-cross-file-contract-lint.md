@@ -6,6 +6,7 @@
   SW-32 (wave 2), SW-33 (wave 3a), SW-34 (wave 3b), SW-35 (wave 4)
 - Relates to: `docs/contract-lint.md` (rule catalogue and per-rule scope decisions)
 - Supersedes: none
+- Superseded in part by: ADR 0011 (decision 7 - `CL500` and its byte budgets were retired, SW-57)
 
 ## Context
 

@@ -681,13 +681,12 @@ else
             else
                 warn "$cl_file:$cl_line $cl_rule - $cl_msg"
                 cl_warns=$((cl_warns + 1))
-                # CL500/CL202 are permanent-WARN ratchets by design (byte
-                # budgets, unrecognized MCP tool names) - never counted
-                # against the standing-warning budget below, or a legitimate
-                # CL500 bump would fail the build through a rule explicitly
-                # meant not to.
+                # CL202 is a permanent-WARN ratchet by design (unrecognized
+                # MCP tool names) - never counted against the standing-warning
+                # budget below, or a legitimate new tool name would fail the
+                # build through a rule explicitly meant not to.
                 case "$cl_rule" in
-                    CL500|CL202) : ;;
+                    CL202) : ;;
                     *) cl_warns_budgeted=$((cl_warns_budgeted + 1)) ;;
                 esac
             fi
@@ -701,7 +700,7 @@ else
         add_failure "contract-lint: exit $lint_exit"
     else
         # Ratchet, not a ceiling: contractLint.warnBudget is the max standing
-        # WARN count (excluding CL500/CL202). Lowering it below actual requires
+        # WARN count (excluding CL202). Lowering it below actual requires
         # lowering it in the SAME commit that resolves the warnings - never
         # raise it to make a new warning pass quietly.
         warn_budget=0

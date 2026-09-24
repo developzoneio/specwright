@@ -372,8 +372,6 @@
       { "id": "CL401", "severity": "WARN",  "wave": 3, "summary": "hardcoded language/framework name in the same contexts (stays WARN permanently - often legitimate in prose)" },
       { "id": "CL402", "severity": "BLOCK", "wave": 3, "summary": "hardcoded absolute filesystem path (Windows drive letter or POSIX multi-segment) in scan scope" },
 
-      { "id": "CL500", "severity": "WARN",  "wave": 4, "summary": "file exceeds contractLint.budgets.<area>Bytes (stays WARN permanently - a ratchet, not a build gate)" },
-
       { "id": "CL900", "severity": "BLOCK", "wave": 1, "summary": "suppression comment carrying no usable reason" },
       { "id": "CL901", "severity": "BLOCK", "wave": 1, "summary": "suppression naming a rule id absent from this registry" },
       { "id": "CL902", "severity": "WARN",  "wave": 1, "summary": "suppression that suppressed no finding" }
@@ -497,46 +495,32 @@
       "explain why not', never as 'suppress and move on'."
     ],
 
-    "budgets": {
-      "commandsBytes": 37194,
-      "agentsBytes": 15232,
-      "skillsBytes": 12412
-    },
-
-    "$budgetsComment": [
-      "CL500's vocabulary. A RATCHET, not a design target: each ceiling is set at today's",
-      "largest file in that area, so the repo is green by construction on day one and every",
-      "later WARN is real growth, never a paragraph someone happened to write. CL500 stays",
-      "WARN forever (see contractLint.rules above) - promoting it to BLOCK would turn a",
-      "judgement call into a build failure, and the judgement is the valuable part. Raising",
-      "a number here is a real decision that belongs in a PR description, never a reflex to",
-      "a red CI run.",
-      "",
-      "The byte count is NORMALIZED, never a raw disk read: the sum of each line's UTF-8",
-      "byte length plus one separator per line boundary, computed off the same per-line",
-      "cache every other rule already reads. A raw ReadAllBytes().Length / `wc -c` would",
-      "make this rule disagree with itself between platforms for byte-identical content -",
-      "contractLint.scanScope is 'text=auto' (see .gitattributes), so *.md checks out LF on",
-      "a Linux CI runner and CRLF on Windows. Confirmed on this repo: commands/spec.md is",
-      "25979 bytes as a git blob (LF) but 26521 bytes on a native Windows checkout - a 542",
-      "byte, ~2% difference for identical content. Line count was rejected for the same",
-      "reason CLAUDE.md rejects it elsewhere: it is not a measure both implementations can",
-      "agree on without arguing about line endings."
-    ],
-
     "warnBudget": 0,
 
     "$warnBudgetComment": [
       "scripts/validate.{sh,ps1} Check 8's ceiling: the max standing WARN count across every",
-      "rule EXCEPT CL500 and CL202, which stay WARN permanently by design (see their comments",
-      "above) and never count against this budget - otherwise a legitimate CL500 byte-budget",
-      "bump would fail the build through a rule explicitly meant not to.",
+      "rule EXCEPT CL202, which stays WARN permanently by design (see its comment above) and",
+      "never counts against this budget - otherwise a legitimate new MCP tool name would fail",
+      "the build through a rule explicitly meant not to. (CL500, the byte-budget ratchet, was",
+      "the other exemption until SW-57 retired it - see docs/adr/0011-retire-cl500-byte-ratchet.md.)",
       "",
       "A RATCHET, not a ceiling to raise on demand: 0 because SW-48 drove every standing",
       "warning at the time to zero (fixed, removed, or suppressed with a one-line reason - see",
       "CHANGELOG). Lowering the actual count below this number requires lowering this number",
       "in the SAME commit. Raising it to make a new warning pass quietly defeats the entire",
       "point - a 13th warning next release must be as visible as the first."
+    ]
+  },
+
+  "promptSizeReport": {
+    "flagGrowthPercent": 15,
+    "$comment": [
+      "scripts/prompt-size-report.{sh,ps1}: the release-time replacement for CL500 (retired by",
+      "SW-57 - see docs/adr/0011-retire-cl500-byte-ratchet.md). Scope is contractLint.scanScope.",
+      "ADVISORY, never a build gate: the report flags a file that grew more than this percentage",
+      "since the compared ref, and a flagged file needs a trim-or-justify line in that release's",
+      "notes. There is no number to bump - the threshold is a rate, so it does not drift upward",
+      "with the files it measures. Cadence and failure signals: docs/contract-lint.md."
     ]
   },
 

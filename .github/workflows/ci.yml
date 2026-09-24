@@ -324,6 +324,11 @@ jobs:
         shell: pwsh
         run: ./tests/installer/run-prefix-parity.ps1 -SelfTest
 
+      # --- Release-time prompt size report, CL500's replacement (SW-57) ------
+      - name: Prompt size report parity (bash vs PowerShell)
+        shell: pwsh
+        run: ./tests/prompt-size-report/run-parity.ps1
+
       # --- Partial-install guard fires on a mid-copy failure (SW-46) ---------
       - name: Partial-install guard negative case (bash)
         if: runner.os == 'Linux' || runner.os == 'macOS'
