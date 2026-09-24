@@ -312,6 +312,18 @@ jobs:
           # (same trap documented at the lesson-validator step above).
           exit 0
 
+      # --- Installer --prefix parity (SW-53): one shared case table asserted
+      # against install.sh, uninstall.sh, install.ps1 and uninstall.ps1 in a
+      # single pwsh process. No `if:` guard - every OS runs all four, so a
+      # bash guard narrower than IsNullOrWhiteSpace fails on every runner ----
+      - name: Installer prefix parity (bash vs PowerShell)
+        shell: pwsh
+        run: ./tests/installer/run-prefix-parity.ps1
+
+      - name: Installer prefix parity self-test (divergence detection)
+        shell: pwsh
+        run: ./tests/installer/run-prefix-parity.ps1 -SelfTest
+
       # --- Partial-install guard fires on a mid-copy failure (SW-46) ---------
       - name: Partial-install guard negative case (bash)
         if: runner.os == 'Linux' || runner.os == 'macOS'

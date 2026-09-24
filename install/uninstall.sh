@@ -97,8 +97,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---- prefix safety guard ---------------------------------------------------
+# Mirrors install.sh's guard exactly - install and uninstall must accept the
+# same set of prefixes, or a prefix legal for one and rejected by the other
+# leaves orphaned or unreachable files.
+#
+# [[:space:]] rather than a spaces-only `// /` strip: PowerShell's
+# IsNullOrWhiteSpace also rejects tab/CR/LF/VT/FF, and a narrower check here
+# would accept prefixes the .ps1 installers reject (SW-53). The shared case
+# table in tests/installer/prefix-cases.json pins all four scripts together.
 
-if [[ -z "${PREFIX// /}" || "$PREFIX" == */* || "$PREFIX" == *\\* || "$PREFIX" == *..* ]]; then
+if [[ -z "${PREFIX//[[:space:]]/}" || "$PREFIX" == */* || "$PREFIX" == *\\* || "$PREFIX" == *..* ]]; then
     fail "Invalid prefix '$PREFIX'. Must be a plain folder name (no separators, no '..')."
     exit 1
 fi
@@ -108,9 +116,8 @@ fi
 # same set of base paths, or a base path legal for one and rejected by the
 # other leaves orphaned or unreachable files.
 #
-# Uses [[:space:]] rather than the PREFIX guard's `// /` (spaces-only) idiom
-# on purpose - PowerShell's IsNullOrWhiteSpace also catches tabs/CR/LF, and a
-# narrower check here would accept inputs bash and PowerShell disagree on.
+# Uses [[:space:]], same as the prefix guard above, to match PowerShell's
+# IsNullOrWhiteSpace (tab/CR/LF/VT/FF, not just spaces).
 
 if [[ -z "${BASE_PATH//[[:space:]]/}" ]]; then
     fail "Invalid base path '$BASE_PATH'. Must not be empty or whitespace-only."

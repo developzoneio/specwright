@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`scripts/validate.sh`** (SW-52) - Check 8 now reports a missing `jq` with the same message as
   Checks 7 and 9, through one shared `jq_missing` helper. Before, it printed only
   "contract-lint could not run (exit 2)", because the linter's stderr reason was discarded.
+- **`install/install.sh`, `install/uninstall.sh`** (SW-53) - the `--prefix` emptiness check now
+  strips `[[:space:]]` instead of spaces only (`${PREFIX// /}`), matching `IsNullOrWhiteSpace` in
+  the `.ps1` installers. A tab, newline or CR prefix was accepted on Unix (creating e.g.
+  `commands/<TAB>/`) while Windows rejected it. `uninstall.sh`'s guard now carries the same
+  "mirrors install.sh" comment as its twin.
 
 ### Changed
 - **`templates/settings.template.json`** (SW-50, commit 3/6) - adds a prominent `_pwsh_recommended`
@@ -51,7 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   must exit 0 on every failure path). A stale exception path also fails. This turns the
   CONTRIBUTING bash convention into a gate. The sweep across `scripts/` and `tests/` found
   `smoke-hooks.sh` to be the only violation.
-
+- **`tests/installer/`** (SW-53) - `prefix-cases.json` shared case table (valid, empty, spaces,
+  tab, newline, CR, `..`, `/`, `\`) plus `run-prefix-parity.ps1`, which asserts identical
+  accept/reject outcomes across all four installer scripts in dry-run mode, and a `-SelfTest` that
+  proves the pre-fix spaces-only guard is caught. Both run in CI on every OS.
 - **Contract-lint rule `CL205` (BLOCK)** (SW-51) - `CL200`'s command-side twin. Inside the block of
   an invocation whose target agent has no write tool on disk (anchor to next heading/anchor, NOT
   cut at numbered steps), a line naming a spec artifact (`NN-name.md` / `04-artifacts/`) and a

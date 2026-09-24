@@ -46,6 +46,10 @@ bash scripts/contract-lint.sh --root .       # exit 0 clean, 1 on BLOCK, 2 canno
 # Fixture suite. Drives BOTH implementations in one process, so parity is asserted
 .\tests\contract-lint\run-selftest.ps1
 .\tests\contract-lint\run-selftest.ps1 -SelfTest   # proves the harness notices a dead linter
+
+# Installer --prefix parity: one case table asserted against all 4 install/uninstall scripts
+.\tests\installer\run-prefix-parity.ps1
+.\tests\installer\run-prefix-parity.ps1 -SelfTest   # proves it catches a spaces-only guard
 ```
 
 Every PR adds a line under `## [Unreleased]` in `CHANGELOG.md` (Keep a Changelog / SemVer).
