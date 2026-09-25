@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`hooks/bash/*.sh`, `hooks/powershell/*.ps1`** (SW-78) - all three hooks now resolve the
+  project root instead of trusting the hook payload's `cwd`, which Claude Code sets to the session's
+  *current* directory (a Bash `cd` moves it). The root is `CLAUDE_PROJECT_DIR` when set; otherwise
+  the nearest ancestor of `cwd` with `.claude/project-config.json`, then the nearest with `.specs/`;
+  otherwise `cwd`. Before this, a session sitting in a subdirectory (e.g. `.specs/FEAT-x`) had every
+  `spec-gate` rule fail open with no metric event, and the hooks created a stray nested
+  `.specs/_metrics/` / `.claude/.hookstate/` there. A relative `file_path` is still anchored on the
+  session `cwd`. `tests/hooks/run-conformance.ps1` gains per-fixture `cwd` / `env` in `setup.json`
+  and a `{{ROOT}}` token. It also strips `CLAUDE_PROJECT_DIR` from child processes (as does
+  `measure-latency.ps1`) and fails a case that creates state directories under an off-root `cwd`.
+  There are 7 new `subdir-cwd-*` fixtures across the three hooks.
 - **`hooks/bash/spec-gate.sh`, `hooks/powershell/spec-gate.ps1`** (SW-75) - new Rule 0b lets the
   workflows' own `.specs/index.md` status transitions through `paths.protected`. Previously Rule 1
   denied every `draft -> approved` / `approved -> in-progress` edit, so `/sd:feature` (and bug,

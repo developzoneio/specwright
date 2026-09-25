@@ -8,10 +8,14 @@
       1. Create a fresh temp workspace PER IMPLEMENTATION and copy the
          case's workspace/ tree into it (fresh copy means hook state such
          as the subagent-retro debounce file cannot leak across runs).
-      2. Apply setup.json actions (currently: backdating file mtimes).
-      3. Substitute {{CWD}} in input.json with the workspace path
-         (forward slashes; both implementations accept them) and pipe the
-         payload into the implementation on stdin.
+      2. Apply setup.json actions (backdating file mtimes, planting files).
+      3. Substitute {{ROOT}} in input.json with the workspace path and
+         {{CWD}} with the session cwd (forward slashes; both implementations
+         accept them) and pipe the payload into the implementation on stdin.
+         The session cwd is the workspace unless setup.json names a `cwd`
+         subdirectory (SW-78). The child environment never inherits
+         CLAUDE_PROJECT_DIR; setup.json `env` sets it (or any other variable)
+         per case, with {{ROOT}} substituted.
       4. Normalize what the hook did into a small decision object.
       5. Assert bash decision == pwsh decision == expected.json golden.
 
@@ -119,15 +123,31 @@ function New-CaseWorkspace {
     return $ws
 }
 
+function Get-CaseSetup {
+    param([string]$CaseDir)
+    $setupPath = Join-Path $CaseDir 'setup.json'
+    if (-not (Test-Path -LiteralPath $setupPath)) { return $null }
+    return (Get-Content -LiteralPath $setupPath -Raw | ConvertFrom-Json)
+}
+
+# Variables the hooks read from the environment. Stripped from every child so
+# a runner started inside a Claude Code session (which exports
+# CLAUDE_PROJECT_DIR) cannot point the hooks at the real repo; a case that
+# wants one sets it through setup.json `env`.
+$script:scrubbedEnv = @('CLAUDE_PROJECT_DIR')
+
 function Invoke-HookProcess {
     param(
         [string]$Exe,
         [string[]]$ProcArgs,
-        [string]$Payload
+        [string]$Payload,
+        [hashtable]$Env = @{}
     )
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = $Exe
     foreach ($a in $ProcArgs) { $psi.ArgumentList.Add($a) }
+    foreach ($name in $script:scrubbedEnv) { [void]$psi.Environment.Remove($name) }
+    foreach ($name in $Env.Keys) { $psi.Environment[$name] = [string]$Env[$name] }
     $psi.RedirectStandardInput  = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
@@ -212,6 +232,18 @@ function Read-NormalizedEventLines {
     return , @($events)
 }
 
+# SW-78: a hook that trusted an off-root cwd created .specs/ or .claude/ state
+# directories inside it. Lists whichever of the two exist under the session
+# cwd; the caller diffs before/after so fixture-planted ones do not count.
+function Get-NestedStateDirs {
+    param([string]$CwdPath)
+    $found = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in @('.specs', '.claude')) {
+        if (Test-Path -LiteralPath (Join-Path $CwdPath $name) -PathType Container) { $found.Add($name) }
+    }
+    return $found.ToArray()
+}
+
 function Get-CaseEvents {
     param([string]$Ws)
     return Read-NormalizedEventLines -Path (Get-MetricsEventsPath -Ws $Ws)
@@ -235,21 +267,46 @@ function Invoke-HookImpl {
     $ws = New-CaseWorkspace -CaseDir $CaseDir
     try {
         $wsForward = $ws.Replace('\', '/')
+        $setup = Get-CaseSetup -CaseDir $CaseDir
+
+        # Session cwd (SW-78): the workspace root unless the case names a
+        # subdirectory. The subdirectory must come from the fixture's own
+        # workspace/ tree - the runner never creates it, so the nested-state
+        # check below can tell fixture content from hook output.
+        $cwdForward = $wsForward
+        $nestedBefore = @()
+        if ($null -ne $setup -and -not [string]::IsNullOrWhiteSpace([string]$setup.cwd)) {
+            $cwdForward = $wsForward + '/' + ([string]$setup.cwd).Trim('/')
+            $nestedBefore = @(Get-NestedStateDirs -CwdPath $cwdForward)
+        }
+
+        $envMap = @{}
+        if ($null -ne $setup -and $null -ne $setup.env) {
+            foreach ($prop in $setup.env.PSObject.Properties) {
+                $envMap[$prop.Name] = ([string]$prop.Value).Replace('{{ROOT}}', $wsForward)
+            }
+        }
+
         $inputPath = Join-Path $CaseDir 'input.json'
-        $payload = (Get-Content -LiteralPath $inputPath -Raw).Replace('{{CWD}}', $wsForward)
+        $payload = (Get-Content -LiteralPath $inputPath -Raw).Replace('{{ROOT}}', $wsForward).Replace('{{CWD}}', $cwdForward)
         if ($Impl -eq 'bash') {
-            $run = Invoke-HookProcess -Exe $script:bashExe -ProcArgs @($HookScript) -Payload $payload
+            $run = Invoke-HookProcess -Exe $script:bashExe -ProcArgs @($HookScript) -Payload $payload -Env $envMap
         } else {
-            $run = Invoke-HookProcess -Exe 'pwsh' -ProcArgs @('-NoProfile', '-File', $HookScript) -Payload $payload
+            $run = Invoke-HookProcess -Exe 'pwsh' -ProcArgs @('-NoProfile', '-File', $HookScript) -Payload $payload -Env $envMap
         }
         $events = Get-CaseEvents -Ws $ws
         $rotated = Get-CaseRotatedEvents -Ws $ws
+        $nestedCreated = @()
+        if ($cwdForward -ne $wsForward) {
+            $nestedCreated = @(Get-NestedStateDirs -CwdPath $cwdForward | Where-Object { $nestedBefore -notcontains $_ })
+        }
         return [pscustomobject]@{
             ExitCode      = $run.ExitCode
             Stdout        = $run.Stdout
             Stderr        = $run.Stderr
             Events        = $events
             RotatedEvents = $rotated
+            NestedCreated = $nestedCreated
             Workspace     = $ws
         }
     } finally {
@@ -512,8 +569,16 @@ function Invoke-ConformanceCase {
         }
     }
 
+    # SW-78: no hook may create state directories under an off-root cwd.
+    $nestedNote = $null
+    if (@($bashRun.NestedCreated).Count -gt 0 -or @($pwshRun.NestedCreated).Count -gt 0) {
+        $match = $false
+        $nestedNote = "hook created state dirs under the session cwd (bash=$(@($bashRun.NestedCreated) -join ','), pwsh=$(@($pwshRun.NestedCreated) -join ','))"
+    }
+
     return [pscustomobject]@{
         CaseName     = $caseName
+        NestedNote   = $nestedNote
         Bash         = $bashJson
         Pwsh         = $pwshJson
         Expected     = $expectedJson
@@ -533,6 +598,9 @@ function Write-CaseDiff {
     }
     if ($Result.RotationNote) {
         Write-Host "         rotation : $($Result.RotationNote)"
+    }
+    if ($Result.NestedNote) {
+        Write-Host "         nested   : $($Result.NestedNote)"
     }
 }
 

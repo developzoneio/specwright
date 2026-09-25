@@ -1,0 +1,1 @@
+{ "cwd": ".specs/FEAT-001", "env": { "CLAUDE_PROJECT_DIR": "{{ROOT}}" } }

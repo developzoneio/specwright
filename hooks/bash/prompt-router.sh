@@ -33,6 +33,45 @@ if [[ ! -d "${cwd}" ]]; then
     exit 0
 fi
 
+# --- project root (SW-78) -----------------------------------------------------
+# `cwd` is the session's CURRENT directory, and a Bash `cd` moves it. Reading
+# config and specs relative to it made a session sitting in a subdirectory see
+# no spec folders and no in-progress work. Everything below resolves against
+# the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of cwd (cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of cwd holding a .specs/ directory.
+#   4. cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Pure string
+# walk, no `cd`/`realpath`. Identical in all three hooks; mirrors
+# Resolve-ProjectRoot in the .ps1 twins.
+resolve_project_root() {
+    local start="${1//\\//}"
+    if [[ -n "${CLAUDE_PROJECT_DIR:-}" && -d "${CLAUDE_PROJECT_DIR}" ]]; then
+        printf '%s' "${CLAUDE_PROJECT_DIR//\\//}"
+        return 0
+    fi
+    [[ "${start}" != "/" ]] && start="${start%/}"
+    local marker dir i
+    for marker in f:.claude/project-config.json d:.specs; do
+        dir="${start}"
+        for (( i = 0; i < 64; i++ )); do
+            if [[ "${marker}" == f:* && -f "${dir%/}/${marker#f:}" ]] ||
+               [[ "${marker}" == d:* && -d "${dir%/}/${marker#d:}" ]]; then
+                printf '%s' "${dir}"
+                return 0
+            fi
+            [[ "${dir}" == "/" || "${dir}" != */* ]] && break
+            dir="${dir%/*}"
+            [[ -z "${dir}" ]] && dir="/"
+        done
+    done
+    printf '%s' "${start}"
+}
+
+project_root="$(resolve_project_root "${cwd}")"
+
 # --- load config (defaults if missing) ---------------------------------------
 
 # An empty object is a safe fallback HERE only because every value this hook
@@ -40,7 +79,7 @@ fi
 # those defaults are the same values as $defaults in prompt-router.ps1. Any new
 # read must keep that property or the fallback has to become a full default
 # document, as it is in spec-gate.sh.
-config_path="${cwd}/.claude/project-config.json"
+config_path="${project_root}/.claude/project-config.json"
 config_json="{}"
 if [[ -f "${config_path}" ]]; then
     if jq -e . "${config_path}" >/dev/null 2>&1; then
@@ -59,8 +98,8 @@ spec_dir="$(printf '%s' "${config_json}"   | jq -r '.spec.dir       // ".specs"'
 index_rel="$(printf '%s' "${config_json}"  | jq -r '.spec.indexFile // ".specs/index.md"' 2>/dev/null)"
 ticket_pat="$(printf '%s' "${config_json}" | jq -r '.ticket.pattern // "^[A-Z]+-[0-9]+$"' 2>/dev/null)"
 
-spec_path="${cwd}/${spec_dir}"
-index_path="${cwd}/${index_rel}"
+spec_path="${project_root}/${spec_dir}"
+index_path="${project_root}/${index_rel}"
 
 # --- spec prefix alternation (SW-44) ------------------------------------------
 # Built-in fallback covers every prefix shipped in

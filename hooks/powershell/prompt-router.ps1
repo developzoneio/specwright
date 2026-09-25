@@ -5,7 +5,8 @@
 
 .DESCRIPTION
     Reads Claude Code hook JSON from stdin. Extracts the user prompt and the
-    project cwd. Loads .claude/project-config.json (or sane defaults if absent)
+    session cwd, resolving the project root from it (SW-78). Loads
+    .claude/project-config.json (or sane defaults if absent)
     and:
       1. Matches the prompt against workflow keywords (bug / feature / refactor
          / perf / rca / port) and suggests the relevant /sd:* command.
@@ -48,8 +49,43 @@ $script:DefaultKeywords = [pscustomobject]@{
     port     = @('backport','port from','port the','donor repo','mirror from','replicate from')
 }
 
-function Get-ProjectConfig {
+# SW-78: `cwd` is the session's CURRENT directory, and a Bash `cd` moves it.
+# Reading config and specs relative to it made a session sitting in a
+# subdirectory see no spec folders and no in-progress work.
+# Every project path is therefore resolved against the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of Cwd (Cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of Cwd holding a .specs/ directory.
+#   4. Cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Identical in all
+# three hooks; mirrors resolve_project_root in the .sh twins.
+function Resolve-ProjectRoot {
     param([string]$Cwd)
+    $envRoot = $env:CLAUDE_PROJECT_DIR
+    if (-not [string]::IsNullOrWhiteSpace($envRoot) -and (Test-Path -LiteralPath $envRoot -PathType Container)) {
+        return $envRoot
+    }
+    $start = $Cwd.TrimEnd('/', '\')
+    if ($start.Length -eq 0) { return $Cwd }
+    $markers = @(
+        @{ Rel = '.claude/project-config.json'; Type = 'Leaf' },
+        @{ Rel = '.specs'; Type = 'Container' }
+    )
+    foreach ($m in $markers) {
+        $dir = $start
+        for ($i = 0; $i -lt 64 -and -not [string]::IsNullOrEmpty($dir); $i++) {
+            if (Test-Path -LiteralPath (Join-Path $dir $m.Rel) -PathType $m.Type) { return $dir }
+            $parent = [System.IO.Path]::GetDirectoryName($dir)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -eq $dir) { break }
+            $dir = $parent
+        }
+    }
+    return $Cwd
+}
+
+function Get-ProjectConfig {
+    param([string]$Root)
 
     $defaults = [pscustomobject]@{
         spec    = [pscustomobject]@{
@@ -68,7 +104,7 @@ function Get-ProjectConfig {
         }
     }
 
-    $cfgPath = Join-Path $Cwd '.claude/project-config.json'
+    $cfgPath = Join-Path $Root '.claude/project-config.json'
     if (-not (Test-Path -LiteralPath $cfgPath)) { return $defaults }
 
     # -ErrorAction Stop is required: the script-wide SilentlyContinue preference
@@ -228,12 +264,13 @@ $prompt = $hookInput.prompt
 $cwd    = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($prompt) -or [string]::IsNullOrWhiteSpace($cwd)) { exit 0 }
 if (-not (Test-Path -LiteralPath $cwd)) { exit 0 }
+$projectRoot = Resolve-ProjectRoot -Cwd $cwd
 
-$config = Get-ProjectConfig -Cwd $cwd
+$config = Get-ProjectConfig -Root $projectRoot
 if (-not (Test-HookEnabled -Config $config)) { exit 0 }
 
-$specDir   = if ($config.spec.dir)       { Join-Path $cwd $config.spec.dir }       else { Join-Path $cwd '.specs' }
-$indexFile = if ($config.spec.indexFile) { Join-Path $cwd $config.spec.indexFile } else { Join-Path $cwd '.specs/index.md' }
+$specDir   = if ($config.spec.dir)       { Join-Path $projectRoot $config.spec.dir }       else { Join-Path $projectRoot '.specs' }
+$indexFile = if ($config.spec.indexFile) { Join-Path $projectRoot $config.spec.indexFile } else { Join-Path $projectRoot '.specs/index.md' }
 $pattern   = if ($config.ticket.pattern) { $config.ticket.pattern }                else { '^[A-Z]+-[0-9]+$' }
 $kwMap     = $config.workflow.keywords
 

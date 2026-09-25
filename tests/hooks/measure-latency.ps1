@@ -132,6 +132,10 @@ function Invoke-TimedHookRun {
     foreach ($a in @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $HookScript)) {
         $psi.ArgumentList.Add($a)
     }
+    # SW-78: the hooks prefer CLAUDE_PROJECT_DIR over the payload cwd. Inherited
+    # from a surrounding Claude Code session it would point every run at the
+    # real repo instead of the fixture workspace (mirrors run-conformance.ps1).
+    [void]$psi.Environment.Remove('CLAUDE_PROJECT_DIR')
     $psi.RedirectStandardInput  = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
@@ -354,7 +358,7 @@ foreach ($hookName in $hookNames) {
                 $ws = New-LatencyWorkspace -CaseDir $caseDir
                 try {
                     $wsForward = $ws.Replace('\', '/')
-                    $payload = $rawPayload.Replace('{{CWD}}', $wsForward)
+                    $payload = $rawPayload.Replace('{{ROOT}}', $wsForward).Replace('{{CWD}}', $wsForward)
                     $run = Invoke-TimedHookRun -Exe $flavor -HookScript $hookScript -Payload $payload
                     $mismatch = Test-HookRunMatchesGolden -HookName $hookName -Expected $expected -Run $run
                     if ($null -ne $mismatch) {

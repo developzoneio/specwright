@@ -28,6 +28,45 @@ if [[ ! -d "${cwd}" ]]; then
     exit 0
 fi
 
+# --- project root (SW-78) -----------------------------------------------------
+# `cwd` is the session's CURRENT directory, and a Bash `cd` moves it. Reading
+# config, specs, hook state and the metrics log relative to it made a session
+# sitting in a subdirectory miss every spec and grow a nested .specs/_metrics/
+# and .claude/.hookstate/ there. Everything below resolves against the root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of cwd (cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of cwd holding a .specs/ directory.
+#   4. cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Pure string
+# walk, no `cd`/`realpath`. Identical in all three hooks; mirrors
+# Resolve-ProjectRoot in the .ps1 twins.
+resolve_project_root() {
+    local start="${1//\\//}"
+    if [[ -n "${CLAUDE_PROJECT_DIR:-}" && -d "${CLAUDE_PROJECT_DIR}" ]]; then
+        printf '%s' "${CLAUDE_PROJECT_DIR//\\//}"
+        return 0
+    fi
+    [[ "${start}" != "/" ]] && start="${start%/}"
+    local marker dir i
+    for marker in f:.claude/project-config.json d:.specs; do
+        dir="${start}"
+        for (( i = 0; i < 64; i++ )); do
+            if [[ "${marker}" == f:* && -f "${dir%/}/${marker#f:}" ]] ||
+               [[ "${marker}" == d:* && -d "${dir%/}/${marker#d:}" ]]; then
+                printf '%s' "${dir}"
+                return 0
+            fi
+            [[ "${dir}" == "/" || "${dir}" != */* ]] && break
+            dir="${dir%/*}"
+            [[ -z "${dir}" ]] && dir="/"
+        done
+    done
+    printf '%s' "${start}"
+}
+
+project_root="$(resolve_project_root "${cwd}")"
+
 session_id="$(printf '%s' "${input}" | jq -r '.session_id // "no-session"' 2>/dev/null)"
 safe_id="$(printf '%s' "${session_id}" | tr -c 'A-Za-z0-9_-' '_')"
 
@@ -37,7 +76,7 @@ safe_id="$(printf '%s' "${session_id}" | tr -c 'A-Za-z0-9_-' '_')"
 # reads has a `//` default below, and those defaults are the same values as
 # $defaults in subagent-retro.ps1. Any new read must keep that property or the
 # fallback has to become a full default document, as it is in spec-gate.sh.
-config_path="${cwd}/.claude/project-config.json"
+config_path="${project_root}/.claude/project-config.json"
 config_json="{}"
 if [[ -f "${config_path}" ]] && jq -e . "${config_path}" >/dev/null 2>&1; then
     config_json="$(cat "${config_path}")"
@@ -96,10 +135,10 @@ resolve_spec_prefixes() {
 
 spec_prefixes="$(resolve_spec_prefixes)"
 
-spec_dir="${cwd}/${spec_dir_rel}"
-index_path="${cwd}/${index_rel}"
+spec_dir="${project_root}/${spec_dir_rel}"
+index_path="${project_root}/${index_rel}"
 
-state_dir="${cwd}/.claude/.hookstate"
+state_dir="${project_root}/.claude/.hookstate"
 state_path="${state_dir}/subagent-retro-${safe_id}.json"
 lessons_path="${spec_dir}/_lessons/lessons.md"
 
@@ -149,7 +188,7 @@ write_state() {
 # see the emit_subagent_stop_metric call site below.
 
 # A metrics path is not an arbitrary-write primitive: reject anything rooted
-# (leading '/' or a drive-letter prefix) or that escapes cwd via '..' rather
+# (leading '/' or a drive-letter prefix) or that escapes the root via '..' rather
 # than ever writing outside the workspace. Reuses the same rootedness test and
 # dot-segment collapse used for the gate's own path safety above, so the two
 # checks cannot silently diverge. Mirrors Test-MetricsPathSafe in
@@ -189,7 +228,7 @@ write_metric_line() {
     metrics_path="${metrics_path//\\//}"
     metrics_path_is_safe "${metrics_path}" || return 0
 
-    local full_path="${cwd}/${metrics_path}"
+    local full_path="${project_root}/${metrics_path}"
     mkdir -p "$(dirname "${full_path}")" 2>/dev/null || return 0
 
     local ts

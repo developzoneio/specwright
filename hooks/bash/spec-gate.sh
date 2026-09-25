@@ -45,6 +45,45 @@ if [[ -z "${file_path}" ]]; then
     exit 0
 fi
 
+# --- project root (SW-78) -----------------------------------------------------
+# `cwd` is the session's CURRENT directory, and a Bash `cd` moves it. Resolving
+# config, the index, the metrics log and the edited path against it let a
+# session sitting in a subdirectory bypass every rule (and grow a nested
+# .specs/_metrics/ there). Everything below resolves against the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of cwd (cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of cwd holding a .specs/ directory.
+#   4. cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Pure string
+# walk, no `cd`/`realpath`. Identical in all three hooks; mirrors
+# Resolve-ProjectRoot in the .ps1 twins.
+resolve_project_root() {
+    local start="${1//\\//}"
+    if [[ -n "${CLAUDE_PROJECT_DIR:-}" && -d "${CLAUDE_PROJECT_DIR}" ]]; then
+        printf '%s' "${CLAUDE_PROJECT_DIR//\\//}"
+        return 0
+    fi
+    [[ "${start}" != "/" ]] && start="${start%/}"
+    local marker dir i
+    for marker in f:.claude/project-config.json d:.specs; do
+        dir="${start}"
+        for (( i = 0; i < 64; i++ )); do
+            if [[ "${marker}" == f:* && -f "${dir%/}/${marker#f:}" ]] ||
+               [[ "${marker}" == d:* && -d "${dir%/}/${marker#d:}" ]]; then
+                printf '%s' "${dir}"
+                return 0
+            fi
+            [[ "${dir}" == "/" || "${dir}" != */* ]] && break
+            dir="${dir%/*}"
+            [[ -z "${dir}" ]] && dir="/"
+        done
+    done
+    printf '%s' "${start}"
+}
+
+project_root="$(resolve_project_root "${cwd}")"
+
 # --- load config --------------------------------------------------------------
 
 # A project with no .claude/project-config.json (the normal state before
@@ -53,7 +92,7 @@ fi
 # stay byte-identical in meaning to $defaults in spec-gate.ps1.
 default_config='{"spec":{"dir":".specs","indexFile":".specs/index.md"},"paths":{"protected":[".specs/constitution.md",".specs/index.md","LICENSE"]},"hooks":{"specGate":{"enabled":true,"mode":"warn"},"metrics":{"enabled":true,"path":".specs/_metrics/events.jsonl","maxSizeKb":1024}}}'
 
-config_path="${cwd}/.claude/project-config.json"
+config_path="${project_root}/.claude/project-config.json"
 config_json="${default_config}"
 if [[ -f "${config_path}" ]] && jq -e . "${config_path}" >/dev/null 2>&1; then
     config_json="$(cat "${config_path}")"
@@ -72,7 +111,7 @@ if [[ "${mode}" == "off" ]]; then
 fi
 
 index_rel="$(printf '%s' "${config_json}" | jq -r '.spec.indexFile // ".specs/index.md"' 2>/dev/null)"
-index_path="${cwd}/${index_rel}"
+index_path="${project_root}/${index_rel}"
 
 # --- spec prefix alternation (SW-44) ------------------------------------------
 # Built-in fallback covers every prefix shipped in
@@ -196,13 +235,13 @@ collapse_dot_segments() {
 normalize_rel() {
     local fp="$1" base="$2"
     # If fp is already relative, collapse dot segments but there is no known
-    # root to compare against a cwd prefix, so return the collapsed path as-is.
+    # root to compare against a root prefix, so return the collapsed path as-is.
     if [[ "${fp}" != /* && "${fp}" != ?:* ]]; then
         printf '%s' "$(collapse_dot_segments "${fp//\\//}")"
         return
     fi
     # Collapse '.'/'..' BEFORE the prefix strip, so a path that traverses
-    # through a directory and back (e.g. cwd/src/../.specs/x) is compared
+    # through a directory and back (e.g. root/src/../.specs/x) is compared
     # against base in its fully-resolved form, not its literal typed form.
     local fp_raw="${fp//\\//}"
     local base_norm="${base//\\//}"
@@ -226,7 +265,15 @@ normalize_rel() {
     fi
 }
 
-rel="$(normalize_rel "${file_path}" "${cwd}")"
+# A relative file_path is relative to the SESSION cwd. When that is the root,
+# keep the historical relative handling untouched; otherwise anchor it on cwd
+# first so e.g. '../index.md' typed from .specs/FEAT-x lands on .specs/index.md.
+if [[ "${file_path}" != /* && "${file_path}" != ?:* ]] &&
+   [[ "$(collapse_dot_segments "${cwd//\\//}")" != "$(collapse_dot_segments "${project_root}")" ]]; then
+    file_path="${cwd%/}/${file_path}"
+fi
+
+rel="$(normalize_rel "${file_path}" "${project_root}")"
 if [[ -z "${rel}" ]]; then
     exit 0
 fi
@@ -249,7 +296,7 @@ emit_block() {
 # from inside the decision path itself.
 
 # A metrics path is not an arbitrary-write primitive: reject anything rooted
-# (leading '/' or a drive-letter prefix) or that escapes cwd via '..' rather
+# (leading '/' or a drive-letter prefix) or that escapes the root via '..' rather
 # than ever writing outside the workspace. Reuses the same rootedness test and
 # dot-segment collapse used for the gate's own path safety above, so the two
 # checks cannot silently diverge. Mirrors Test-MetricsPathSafe in
@@ -289,7 +336,7 @@ write_metric_line() {
     metrics_path="${metrics_path//\\//}"
     metrics_path_is_safe "${metrics_path}" || return 0
 
-    local full_path="${cwd}/${metrics_path}"
+    local full_path="${project_root}/${metrics_path}"
     mkdir -p "$(dirname "${full_path}")" 2>/dev/null || return 0
 
     local ts
@@ -572,7 +619,7 @@ if [[ "${verify_gate}" == "true" && "${rel_lower}" == "${index_rel_lower}" ]]; t
             missing=""
             while IFS= read -r id; do
                 [[ -z "${id}" ]] && continue
-                artifact="${cwd}/${spec_dir}/${id}/06-verify.md"
+                artifact="${project_root}/${spec_dir}/${id}/06-verify.md"
                 if [[ ! -f "${artifact}" ]] \
                    || ! grep -q -i -E '^result:[[:space:]]*pass[[:space:]]*$' "${artifact}" 2>/dev/null; then
                     if [[ -z "${missing}" ]]; then

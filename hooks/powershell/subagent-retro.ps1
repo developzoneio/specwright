@@ -35,8 +35,44 @@ function Read-StdinJson {
     }
 }
 
-function Get-ProjectConfig {
+# SW-78: `cwd` is the session's CURRENT directory, and a Bash `cd` moves it.
+# Reading config, specs, hook state and the metrics log relative to it made a
+# session sitting in a subdirectory miss every spec and grow a nested
+# .specs/_metrics/ and .claude/.hookstate/ there.
+# Every project path is therefore resolved against the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of Cwd (Cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of Cwd holding a .specs/ directory.
+#   4. Cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Identical in all
+# three hooks; mirrors resolve_project_root in the .sh twins.
+function Resolve-ProjectRoot {
     param([string]$Cwd)
+    $envRoot = $env:CLAUDE_PROJECT_DIR
+    if (-not [string]::IsNullOrWhiteSpace($envRoot) -and (Test-Path -LiteralPath $envRoot -PathType Container)) {
+        return $envRoot
+    }
+    $start = $Cwd.TrimEnd('/', '\')
+    if ($start.Length -eq 0) { return $Cwd }
+    $markers = @(
+        @{ Rel = '.claude/project-config.json'; Type = 'Leaf' },
+        @{ Rel = '.specs'; Type = 'Container' }
+    )
+    foreach ($m in $markers) {
+        $dir = $start
+        for ($i = 0; $i -lt 64 -and -not [string]::IsNullOrEmpty($dir); $i++) {
+            if (Test-Path -LiteralPath (Join-Path $dir $m.Rel) -PathType $m.Type) { return $dir }
+            $parent = [System.IO.Path]::GetDirectoryName($dir)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -eq $dir) { break }
+            $dir = $parent
+        }
+    }
+    return $Cwd
+}
+
+function Get-ProjectConfig {
+    param([string]$Root)
 
     $defaults = [pscustomobject]@{
         spec  = [pscustomobject]@{
@@ -53,7 +89,7 @@ function Get-ProjectConfig {
         }
     }
 
-    $cfgPath = Join-Path $Cwd '.claude/project-config.json'
+    $cfgPath = Join-Path $Root '.claude/project-config.json'
     if (-not (Test-Path -LiteralPath $cfgPath)) { return $defaults }
     # -ErrorAction Stop is required: the script-wide SilentlyContinue preference
     # would otherwise make a malformed config a NON-terminating error, so the
@@ -142,7 +178,7 @@ function ConvertTo-CollapsedPath {
 function Test-MetricsPathSafe {
     param([string]$RelPath)
     # A metrics path is not an arbitrary-write primitive: reject anything
-    # rooted (absolute, or a drive-letter path) or that escapes Cwd via '..'
+    # rooted (absolute, or a drive-letter path) or that escapes Root via '..'
     # rather than ever writing outside the workspace. Reuses the same
     # rootedness test and dot-segment collapse used for the gate's own path
     # safety above, so the two safety checks cannot silently diverge.
@@ -155,7 +191,7 @@ function Test-MetricsPathSafe {
 
 function Write-MetricEvent {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [string]$SpecId,
         [string]$Phase,
@@ -183,7 +219,7 @@ function Write-MetricEvent {
 
         if (-not (Test-MetricsPathSafe -RelPath $relPath)) { return }
 
-        $fullPath = Join-Path $Cwd $relPath
+        $fullPath = Join-Path $Root $relPath
         $parent = Split-Path -Path $fullPath -Parent
         if (-not (Test-Path -LiteralPath $parent)) {
             New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
@@ -259,14 +295,14 @@ function Write-MetricEvent {
 
 function Write-SubagentStopMetric {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [string]$SpecId,
         [string]$Phase,
         [int]$Stale
     )
     $fields = [ordered]@{ stale = $Stale }
-    Write-MetricEvent -Cwd $Cwd -Config $Config -SpecId $SpecId -Phase $Phase -EventKind 'subagent_stop' -Fields $fields
+    Write-MetricEvent -Root $Root -Config $Config -SpecId $SpecId -Phase $Phase -EventKind 'subagent_stop' -Fields $fields
 }
 
 function Get-IndexSpecs {
@@ -500,11 +536,12 @@ if ($null -eq $hookInput) { exit 0 }
 $cwd = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 if (-not (Test-Path -LiteralPath $cwd)) { exit 0 }
+$projectRoot = Resolve-ProjectRoot -Cwd $cwd
 
 $sessionId = $hookInput.session_id
 if ([string]::IsNullOrWhiteSpace($sessionId)) { $sessionId = 'no-session' }
 
-$config = Get-ProjectConfig -Cwd $cwd
+$config = Get-ProjectConfig -Root $projectRoot
 try {
     # Type-strict: only a literal JSON boolean false disables the hook. A plain
     # `-not ...enabled` fires on an ABSENT key ($null), silently disabling the
@@ -542,9 +579,9 @@ try {
 } catch { $maxLessons = 3 }
 if ($maxLessons -lt 0) { $maxLessons = 3 }
 
-$specDir   = if ($config.spec.dir)       { Join-Path $cwd $config.spec.dir }       else { Join-Path $cwd '.specs' }
-$indexFile = if ($config.spec.indexFile) { Join-Path $cwd $config.spec.indexFile } else { Join-Path $cwd '.specs/index.md' }
-$stateDir    = Join-Path $cwd '.claude/.hookstate'
+$specDir   = if ($config.spec.dir)       { Join-Path $projectRoot $config.spec.dir }       else { Join-Path $projectRoot '.specs' }
+$indexFile = if ($config.spec.indexFile) { Join-Path $projectRoot $config.spec.indexFile } else { Join-Path $projectRoot '.specs/index.md' }
+$stateDir    = Join-Path $projectRoot '.claude/.hookstate'
 $safeId      = ($sessionId -replace '[^A-Za-z0-9_\-]','_')
 $statePath   = Join-Path $stateDir ("subagent-retro-$safeId.json")
 $lessonsPath = Join-Path $specDir (Join-Path '_lessons' 'lessons.md')
@@ -567,7 +604,7 @@ $staleIds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.Str
 foreach ($s in $stale) { [void]$staleIds.Add($s.Id) }
 foreach ($spec in $specs) {
     $staleCount = if ($staleIds.Contains($spec.Id)) { 1 } else { 0 }
-    Write-SubagentStopMetric -Cwd $cwd -Config $config -SpecId $spec.Id -Phase 'in-progress' -Stale $staleCount
+    Write-SubagentStopMetric -Root $projectRoot -Config $config -SpecId $spec.Id -Phase 'in-progress' -Stale $staleCount
 }
 
 # --- lesson injection (SW-19) ---

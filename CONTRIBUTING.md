@@ -103,6 +103,12 @@ hook and fails if their normalized decisions diverge from each other or from the
 fixture case whenever you add hook behavior; `-SelfTest` proves the harness still detects
 divergence.
 
+In a fixture's `input.json`, `{{ROOT}}` is the workspace (the project root) and `{{CWD}}` is the
+session cwd. The session cwd is the root unless `setup.json` names a `"cwd"` subdirectory of the
+fixture's own `workspace/` tree. The runner strips `CLAUDE_PROJECT_DIR` from every child process,
+and `setup.json` `"env"` sets it per case (`{{ROOT}}` is substituted there too). A case with an
+off-root `cwd` also fails if any hook creates `.specs/` or `.claude/` under that cwd (SW-78).
+
 Check 7 needs `jq` on Unix and **fails loudly without it**. This is the opposite of the hook rule
 below (hooks exit `0` silently when `jq` is missing so they never block a user on their own bugs) -
 a validator that skipped itself for a missing tool would turn CI green while checking nothing.

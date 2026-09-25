@@ -1,0 +1,5 @@
+{
+  "spec": { "dir": ".specs", "indexFile": ".specs/index.md" },
+  "ticket": { "pattern": "^[A-Z]+-[0-9]+$" },
+  "hooks": { "userPromptRouter": { "enabled": true } }
+}

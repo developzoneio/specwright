@@ -43,8 +43,44 @@ function Read-StdinJson {
     }
 }
 
-function Get-ProjectConfig {
+# SW-78: `cwd` is the session's CURRENT directory, and a Bash `cd` moves it.
+# Resolving config, the index, the metrics log and the edited path against it
+# let a session sitting in a subdirectory bypass every rule (and grow a nested
+# .specs/_metrics/ there).
+# Every project path is therefore resolved against the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of Cwd (Cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of Cwd holding a .specs/ directory.
+#   4. Cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Identical in all
+# three hooks; mirrors resolve_project_root in the .sh twins.
+function Resolve-ProjectRoot {
     param([string]$Cwd)
+    $envRoot = $env:CLAUDE_PROJECT_DIR
+    if (-not [string]::IsNullOrWhiteSpace($envRoot) -and (Test-Path -LiteralPath $envRoot -PathType Container)) {
+        return $envRoot
+    }
+    $start = $Cwd.TrimEnd('/', '\')
+    if ($start.Length -eq 0) { return $Cwd }
+    $markers = @(
+        @{ Rel = '.claude/project-config.json'; Type = 'Leaf' },
+        @{ Rel = '.specs'; Type = 'Container' }
+    )
+    foreach ($m in $markers) {
+        $dir = $start
+        for ($i = 0; $i -lt 64 -and -not [string]::IsNullOrEmpty($dir); $i++) {
+            if (Test-Path -LiteralPath (Join-Path $dir $m.Rel) -PathType $m.Type) { return $dir }
+            $parent = [System.IO.Path]::GetDirectoryName($dir)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -eq $dir) { break }
+            $dir = $parent
+        }
+    }
+    return $Cwd
+}
+
+function Get-ProjectConfig {
+    param([string]$Root)
 
     $defaults = [pscustomobject]@{
         spec  = [pscustomobject]@{
@@ -60,7 +96,7 @@ function Get-ProjectConfig {
         }
     }
 
-    $cfgPath = Join-Path $Cwd '.claude/project-config.json'
+    $cfgPath = Join-Path $Root '.claude/project-config.json'
     if (-not (Test-Path -LiteralPath $cfgPath)) { return $defaults }
 
     # -ErrorAction Stop is required: the script-wide SilentlyContinue preference
@@ -195,17 +231,18 @@ function ConvertTo-CollapsedPath {
 
 function ConvertTo-RelativePath {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [string]$FilePath
     )
     if ([string]::IsNullOrWhiteSpace($FilePath)) { return $null }
     try {
         # If FilePath is not rooted (no leading '/' and no drive-letter prefix
-        # such as 'C:'), it is already relative to Cwd by construction, so
-        # collapsing its own dot segments directly yields the correct
-        # relative-to-Cwd path. Joining it onto Cwd and calling
+        # such as 'C:'), it is already relative to Root by construction (the
+        # caller anchors it on the session cwd first when that is not the
+        # root, SW-78), so collapsing its own dot segments directly yields the
+        # correct relative-to-Root path. Joining it onto Root and calling
         # [System.IO.Path]::GetFullPath would resolve against THIS SCRIPT
-        # PROCESS's own working directory instead of the hook payload's Cwd -
+        # PROCESS's own working directory instead of the hook payload's -
         # that mismatch was the root cause of the
         # 'src/../.specs/constitution.md' traversal bypass, since the
         # resulting absolute path never started with $base and fell through
@@ -216,7 +253,7 @@ function ConvertTo-RelativePath {
         }
 
         # Collapse '.'/'..' BEFORE the prefix strip, so a path that traverses
-        # through a directory and back (e.g. cwd/src/../.specs/x) is compared
+        # through a directory and back (e.g. root/src/../.specs/x) is compared
         # against base in its fully-resolved form, not its literal typed form.
         # A trailing separator collapses away here too (see
         # ConvertTo-CollapsedPath), which fixes the second bypass: without
@@ -224,7 +261,7 @@ function ConvertTo-RelativePath {
         # returns "" and the path escapes both the protected-path equality
         # check and the code-file extension check.
         $fpRaw = $FilePath.Replace('\','/')
-        $baseNorm = $Cwd.Replace('\','/')
+        $baseNorm = $Root.Replace('\','/')
         $fpNorm = ConvertTo-CollapsedPath -Path $fpRaw
         $baseCollapsed = ConvertTo-CollapsedPath -Path $baseNorm
 
@@ -232,7 +269,7 @@ function ConvertTo-RelativePath {
             $rel = $fpNorm.Substring($baseCollapsed.Length).TrimStart('/')
             return $rel
         }
-        # Resolving FilePath lands outside Cwd entirely (e.g. enough leading
+        # Resolving FilePath lands outside Root entirely (e.g. enough leading
         # '..' to escape the workspace) - fall back to the raw, un-collapsed
         # path, same as spec-gate.sh's normalize_rel fallback branch.
         return $fpRaw
@@ -558,7 +595,7 @@ function Test-IndexTransitionEdit {
 function Test-MetricsPathSafe {
     param([string]$RelPath)
     # A metrics path is not an arbitrary-write primitive: reject anything
-    # rooted (absolute, or a drive-letter path) or that escapes Cwd via '..'
+    # rooted (absolute, or a drive-letter path) or that escapes Root via '..'
     # rather than ever writing outside the workspace. Reuses the same
     # rootedness test and dot-segment collapse used for the gate's own path
     # safety above, so the two safety checks cannot silently diverge.
@@ -571,7 +608,7 @@ function Test-MetricsPathSafe {
 
 function Write-MetricEvent {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [string]$SpecId,
         [string]$Phase,
@@ -599,7 +636,7 @@ function Write-MetricEvent {
 
         if (-not (Test-MetricsPathSafe -RelPath $relPath)) { return }
 
-        $fullPath = Join-Path $Cwd $relPath
+        $fullPath = Join-Path $Root $relPath
         $parent = Split-Path -Path $fullPath -Parent
         if (-not (Test-Path -LiteralPath $parent)) {
             New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
@@ -675,7 +712,7 @@ function Write-MetricEvent {
 
 function Write-GateMetric {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [string]$SpecId,
         [string]$Phase,
@@ -685,19 +722,19 @@ function Write-GateMetric {
     )
     $fields = [ordered]@{ gate = $Gate; decision = $Decision }
     if ($Ext) { $fields['ext'] = $Ext }
-    Write-MetricEvent -Cwd $Cwd -Config $Config -SpecId $SpecId -Phase $Phase -EventKind 'gate' -Fields $fields
+    Write-MetricEvent -Root $Root -Config $Config -SpecId $SpecId -Phase $Phase -EventKind 'gate' -Fields $fields
 }
 
 function Write-TransitionMetrics {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [object[]]$Transitions,
         [string]$Decision
     )
     foreach ($t in $Transitions) {
         $fields = [ordered]@{ from = $t.From; decision = $Decision }
-        Write-MetricEvent -Cwd $Cwd -Config $Config -SpecId $t.Id -Phase $t.Phase -EventKind 'spec_transition' -Fields $fields
+        Write-MetricEvent -Root $Root -Config $Config -SpecId $t.Id -Phase $t.Phase -EventKind 'spec_transition' -Fields $fields
     }
 }
 
@@ -734,7 +771,7 @@ function Write-TransitionMetrics {
 # real-world case.
 function Write-ComplexitySplitMetrics {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [object[]]$Transitions,
         [string]$IndexPath,
@@ -782,7 +819,7 @@ function Write-ComplexitySplitMetrics {
                 if ($other.StartsWith("$($t.Id)-", [System.StringComparison]::Ordinal)) { $childFound = $true; break }
             }
             if ($childFound) {
-                Write-GateMetric -Cwd $Cwd -Config $Config -SpecId $t.Id -Phase 'archived' -Gate 'complexity' -Decision 'split'
+                Write-GateMetric -Root $Root -Config $Config -SpecId $t.Id -Phase 'archived' -Gate 'complexity' -Decision 'split'
             }
         }
     } catch { }
@@ -790,11 +827,11 @@ function Write-ComplexitySplitMetrics {
 
 function Test-VerifyArtifactPass {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [string]$SpecDir,
         [string]$SpecId
     )
-    $artifact = Join-Path $Cwd (Join-Path $SpecDir (Join-Path $SpecId '06-verify.md'))
+    $artifact = Join-Path $Root (Join-Path $SpecDir (Join-Path $SpecId '06-verify.md'))
     if (-not (Test-Path -LiteralPath $artifact)) { return $false }
     try {
         $content = Get-Content -LiteralPath $artifact -Raw -Encoding UTF8 -ErrorAction Stop
@@ -829,6 +866,7 @@ if ($toolName -ne 'Edit' -and $toolName -ne 'Write' -and $toolName -ne 'MultiEdi
 
 $cwd = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+$projectRoot = Resolve-ProjectRoot -Cwd $cwd
 
 # SW-50: these two checks are pure string ops with zero I/O, so they run
 # BEFORE Get-ProjectConfig (which reads project-config.json from disk).
@@ -838,10 +876,19 @@ if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 $filePath = $hookInput.tool_input.file_path
 if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
 
-$rel = ConvertTo-RelativePath -Cwd $cwd -FilePath $filePath
+# A relative file_path is relative to the SESSION cwd. When that is the root,
+# keep the historical relative handling untouched; otherwise anchor it on cwd
+# first so e.g. '../index.md' typed from .specs/FEAT-x lands on .specs/index.md.
+# Mirrors spec-gate.sh (ordinal compare, like bash's string compare).
+if ((-not (Test-IsRootedPath $filePath)) -and
+    ((ConvertTo-CollapsedPath -Path $cwd.Replace('\','/')) -cne (ConvertTo-CollapsedPath -Path $projectRoot.Replace('\','/')))) {
+    $filePath = $cwd.TrimEnd('/', '\') + '/' + $filePath
+}
+
+$rel = ConvertTo-RelativePath -Root $projectRoot -FilePath $filePath
 if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
 
-$config = Get-ProjectConfig -Cwd $cwd
+$config = Get-ProjectConfig -Root $projectRoot
 $specPrefixes = Get-SpecPrefixAlternation -Config $config
 $featurePrefix = Get-SpecPrefixValue -Config $config -Key 'feature' -DefaultValue 'FEAT'
 
@@ -903,16 +950,16 @@ try { if ($config.spec.dir) { $specDir = [string]$config.spec.dir } } catch { }
 # is actually reached. Empty (a no-op below) whenever $rel is not the index.
 $transitions = @()
 if ([string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $transitions = Get-SpecStatusTransitions -HookInput $hookInput -IndexPath (Join-Path $cwd $indexRel) -Prefixes $specPrefixes
+    $transitions = Get-SpecStatusTransitions -HookInput $hookInput -IndexPath (Join-Path $projectRoot $indexRel) -Prefixes $specPrefixes
 }
 
 if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $indexAbs = Join-Path $cwd $indexRel
+    $indexAbs = Join-Path $projectRoot $indexRel
     $doneIds = Get-DoneTransitionIds -HookInput $hookInput -IndexPath $indexAbs
     if ($doneIds.Count -gt 0) {
         $missing = New-Object System.Collections.Generic.List[string]
         foreach ($id in $doneIds) {
-            if (-not (Test-VerifyArtifactPass -Cwd $cwd -SpecDir $specDir -SpecId $id)) {
+            if (-not (Test-VerifyArtifactPass -Root $projectRoot -SpecDir $specDir -SpecId $id)) {
                 $missing.Add($id) | Out-Null
             }
         }
@@ -934,9 +981,9 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
             [Array]::Sort($doneIdsForMetrics, [System.StringComparer]::Ordinal)
             foreach ($id in $doneIdsForMetrics) {
                 $idDecision = if ($missing.Contains($id)) { 'block' } else { 'allow' }
-                Write-GateMetric -Cwd $cwd -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision $idDecision
+                Write-GateMetric -Root $projectRoot -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision $idDecision
             }
-            Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'block'
+            Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'block'
             # No Write-ComplexitySplitMetrics here: the whole edit is denied,
             # so nothing in it - including any bundled parent archive + child
             # registration - actually reached disk. See the function's own
@@ -947,10 +994,10 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
         $doneIdsForMetrics = @($doneIds)
         [Array]::Sort($doneIdsForMetrics, [System.StringComparer]::Ordinal)
         foreach ($id in $doneIdsForMetrics) {
-            Write-GateMetric -Cwd $cwd -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision 'allow'
+            Write-GateMetric -Root $projectRoot -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision 'allow'
         }
-        Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
-        Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath $indexAbs -HookInput $hookInput -FeaturePrefix $featurePrefix
+        Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'allow'
+        Write-ComplexitySplitMetrics -Root $projectRoot -Config $config -Transitions $transitions -IndexPath $indexAbs -HookInput $hookInput -FeaturePrefix $featurePrefix
         exit 0
     }
 }
@@ -968,15 +1015,15 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
 # row moving to done is not an edge here: Rule 0 owns it, and with verifyGate
 # off it stays blocked by Rule 1 as before. Mirrors spec-gate.sh Rule 0b.
 if ([string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $indexChanges = Test-IndexTransitionEdit -HookInput $hookInput -IndexPath (Join-Path $cwd $indexRel) -Prefixes $specPrefixes
+    $indexChanges = Test-IndexTransitionEdit -HookInput $hookInput -IndexPath (Join-Path $projectRoot $indexRel) -Prefixes $specPrefixes
     if ($indexChanges.Count -gt 0) {
         # Record the transitions from Rule 0b's own diff, not the fragment
         # scan: a workflow edit that rewrites only the Status cell (old
         # "| draft |" -> new "| approved |") carries no full row in
         # new_string, so Get-SpecStatusTransitions would miss it entirely.
         $ruleTransitions = @($indexChanges | ForEach-Object { [pscustomobject]@{ Id = $_.Id; Phase = $_.To; From = $_.From } })
-        Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $ruleTransitions -Decision 'allow'
-        Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $ruleTransitions -IndexPath (Join-Path $cwd $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
+        Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $ruleTransitions -Decision 'allow'
+        Write-ComplexitySplitMetrics -Root $projectRoot -Config $config -Transitions $ruleTransitions -IndexPath (Join-Path $projectRoot $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
         exit 0
     }
 }
@@ -986,8 +1033,8 @@ $protected = @()
 try { if ($config.paths.protected) { $protected = @($config.paths.protected) } } catch { }
 if (Test-IsProtected -RelPath $rel -Protected $protected) {
     Write-BlockDecision "spec-gate: '$rel' is listed under paths.protected in .claude/project-config.json. Update via /sd:refactor or an ADR; never edit directly."
-    Write-GateMetric -Cwd $cwd -Config $config -SpecId '-' -Phase '-' -Gate 'protected' -Decision 'block'
-    Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'block'
+    Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'protected' -Decision 'block'
+    Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'block'
     # No Write-ComplexitySplitMetrics here: the edit is denied, so a detected
     # parent-archive-plus-child pattern in it never reached disk.
     exit 0
@@ -995,15 +1042,15 @@ if (Test-IsProtected -RelPath $rel -Protected $protected) {
 
 # Rule 2: allow-listed paths -> always allow
 if (Test-IsAllowListed -RelPath $rel) {
-    Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
-    Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath (Join-Path $cwd $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
+    Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'allow'
+    Write-ComplexitySplitMetrics -Root $projectRoot -Config $config -Transitions $transitions -IndexPath (Join-Path $projectRoot $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
     exit 0
 }
 
 # Rule 3: code file -> require in-progress spec
 if (Test-IsCodeFile -RelPath $rel) {
     $ext = [System.IO.Path]::GetExtension($rel).ToLowerInvariant()
-    $indexFile = if ($config.spec.indexFile) { Join-Path $cwd $config.spec.indexFile } else { Join-Path $cwd '.specs/index.md' }
+    $indexFile = if ($config.spec.indexFile) { Join-Path $projectRoot $config.spec.indexFile } else { Join-Path $projectRoot '.specs/index.md' }
     # @() forces a real array even when exactly one in-progress spec is
     # found - PowerShell's pipeline otherwise unwraps a single-element
     # List[string] into a bare string, which would make $inProgress[0]
@@ -1013,18 +1060,18 @@ if (Test-IsCodeFile -RelPath $rel) {
         $msg = "spec-gate: editing code file '$rel' but no in-progress spec is recorded in .specs/index.md. Run /sd:feature, /sd:bug, /sd:refactor, or /sd:perf first to create a spec, or set hooks.specGate.mode='off' in .claude/project-config.json to disable."
         if ($mode -eq 'block') {
             Write-BlockDecision $msg
-            Write-GateMetric -Cwd $cwd -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'block' -Ext $ext
+            Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'block' -Ext $ext
             exit 0
         } else {
             [Console]::Error.WriteLine("[WARN] $msg")
-            Write-GateMetric -Cwd $cwd -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'warn' -Ext $ext
+            Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'warn' -Ext $ext
             exit 0
         }
     } else {
         # An in-progress spec exists - the edit is allowed. Recording the
         # allow (not just the block/warn paths) is the point: the ratio of
         # allow to warn/block is what the retro loop measures.
-        Write-GateMetric -Cwd $cwd -Config $config -SpecId $inProgress[0] -Phase 'in-progress' -Gate 'code-edit' -Decision 'allow' -Ext $ext
+        Write-GateMetric -Root $projectRoot -Config $config -SpecId $inProgress[0] -Phase 'in-progress' -Gate 'code-edit' -Decision 'allow' -Ext $ext
     }
 }
 
