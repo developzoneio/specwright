@@ -1,9 +1,10 @@
 # ADR 0013: model override - the Agent tool honors a per-invocation `model` (Verdict A)
 
-- Status: accepted (mechanism level); workflow-level confirmation open - see "Open item"
+- Status: accepted (mechanism and workflow level)
 - Date: 2026-09-25
 - Source spec: Jira SW-72 (follow-up to SW-59, whose deliverable was never committed)
-- Relates to: ADR 0002 (complexity triage - asserts the architect override); SW-60
+- Relates to: ADR 0002 (complexity triage - asserts the architect override); SW-73 (e2e sandbox
+  isolation on Windows, found here); SW-60
   (`skills/sd-model-escalation/SKILL.md`, rules `ESC-FEAT-02/03/03b/04/04b`); SW-61 (implementer
   override, e2e scenarios 06 and 07)
 - Supersedes: none
@@ -83,38 +84,73 @@ text. SW-60's definition of the mechanism stands, and epic SW-58 proceeds as sco
 ticket is reserved.
 
 Re-check this ADR when the pinned minimum Claude Code version in `tests/e2e/README.md` is raised,
-or when a release note changes subagent model resolution. Repeat the method above and compare
-against the tables.
+or when a release note changes subagent model resolution. The mechanism probe is the method above.
+The workflow probe is `tests/e2e/probe-model-override.ps1` (`-Case feat04|feat03|all`, about
+USD 4 per run, 2 runs per case). It is manual and paid, and is not part of `run-e2e.ps1` or CI.
 
-## Open item - workflow-level confirmation
+## Workflow-level evidence
 
-Verdict A shows the mechanism works. It does not show that `/sd:feature` *uses* it: that a model
-reading `ESC-FEAT-04` actually puts `model` in the Agent call rather than only writing the retro
-line. That needs the real workflow, as SW-72's method describes:
+Verdict A above is about the mechanism. Separately, `/sd:feature` has to *use* it: a model reading
+`ESC-FEAT-0x` must put `model` in the Agent call, not only write the retro line. That was checked
+with `tests/e2e/probe-model-override.ps1`, which pairs an L run with a control run through the real
+workflow and applies the same `meta.json` / `message.model` extraction as above.
 
-- L run: e2e scenario 06 as shipped (T01 `Estimated complexity: L`). Expect T01's
-  `sd-implementer` subagent `meta.json` to carry `"model":"sonnet"` and serve `claude-sonnet-*`,
-  and T02 to carry no `model` and serve `claude-haiku-*`.
-- Control run: the same workspace with T01 set to `S`. Expect both implementer subagents on haiku
-  with no `model`.
-- The same pair for a spec with `complexity: L` vs `M` through Gate 2, for `ESC-FEAT-02/03`.
+- Claude Code `2.1.282`, Windows, 2026-09-25. The runs used `--dangerously-skip-permissions`, like
+  e2e scenario 06. Output dirs: `C:\sw72-20260925-130826` (`feat04`) and
+  `C:\sw72-20260925-131314` (`feat03`), each with `sw72-report.md`. These are on the developer's
+  machine and are not committed.
+- `feat04`: scenario 06 as shipped (T01 `Estimated complexity: L`, T02 `S`) vs. the same
+  workspace with T01 set to `S`.
+- `feat03`: scenario 06's spec reseeded as `draft` with `complexity: L` vs. `M`. The escalation
+  `ceiling` was raised to `opus`, because scenario 06 pins `sonnet`, which caps `ESC-FEAT-03`. The
+  runs went through Phase 2 and 3 and stopped at Gate 2.
 
-This was not run for this ADR. The workflow needs `--dangerously-skip-permissions` (scenario 06
-already uses it, to run `npm test` unattended), and that was not approved in the session that
-wrote this ADR. Until it runs, the SW-61 retro line remains self-report for the workflow path. If
-the run shows no `model` in the escalated call's `meta.json`, the verdict for the *workflow* is B
-even though the mechanism is A. Fix the prompt text in `commands/feature.md` / the skill, not the
-mechanism.
+| Case | Run | `sd-*` subagent | `model` param | Served |
+|---|---|---|---|---|
+| `feat04` | L | `sd-implementer` (T01) | `sonnet` | `claude-sonnet-*` |
+| `feat04` | L | `sd-implementer` (T02) | none or `haiku` | `claude-haiku-*` |
+| `feat04` | control | every `sd-implementer` | none or `haiku` | `claude-haiku-*` |
+| `feat03` | L | `sd-code-explorer` | `sonnet` | `claude-sonnet-*` |
+| `feat03` | L | `sd-spec-architect` | `opus` | `claude-opus-*` |
+| `feat03` | control | every `sd-code-explorer` | none or `haiku` | `claude-haiku-*` |
+| `feat03` | control | every `sd-spec-architect` | none or `sonnet` | `claude-sonnet-*` |
 
-Harness note: `tests/e2e/run-e2e.ps1` passes `--no-session-persistence`, so `SD_E2E_KEEP=1` keeps
-the fake home but writes **no transcript**. A workflow-level run for this item must invoke
-`claude -p` without that flag. The harness itself should keep it, because per-scenario transcripts
-are not needed for artifact assertions.
+All seven checks passed. `ESC-FEAT-02`, `ESC-FEAT-03` and `ESC-FEAT-04` are applied by the
+workflow, and each call is served on the escalated tier. `ESC-FEAT-03b` and `ESC-FEAT-04b` were
+not exercised. They use the same Agent-call step, so they rest on the same evidence, but no run
+triggered them.
+
+### Findings from getting there
+
+1. **Self-report was wrong, and would have passed review.** The first Windows run (see finding 2)
+   served both control implementers on `claude-sonnet-5`. The main thread's closing message in
+   that transcript (line 79) said "Both tasks ran at **haiku**". This is the failure SW-59 and
+   SW-72 were opened to catch. A retro line or summary is not evidence of the served model; only
+   `message.model` is.
+2. **The sandbox was not isolated on Windows (SW-73).** The first runs used `%TEMP%`, which is
+   under the user profile. With no git root to stop it, Claude Code loads every ancestor `.claude/`
+   as *project* scope, and project scope outranks the fake home. So the developer's real
+   `~/.claude` was loaded: a stale `sd-implementer` with `model: sonnet`, and a personal skill.
+   This was reproduced on Linux with an ancestor `.claude/agents/sd/implementer.md`. It was served
+   sonnet with no `.git`, and haiku with `git init` in the workspace. The probe now defaults
+   `-OutDir` to the drive root and refuses any `-OutDir` with a `.claude` above it.
+   `tests/e2e/run-e2e.ps1` has the same gap; the fix is tracked in SW-73.
+3. **Line endings are not a factor.** LF and CRLF agent frontmatter both resolved `model: haiku`,
+   on Linux and on Windows. `*.md` is not pinned to LF in `.gitattributes`, and that is fine.
+4. **Resume skips `ESC-FEAT-02`.** `commands/feature.md`'s state machine sends `approved` with no
+   `02-tasks.md` straight to Phase 3, so a spec resumed from `approved` never runs Phase 2 or its
+   escalation check. The `feat03` case starts from `draft` to avoid this. Whether that resume path
+   should re-run Phase 2 is left to the epic.
+5. **Harness transcripts.** `run-e2e.ps1` passes `--no-session-persistence`, so `SD_E2E_KEEP=1`
+   keeps the fake home but writes no transcript. The probe omits that flag on purpose. The harness
+   should keep it, because artifact assertions do not need transcripts.
 
 ## Consequences
 
-- ADR 0002's "per-invocation main-thread override" is no longer an assumption at the mechanism
-  level.
+- ADR 0002's "per-invocation main-thread override" is no longer an assumption, at either level.
+- A served-model claim needs `message.model` from a transcript. A `--no-session-persistence`
+  run cannot provide it, and a model's summary does not count.
+- On Windows, any sandbox under the user profile reads the real `~/.claude` (SW-73).
 - The `unapplied` fallback in `sd-model-escalation` stays. It covers hosts or future versions
   where the parameter is dropped, and costs nothing when the override works.
 - The rejected Verdict B alternatives from SW-59 (`model: inherit` plus an advisory stop; an

@@ -11,13 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **ADR 0013: model override mechanism** (SW-72) - `docs/adr/0013-model-override-mechanism.md`
-  records Verdict A from sandbox transcript evidence on Claude Code 2.1.282, with a control call
-  per pair: the Agent tool's `model` parameter overrides agent frontmatter. `message.model` in each
-  subagent transcript shows the requested tier for `sd-implementer` haiku->opus,
-  `sd-spec-architect` sonnet->opus and `sd-code-explorer` haiku->sonnet, and the frontmatter tier
-  for each control. This replaces SW-61's self-reported retro line as the evidence for SW-58.
-  Open item: a workflow-level L-vs-control run of `/sd:feature`. Note that `run-e2e.ps1` passes
-  `--no-session-persistence`, so `SD_E2E_KEEP=1` keeps no transcript.
+  records Verdict A on Claude Code 2.1.282, from transcript evidence with a control for every
+  pair. The Agent tool's `model` parameter overrides agent frontmatter (mechanism level), and
+  `/sd:feature` passes it exactly when `ESC-FEAT-02`, `ESC-FEAT-03` or `ESC-FEAT-04` fires
+  (workflow level). Each escalated call was served on its new tier; each control call stayed on
+  the default. This replaces SW-61's self-reported retro line as SW-58's evidence. Along the way:
+  a run's own summary claimed "ran at haiku" while `message.model` showed sonnet, and the e2e
+  sandbox is not isolated on Windows (SW-73).
+- **`tests/e2e/probe-model-override.ps1`** (SW-72) - manual, paid probe that re-runs ADR 0013's
+  workflow check. It runs an L vs control pair per case (`feat04`, `feat03`) and reads
+  `meta.json` / `message.model` from kept transcripts. `-EvaluateOnly` re-checks an earlier run at
+  no cost. It refuses an `-OutDir` with a `.claude` folder above it. Not part of `run-e2e.ps1` or
+  CI.
 - **Task check-off marker for `02-tasks.md`** (SW-71) - `sd-atomic-task-format` gains a
   "Check-off marker" section and is its only owner. The canonical form is a last line in each block,
   `- **Status**: <open | done>`. It is execution state, not one of the 11 contract fields.

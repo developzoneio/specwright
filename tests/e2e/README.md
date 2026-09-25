@@ -98,6 +98,21 @@ in this order, and prints the mode it picked:
   same way, switch it to the `CLAUDE_CODE_OAUTH_TOKEN` secret. The workflow already passes both
   secrets.
 
+### Model-override probe (manual)
+
+`probe-model-override.ps1` is a separate, manual and paid script, not part of `run-e2e.ps1` or
+CI. It is the reproducible method behind ADR 0013. It checks that `/sd:feature` passes the Agent
+tool's `model` parameter when an escalation rule fires, and that the call is served on that tier.
+The evidence is subagent `meta.json` and transcript `message.model`, never the model's own
+account. Re-run it when the minimum `claude` version above is raised.
+
+Two isolation facts it relies on also apply to this harness:
+
+- On Windows, a sandbox under `%TEMP%` is under the user profile. With no git root to stop the
+  walk, Claude Code loads the real `~/.claude` as project scope, which outranks the fake home. See
+  SW-73.
+- `--no-session-persistence` means `SD_E2E_KEEP=1` keeps no transcript.
+
 ## Permission mode - do not default to `acceptEdits`
 
 This was the single biggest surprise building this harness, worth stating plainly: **verified by a
