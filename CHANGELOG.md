@@ -295,6 +295,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sandbox root now defaults to `<SystemDrive>\sd-e2e` on Windows and stays at `GetTempPath()` on
   Unix. `SD_E2E_ROOT` overrides both. A preflight guard exits `2` and names the path when the root
   or any of its ancestors contains a `.claude` directory. Linux and macOS behaviour is unchanged.
+  Verified on Windows: scenario 06 passed under `C:\sd-e2e`, and a `feat04` probe re-run served
+  every `sd-implementer` call with no `model` parameter on haiku. ADR 0013 finding 2 now records
+  the fix.
 - **`/sd:feature` resume from `approved` no longer skips Phase 2** (SW-74) - the state machine
   sent `approved` with no `02-tasks.md` straight to Phase 3. A spec interrupted after Gate 1 was
   planned with no impact map, and `ESC-FEAT-02` never fired (ADR 0013 finding 4). The row is now

@@ -134,7 +134,11 @@ triggered them.
    This was reproduced on Linux with an ancestor `.claude/agents/sd/implementer.md`. It was served
    sonnet with no `.git`, and haiku with `git init` in the workspace. The probe now defaults
    `-OutDir` to the drive root and refuses any `-OutDir` with a `.claude` above it.
-   `tests/e2e/run-e2e.ps1` has the same gap; the fix is tracked in SW-73.
+   `tests/e2e/run-e2e.ps1` had the same gap. SW-73 fixed it the same way: its sandbox root is
+   `<SystemDrive>\sd-e2e` on Windows, and the preflight exits `2` if a `.claude` sits above the
+   root. Re-checked on Windows at commit `82d1394`, 2026-09-25: scenario 06 passed under
+   `C:\sd-e2e`, and a `feat04` probe re-run (`C:\sw72-20260925-140307`) served every
+   `sd-implementer` call that had no `model` parameter on `claude-haiku-4-5-20251001`.
 3. **Line endings are not a factor.** LF and CRLF agent frontmatter both resolved `model: haiku`,
    on Linux and on Windows. `*.md` is not pinned to LF in `.gitattributes`, and that is fine.
 4. **Resume skips `ESC-FEAT-02`.** `commands/feature.md`'s state machine sends `approved` with no
@@ -151,7 +155,9 @@ triggered them.
 - ADR 0002's "per-invocation main-thread override" is no longer an assumption, at either level.
 - A served-model claim needs `message.model` from a transcript. A `--no-session-persistence`
   run cannot provide it, and a model's summary does not count.
-- On Windows, any sandbox under the user profile reads the real `~/.claude` (SW-73).
+- On Windows, any sandbox under the user profile reads the real `~/.claude` (SW-73). Both
+  `run-e2e.ps1` and the probe now keep their sandboxes outside the profile and refuse a root with
+  a `.claude` above it.
 - The `unapplied` fallback in `sd-model-escalation` stays. It covers hosts or future versions
   where the parameter is dropped, and costs nothing when the override works.
 - The rejected Verdict B alternatives from SW-59 (`model: inherit` plus an advisory stop; an
