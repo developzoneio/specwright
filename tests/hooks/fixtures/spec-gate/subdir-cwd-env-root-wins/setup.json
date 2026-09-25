@@ -1,1 +1,1 @@
-{ "cwd": "vendor/lib", "env": { "CLAUDE_PROJECT_DIR": "{{ROOT}}" } }
+{ "cwd": "packages/lib", "env": { "CLAUDE_PROJECT_DIR": "{{ROOT}}" } }
