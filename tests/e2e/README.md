@@ -77,7 +77,10 @@ the walk runs all the way to the filesystem root. On Windows, `GetTempPath()` is
 `C:\Users\<user>\AppData\Local\Temp`, which is under the user profile. The walk therefore reached
 the real `C:\Users\<user>\.claude`, and its agents and skills shadowed the engine under test (a
 stale real `sd-implementer` was served the wrong model). On Linux and macOS, `/tmp` is not under
-`$HOME`, so the leak never appeared there. The harness handles this in two steps:
+`$HOME`, so the leak never appeared there. Settings do **not** leak this way: a hook in an ancestor
+`.claude/settings.json` did not fire, with or without `--setting-sources project`, while the same
+hook in the workspace's own `.claude/settings.json` did (Linux, `claude` 2.1.282, 2026-09-25).
+Only agents and skills walk up. The harness handles this in two steps:
 
 - **Sandbox root outside the profile.** Fake homes and workspaces are created under
   `<SystemDrive>\sd-e2e\` on Windows (for example `C:\sd-e2e\`) and under `GetTempPath()` on Unix.

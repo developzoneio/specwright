@@ -140,7 +140,11 @@ triggered them.
    `C:\sd-e2e`, and a `feat04` probe re-run (`C:\sw72-20260925-140307`) served every
    `sd-implementer` call that had no `model` parameter on `claude-haiku-4-5-20251001`. The
    developer's real `~/.claude/agents/sd/implementer.md` still had the stale `model: sonnet`
-   during that run, so the conflicting agent was present and did not leak in.
+   during that run, so the conflicting agent was present and did not leak in. Settings do not
+   walk up the same way: a `UserPromptSubmit` hook in an ancestor `.claude/settings.json` did not
+   fire, with or without `--setting-sources project` or a `.git`, while the same hook in the
+   workspace's own `.claude/settings.json` did. So real hooks never ran in the leaked sessions;
+   only agents and skills leaked.
 3. **Line endings are not a factor.** LF and CRLF agent frontmatter both resolved `model: haiku`,
    on Linux and on Windows. `*.md` is not pinned to LF in `.gitattributes`, and that is fine.
 4. **Resume skips `ESC-FEAT-02`.** `commands/feature.md`'s state machine sends `approved` with no
