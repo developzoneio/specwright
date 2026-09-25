@@ -199,6 +199,21 @@ runs are still required before this harness can be considered to satisfy SW-27's
 criterion - tracked as follow-up, not attempted further here to avoid spending real budget
 re-confirming a known, non-flaky failure.
 
+### Escalation scenarios (SW-61)
+
+First run of `06` and `07`, 2026-09-25, `claude` 2.1.282, Windows, subscription auth
+(`~/.claude/.credentials.json`), one `-Case` at a time:
+
+| Scenario | `total_cost_usd` | Assertions | Result |
+|---|---|---|---|
+| `06-escalation-implementer` | $0.7453 | 7/7 | pass |
+| `07-escalation-disabled` | $0.6820 | 5/5 | pass |
+
+In `06` the `ESC-FEAT-04` line was written before the T01 implementer call and no `unapplied`
+suffix appeared, so the Agent tool accepted a `model` parameter on this CLI version. That is
+the model's own account of the invocation, not a per-invocation model attribution read from a
+transcript - it does not settle SW-59.
+
 ## Known product gaps this harness surfaced
 
 **1. Rule 1 (`paths.protected`) appears to make `/sd:feature` unable to complete under a
