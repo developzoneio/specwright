@@ -286,6 +286,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   process-startup cost; see ADR 0012.
 
 ### Fixed
+- **`/sd:feature` resume from `approved` no longer skips Phase 2** (SW-74) - the state machine
+  sent `approved` with no `02-tasks.md` straight to Phase 3. A spec interrupted after Gate 1 was
+  planned with no impact map, and `ESC-FEAT-02` never fired (ADR 0013 finding 4). The row is now
+  split on the explorer's output heading, `## Impact analysis (sd-code-explorer)` in
+  `03-decisions.md`, the same idiom as `/sd:port`'s `## Behavior pinning`. Without that heading
+  the workflow resumes at Phase 2; with it, `impact-mapped`, it resumes at Phase 3, and no second
+  impact map is appended. There is also a new `plan-drafted` row. Phase 3 writes `02-tasks.md`
+  but the status stays `approved` until Gate 2 decides, and that state matched no row before; it
+  now resumes by presenting Gate 2.
 - **CI: the two bash negative-case installer steps could never pass** - GitHub runs `shell: bash`
   as `bash -e`, and the steps' own `set -uo pipefail` left `-e` on, so the first expected
   non-zero exit captured by `out="$(...)"; rc=$?` aborted the step before `rc` was read.

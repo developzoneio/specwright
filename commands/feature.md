@@ -19,7 +19,9 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
 |---|---|---|
 | No `.specs/FEAT-<arg>/` dir | `not-found` | Start Phase 1 |
 | `00-spec.md` exists, status=`draft` | `draft` | Present spec for Gate 1 |
-| status=`approved`, no `02-tasks.md` | `approved` | Start Phase 3 |
+| status=`approved`, no `02-tasks.md`, no `## Impact analysis (sd-code-explorer)` in `03-decisions.md` | `approved` | Start Phase 2 |
+| status=`approved`, no `02-tasks.md`, impact analysis present | `impact-mapped` | Start Phase 3 |
+| status=`approved`, `02-tasks.md` exists | `plan-drafted` | Present plan for Gate 2 |
 | `02-tasks.md` exists, unchecked tasks remain | `in-progress` | Resume Phase 4 at next unchecked task |
 | All tasks checked, no integration pass | `tasks-complete` | Start Phase 5 |
 | status=`done` | `done` | Print summary, exit |

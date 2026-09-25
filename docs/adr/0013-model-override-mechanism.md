@@ -139,8 +139,9 @@ triggered them.
    on Linux and on Windows. `*.md` is not pinned to LF in `.gitattributes`, and that is fine.
 4. **Resume skips `ESC-FEAT-02`.** `commands/feature.md`'s state machine sends `approved` with no
    `02-tasks.md` straight to Phase 3, so a spec resumed from `approved` never runs Phase 2 or its
-   escalation check. The `feat03` case starts from `draft` to avoid this. Whether that resume path
-   should re-run Phase 2 is left to the epic.
+   escalation check. The `feat03` case starts from `draft` to avoid this. Fixed in SW-74: the
+   state machine now resumes `approved` at Phase 2 unless `03-decisions.md` already has the
+   explorer's `## Impact analysis (sd-code-explorer)` heading.
 5. **Harness transcripts.** `run-e2e.ps1` passes `--no-session-persistence`, so `SD_E2E_KEEP=1`
    keeps the fake home but writes no transcript. The probe omits that flag on purpose. The harness
    should keep it, because artifact assertions do not need transcripts.
