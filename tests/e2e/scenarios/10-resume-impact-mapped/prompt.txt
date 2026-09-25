@@ -1,0 +1,12 @@
+/sd:feature e2e-resume-mapped
+
+FEAT-e2e-resume-mapped is a synthetic fixture spec seeded by this e2e scenario. Gate 1 has already passed: it is
+`approved`, and the session that approved it ended before it finished. Detect where to resume from
+the workflow's state machine exactly as written. Its `complexity` frontmatter value was set by the
+fixture author on purpose; use it exactly as written and do not edit it.
+
+This is a headless, scripted test run with no human available to reply mid-workflow. Do not stop
+and wait for a real person. Run every phase the state machine sends you to, following each step as
+written, including any model escalation check. Stop as soon as Gate 2 has been presented, whichever
+face it shows. Do not answer Gate 2 and do not start Phase 4. Report which phase you resumed at in
+your last message.

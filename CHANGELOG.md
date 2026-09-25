@@ -295,6 +295,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   impact map is appended. There is also a new `plan-drafted` row. Phase 3 writes `02-tasks.md`
   but the status stays `approved` until Gate 2 decides, and that state matched no row before; it
   now resumes by presenting Gate 2.
+- **e2e scenarios `09-resume-approved` and `10-resume-impact-mapped`** (SW-74) - a run/control
+  pair for the fix above. 09 seeds an `approved` `complexity: L` spec with no impact map and
+  asserts the resume runs Phase 2: one explorer impact section, the `ESC-FEAT-02` retro line, and
+  a stop at Gate 2 with no code change. 10 seeds the impact map and asserts Phase 3 only, with no
+  second map and no `ESC-FEAT-02` line. The assertions were checked offline against simulated
+  outcomes; the pre-SW-74 behavior fails 09 on exactly the impact-map and escalation checks.
 - **CI: the two bash negative-case installer steps could never pass** - GitHub runs `shell: bash`
   as `bash -e`, and the steps' own `set -uo pipefail` left `-e` on, so the first expected
   non-zero exit captured by `out="$(...)"; rc=$?` aborted the step before `rc` was read.
