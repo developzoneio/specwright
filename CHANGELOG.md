@@ -299,8 +299,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pair for the fix above. 09 seeds an `approved` `complexity: L` spec with no impact map and
   asserts the resume runs Phase 2: one explorer impact section, the `ESC-FEAT-02` retro line, and
   a stop at Gate 2 with no code change. 10 seeds the impact map and asserts Phase 3 only, with no
-  second map and no `ESC-FEAT-02` line. The assertions were checked offline against simulated
-  outcomes; the pre-SW-74 behavior fails 09 on exactly the impact-map and escalation checks.
+  second map and no `ESC-FEAT-02` line. Both passed on a live run (6/6 each, `claude` 2.1.282,
+  Windows). Offline, against simulated outcomes, the pre-SW-74 behavior fails 09 on exactly the
+  impact-map and escalation checks.
 - **CI: the two bash negative-case installer steps could never pass** - GitHub runs `shell: bash`
   as `bash -e`, and the steps' own `set -uo pipefail` left `-e` on, so the first expected
   non-zero exit captured by `out="$(...)"; rc=$?` aborted the step before `rc` was read.

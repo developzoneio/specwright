@@ -230,7 +230,24 @@ First run of `06` and `07`, 2026-09-25, `claude` 2.1.282, Windows, subscription 
 In `06` the `ESC-FEAT-04` line was written before the T01 implementer call and no `unapplied`
 suffix appeared, so the Agent tool accepted a `model` parameter on this CLI version. That is
 the model's own account of the invocation, not a per-invocation model attribution read from a
-transcript - it does not settle SW-59.
+transcript - it does not settle SW-59. (Settled since by ADR 0013, from transcript evidence.)
+
+### Resume-from-approved scenarios (SW-74)
+
+First run of `09` and `10`, 2026-09-25, `claude` 2.1.282, Windows, subscription auth
+(`~/.claude/.credentials.json`), one `-Case` at a time. `SD_E2E_DEBUG` was unset, so cost was not
+recorded:
+
+| Scenario | Assertions | Result |
+|---|---|---|
+| `09-resume-approved` | 6/6 | pass |
+| `10-resume-impact-mapped` | 6/6 | pass |
+
+`09` passing is the live proof of the SW-74 fix. Under the pre-SW-74 state machine, an `approved`
+spec skipped Phase 2, and its impact-section and `ESC-FEAT-02` assertions fail. That was checked
+offline against a simulated old-behavior workspace before the run. On Windows, run these with
+`TMP`/`TEMP` pointed outside the user profile until SW-73 lands. Otherwise the sandbox also loads
+the real `~/.claude`, including its installed `feature.md`.
 
 ## Known product gaps this harness surfaced
 
