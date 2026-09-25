@@ -64,6 +64,7 @@ wording can improve in one commit while a divergence still fails.
 | `cl203-declared-tool-never-mentioned` | CL203 |
 | `cl204-write-capable-agent-block` | CL204 |
 | `cl205-readonly-block-passive-artifact-write` | CL205 |
+| `cl206-edit-tool-instruction-missing` | CL206, phrase only inside a fence |
 | `cl300-gate-without-stop` | CL300 |
 | `cl301-gate-without-options` | CL301 |
 | `cl302-gate-count-disagrees` | CL302 |
@@ -96,6 +97,7 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-cl401-placeholder-and-fenced-example` | a language name inside a `<<placeholder>>` and inside a fenced example | `commands/setup.md`, `agents/spec-architect.md` |
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |
 | `fp-cl009-phrase-outside-phase0` | bootstrap guard text inside the skill that owns it, in a fenced example, and outside Phase 0; a Phase 0 that reads the skill at runtime | `skills/sd-bootstrap-guard/SKILL.md`, the Phase 0 of every workflow command |
+| `fp-cl206-phrase-wrapped` | the `editToolOnly` phrase wrapped across two lines of a rules bullet | `## Rules (hard constraints)` of every command in `contractLint.editToolOnly` |
 
 ## The case that must still BITE
 

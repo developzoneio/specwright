@@ -178,6 +178,9 @@ Print:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - This command NEVER invokes a subagent. Pure file ops, like `/sd:spec`.
 - It writes ONLY: `CHANGELOG.md` (repo root), `.specs/index.md`, and per-released-spec `00-spec.md` frontmatter + `05-retro.md`. It never touches code, the constitution, or `.claude/`.
 - Only `done` specs of type feature / bug / refactor / perf / port are released and archived. RCA specs are left untouched.

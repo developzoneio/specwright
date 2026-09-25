@@ -244,6 +244,9 @@ Ask:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Reproduction (Gate 2) is HARD. No fix without repro.
 - Root cause (Gate 3) is HARD. No fix without a named, fixable cause.
 - Failing test FIRST (Gate 4). Never invert this order.

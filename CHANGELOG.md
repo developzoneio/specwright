@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`hooks/bash/spec-gate.sh`, `hooks/powershell/spec-gate.ps1`, workflow commands** (SW-79) -
+  `spec-gate` was wired only for `Edit|Write|MultiEdit`, so a workflow that moved a spec's status
+  with `Bash` `sed -i` on `.specs/index.md` sidestepped Rules 0, 0b and 1 and recorded no
+  `spec_transition` event (seen in e2e scenario `02-feature-happy`). Two layers now close it:
+  - **Prompt.** `commands/feature.md`, `bug`, `refactor`, `perf`, `rca`, `port`, `spec` and
+    `release` each carry a hard rule to change the index and any spec `status:` field with the
+    Edit tool only, never a shell command. New contract-lint rule `CL206` keeps it there.
+  - **Hook.** The matcher is now `Edit|Write|MultiEdit|Bash|PowerShell` (in
+    `templates/settings.template.json`, `examples/fixture-project`, and the installers' printed
+    wiring). A shell command that visibly writes a protected path or the spec index (`sed -i`,
+    `perl -i`, `>`/`>>`, `tee`, `Set-Content`, `Add-Content`, `Out-File`) is denied in every
+    mode and recorded as a new `gate:"shell-write"` event. It is a text heuristic, not a
+    guarantee (`cd .specs && sed -i ... index.md` still gets through). A command with no write
+    marker exits before any disk read. The bash Rule 1 loop is factored into
+    `is_protected_rel`, mirroring `Test-IsProtected`.
+  - `/sd:setup` gains drift check A.4, which flags a `spec-gate` matcher without `Bash` /
+    `PowerShell` in an existing `settings.json` (later checks renumber to 5-9).
+    `commands/status.md` and `docs/architecture.md` list the new gate kind.
+  - There are 9 new `tests/hooks` spec-gate fixtures (`block-bash-*`,
+    `block-powershell-set-content-index`, `subdir-cwd-block-bash-absolute-index`,
+    `allow-bash-*`), and `latency-selection.json` samples a cheap and a blocking Bash case.
 - **`hooks/bash/*.sh`, `hooks/powershell/*.ps1`** (SW-78) - all three hooks now resolve the
   project root instead of trusting the hook payload's `cwd`, which Claude Code sets to the session's
   *current* directory (a Bash `cd` moves it). The root is `CLAUDE_PROJECT_DIR` when set; otherwise
@@ -34,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **Contract-lint rule `CL206` (BLOCK)** (SW-79) - a command listed in the new
+  `contractLint.editToolOnly.files` must state `contractLint.editToolOnly.phrase` ("with the Edit
+  tool only - never a shell command") outside a fence, wrapping across two lines allowed. The
+  files are declared, not inferred; a listed file that does not exist exits 2. Fixtures
+  `cl206-edit-tool-instruction-missing` and `fp-cl206-phrase-wrapped`.
+- **`tests/e2e`** (SW-79) - `SD_E2E_TRANSCRIPT=1` makes `run-e2e.ps1` drop
+  `--no-session-persistence` and keep the fake home, so a run's session transcript can be read.
+  Scenario `02-feature-happy` now asserts all four allowed `spec_transition` events in
+  `events.jsonl` and no `shell-write` gate.
 - **ADR 0013: model override mechanism** (SW-72) - `docs/adr/0013-model-override-mechanism.md`
   records Verdict A on Claude Code 2.1.282, from transcript evidence with a control for every
   pair. The Agent tool's `model` parameter overrides agent frontmatter (mechanism level), and

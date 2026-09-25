@@ -18,6 +18,10 @@
           mode=block -> output block JSON to stdout (see Write-BlockDecision).
           mode=warn  -> write a warning to stderr; allow the edit.
           mode=off   -> always allow.
+    A Bash / PowerShell tool call is checked by the shell-write rule instead
+    (SW-79): a command that visibly writes a protected path or the spec index
+    (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File) is
+    blocked in every mode. Heuristic - see Get-ShellWriteTarget below.
 
     Output schema (dual-format for forward + backward compatibility):
       New:    hookSpecificOutput.permissionDecision = "deny"   (CLI >= schema v2)
@@ -841,6 +845,138 @@ function Test-VerifyArtifactPass {
     return ($content -match '(?im)^result:\s*pass\s*$')
 }
 
+# SW-79: shell-write rule for the Bash / PowerShell tool. A shell command can
+# change .specs/index.md or a protected file without the Edit tool, which would
+# sidestep Rules 0, 0b and 1 and leave no spec_transition event. This denies a
+# command that VISIBLY writes a protected path or the spec index. It is a
+# HEURISTIC, not a guarantee: it reads the command text only, so
+# `cd .specs && sed -i ... index.md`, an interpreter one-liner (python -c,
+# node -e) or a path held in a variable gets through. The workflows' own
+# "Edit tool only" instruction is the primary control; this is the backstop.
+#
+# Algorithm (must stay identical to shell_write_target in spec-gate.sh):
+#   1. Lowercase the command and turn '\' into '/'.
+#   2. Scan it once, tracking single / double quotes. Outside quotes:
+#      ';', '|', '&', CR and LF end the SEGMENT; blank, tab, '(' and ')' end
+#      the token; '>' ends the token and is a '>' token of its own; a quote
+#      character opens a quote and is dropped. Inside a quote every character
+#      is part of the token until the matching quote closes it. Empty tokens
+#      are dropped. So `sed -i 's/| draft |/| approved |/' f` stays one
+#      segment, and an unterminated quote simply runs to the end.
+#   3. The segment is a WRITER when its command word (basename of the first
+#      token) is tee / set-content / add-content / out-file, or is
+#      sed / gsed / perl with an in-place flag (a single-dash cluster that
+#      reaches an 'i', e.g. -i, -i.bak, -pi, or --in-place).
+#   4. Candidate paths: every token after the command word of a writer
+#      segment, and the token after any '>' (a redirect target, '>>'
+#      included) in any segment.
+#   5. A candidate starting with '$' or '~' drops its first segment
+#      ($ROOT/.specs/index.md -> .specs/index.md); any other relative one is
+#      anchored on cwd as file_path is; then ConvertTo-RelativePath. A result
+#      that is the spec index or matches paths.protected is a hit.
+# Returns the first hit's root-relative path, or $null on no hit.
+function Get-ShellSegmentHit {
+    param(
+        [System.Collections.Generic.List[string]]$Tokens,
+        [string]$Cwd,
+        [string]$Root,
+        [string]$CwdCollapsed,
+        [string]$RootCollapsed,
+        [string]$IndexCollapsed,
+        [string[]]$Protected
+    )
+    if ($Tokens.Count -eq 0) { return $null }
+    $verb = $Tokens[0]
+    $slash = $verb.LastIndexOf('/')
+    if ($slash -ge 0) { $verb = $verb.Substring($slash + 1) }
+    $writer = $false
+    if (@('tee', 'set-content', 'add-content', 'out-file') -ccontains $verb) {
+        $writer = $true
+    } elseif (@('sed', 'gsed', 'perl') -ccontains $verb) {
+        for ($j = 1; $j -lt $Tokens.Count; $j++) {
+            if (($Tokens[$j] -cmatch '^-[a-z0-9.]*i') -or $Tokens[$j].StartsWith('--in-place', [System.StringComparison]::Ordinal)) {
+                $writer = $true
+                break
+            }
+        }
+    }
+    $prev = ''
+    for ($k = 0; $k -lt $Tokens.Count; $k++) {
+        $tok = $Tokens[$k]
+        if ($tok -ceq '>') {
+            $prev = '>'
+            continue
+        }
+        if (($prev -ceq '>') -or ($writer -and $k -ge 1)) {
+            $rel = ''
+            if ($tok.StartsWith('$', [System.StringComparison]::Ordinal) -or $tok.StartsWith('~', [System.StringComparison]::Ordinal)) {
+                $cut = $tok.IndexOf('/')
+                if ($cut -ge 0) { $rel = ConvertTo-CollapsedPath -Path $tok.Substring($cut + 1) }
+            } else {
+                $cand = $tok
+                if ((-not (Test-IsRootedPath $cand)) -and ($CwdCollapsed -cne $RootCollapsed)) {
+                    $cand = $Cwd.TrimEnd('/', '\') + '/' + $cand
+                }
+                $rel = ConvertTo-RelativePath -Root $Root -FilePath $cand
+            }
+            if (-not [string]::IsNullOrEmpty($rel)) {
+                if ([string]::Equals($rel, $IndexCollapsed, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    (Test-IsProtected -RelPath $rel -Protected $Protected)) {
+                    return $rel
+                }
+            }
+        }
+        $prev = ''
+    }
+    return $null
+}
+
+function Get-ShellWriteTarget {
+    param(
+        [string]$CommandLower,
+        [string]$Cwd,
+        [string]$Root,
+        [string]$IndexRel,
+        [string[]]$Protected
+    )
+    $cwdC = ConvertTo-CollapsedPath -Path $Cwd.Replace('\','/')
+    $rootC = ConvertTo-CollapsedPath -Path $Root.Replace('\','/')
+    $indexC = ConvertTo-CollapsedPath -Path $IndexRel.Replace('\','/')
+    $cmd = $CommandLower.Replace('\','/')
+    $toks = New-Object System.Collections.Generic.List[string]
+    $tok = New-Object System.Text.StringBuilder
+    $q = [char]0
+    for ($i = 0; $i -le $cmd.Length; $i++) {
+        if ($i -eq $cmd.Length) {
+            # End of input closes any open quote and the last segment.
+            $q = [char]0
+            $c = [char]10
+        } else {
+            $c = $cmd[$i]
+        }
+        if ($q -ne [char]0) {
+            if ($c -eq $q) { $q = [char]0 } else { [void]$tok.Append($c) }
+            continue
+        }
+        if ($c -eq [char]39 -or $c -eq [char]34) {
+            $q = $c
+        } elseif ($c -eq ' ' -or $c -eq [char]9 -or $c -eq '(' -or $c -eq ')') {
+            if ($tok.Length -gt 0) { [void]$toks.Add($tok.ToString()); [void]$tok.Clear() }
+        } elseif ($c -eq '>') {
+            if ($tok.Length -gt 0) { [void]$toks.Add($tok.ToString()); [void]$tok.Clear() }
+            [void]$toks.Add('>')
+        } elseif ($c -eq ';' -or $c -eq '|' -or $c -eq '&' -or $c -eq [char]13 -or $c -eq [char]10) {
+            if ($tok.Length -gt 0) { [void]$toks.Add($tok.ToString()); [void]$tok.Clear() }
+            $hit = Get-ShellSegmentHit -Tokens $toks -Cwd $Cwd -Root $Root -CwdCollapsed $cwdC -RootCollapsed $rootC -IndexCollapsed $indexC -Protected $Protected
+            if ($hit) { return $hit }
+            $toks.Clear()
+        } else {
+            [void]$tok.Append($c)
+        }
+    }
+    return $null
+}
+
 function Write-BlockDecision {
     param([string]$Reason)
     # Dual-format: new hookSpecificOutput schema + legacy decision field.
@@ -862,31 +998,52 @@ $hookInput = Read-StdinJson
 if ($null -eq $hookInput) { exit 0 }
 
 $toolName = $hookInput.tool_name
-if ($toolName -ne 'Edit' -and $toolName -ne 'Write' -and $toolName -ne 'MultiEdit') { exit 0 }
+$isShell = $false
+if ($toolName -ceq 'Bash' -or $toolName -ceq 'PowerShell') {
+    $isShell = $true
+} elseif ($toolName -ne 'Edit' -and $toolName -ne 'Write' -and $toolName -ne 'MultiEdit') {
+    exit 0
+}
 
 $cwd = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
 $projectRoot = Resolve-ProjectRoot -Cwd $cwd
 
-# SW-50: these two checks are pure string ops with zero I/O, so they run
+# SW-50: these checks are pure string ops with zero I/O, so they run
 # BEFORE Get-ProjectConfig (which reads project-config.json from disk).
 # Most tool calls in a session never touch a gate-relevant path, so this
 # ordering avoids a config-file read on the common case. Mirrors
 # spec-gate.sh, which already checked file_path before reading config.
-$filePath = $hookInput.tool_input.file_path
-if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
+$rel = $null
+$shellCmdLower = ''
+if ($isShell) {
+    # SW-79: a shell command has no file_path. The hook now runs on EVERY
+    # shell call (ADR 0012 latency budget), so a command that carries none of
+    # the write markers the shell-write rule looks for exits here.
+    $shellCmd = [string]$hookInput.tool_input.command
+    if ([string]::IsNullOrWhiteSpace($shellCmd)) { exit 0 }
+    $shellCmdLower = $shellCmd.ToLowerInvariant()
+    $hasMarker = $false
+    foreach ($marker in @('>', 'sed', 'perl', 'tee', 'set-content', 'add-content', 'out-file')) {
+        if ($shellCmdLower.Contains($marker)) { $hasMarker = $true; break }
+    }
+    if (-not $hasMarker) { exit 0 }
+} else {
+    $filePath = $hookInput.tool_input.file_path
+    if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
 
-# A relative file_path is relative to the SESSION cwd. When that is the root,
-# keep the historical relative handling untouched; otherwise anchor it on cwd
-# first so e.g. '../index.md' typed from .specs/FEAT-x lands on .specs/index.md.
-# Mirrors spec-gate.sh (ordinal compare, like bash's string compare).
-if ((-not (Test-IsRootedPath $filePath)) -and
-    ((ConvertTo-CollapsedPath -Path $cwd.Replace('\','/')) -cne (ConvertTo-CollapsedPath -Path $projectRoot.Replace('\','/')))) {
-    $filePath = $cwd.TrimEnd('/', '\') + '/' + $filePath
+    # A relative file_path is relative to the SESSION cwd. When that is the root,
+    # keep the historical relative handling untouched; otherwise anchor it on cwd
+    # first so e.g. '../index.md' typed from .specs/FEAT-x lands on .specs/index.md.
+    # Mirrors spec-gate.sh (ordinal compare, like bash's string compare).
+    if ((-not (Test-IsRootedPath $filePath)) -and
+        ((ConvertTo-CollapsedPath -Path $cwd.Replace('\','/')) -cne (ConvertTo-CollapsedPath -Path $projectRoot.Replace('\','/')))) {
+        $filePath = $cwd.TrimEnd('/', '\') + '/' + $filePath
+    }
+
+    $rel = ConvertTo-RelativePath -Root $projectRoot -FilePath $filePath
+    if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
 }
-
-$rel = ConvertTo-RelativePath -Root $projectRoot -FilePath $filePath
-if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
 
 $config = Get-ProjectConfig -Root $projectRoot
 $specPrefixes = Get-SpecPrefixAlternation -Config $config
@@ -907,6 +1064,20 @@ try {
 $mode = 'warn'
 try { if ($config.hooks.specGate.mode) { $mode = [string]$config.hooks.specGate.mode } } catch { }
 if ($mode -eq 'off') { exit 0 }
+
+if ($isShell) {
+    $shellIndexRel = '.specs/index.md'
+    try { if ($config.spec.indexFile) { $shellIndexRel = ([string]$config.spec.indexFile).Replace('\','/') } } catch { }
+    $shellProtected = @()
+    try { if ($config.paths.protected) { $shellProtected = @($config.paths.protected) } } catch { }
+    $shellHit = Get-ShellWriteTarget -CommandLower $shellCmdLower -Cwd $cwd -Root $projectRoot -IndexRel $shellIndexRel -Protected $shellProtected
+    if ($shellHit) {
+        # Blocks in every mode, like Rule 1: mode only governs code edits.
+        Write-BlockDecision "spec-gate: this shell command writes '$shellHit', which is protected (paths.protected or the spec index). Make the change with the Edit tool so spec-gate can check it (Rules 0, 0b, 1)."
+        Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'shell-write' -Decision 'block'
+    }
+    exit 0
+}
 
 # Rule 0: verify gate on the spec index. A row transitioning to done requires
 # a passing /sd:verify artifact; a verified close-out is allowed through the

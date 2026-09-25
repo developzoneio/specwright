@@ -51,6 +51,10 @@ $env:SD_E2E_DEBUG = '1'; .\tests\e2e\run-e2e.ps1
 
 # Keep the throwaway workspace and fake home after a run instead of deleting them (debugging only)
 $env:SD_E2E_KEEP = '1'; .\tests\e2e\run-e2e.ps1 -Case 01-setup
+
+# Keep the session transcript too: drops --no-session-persistence and implies SD_E2E_KEEP. The
+# transcript lands under <fakeHome>\.claude\projects\ (the path is printed) (SW-79)
+$env:SD_E2E_TRANSCRIPT = '1'; .\tests\e2e\run-e2e.ps1 -Case 02-feature-happy
 ```
 
 Not wired into the per-PR `ci.yml` job - see "CI placement" below.
@@ -98,8 +102,9 @@ Verified on Windows, 2026-09-25, `claude` 2.1.282: scenario `06-escalation-imple
 under `C:\sd-e2e`. A kept-transcript `tests/e2e/probe-model-override.ps1 -Case feat04` run, which
 uses the same drive-root layout, served every `sd-implementer` call that had no `model` parameter
 on `claude-haiku-4-5-20251001`, the fake home's `model: haiku`. The real `~/.claude` still had a
-conflicting `sd-implementer` with `model: sonnet` during that run. `run-e2e.ps1` itself keeps no
-transcript (`--no-session-persistence`), so the served-model evidence comes from the probe.
+conflicting `sd-implementer` with `model: sonnet` during that run. `run-e2e.ps1` keeps no
+transcript by default (`--no-session-persistence`), so the served-model evidence comes from the
+probe. `SD_E2E_TRANSCRIPT=1` (SW-79) now keeps one for any scenario.
 
 `git init` in each workspace would also stop the walk, but it was not chosen: it changes the
 fixture, and `/sd:setup` and other workflows can behave differently inside a git repository.
@@ -149,7 +154,8 @@ Two isolation facts it relies on also apply to this harness:
 - On Windows, a sandbox under `%TEMP%` is under the user profile. With no git root to stop the
   walk, Claude Code loads the real `~/.claude` as project scope, which outranks the fake home. See
   SW-73.
-- `--no-session-persistence` means `SD_E2E_KEEP=1` keeps no transcript.
+- `--no-session-persistence` means `SD_E2E_KEEP=1` keeps no transcript. Use
+  `SD_E2E_TRANSCRIPT=1` instead when you need one (SW-79).
 
 ## Permission mode - do not default to `acceptEdits`
 
@@ -197,7 +203,7 @@ modes.
 | # | Scenario | Claim under test |
 |---|---|---|
 | 1 | `01-setup` | `/sd:setup` on a bare, unscaffolded project produces `CLAUDE.md`, `.specs/`, `.claude/project-config.json`, `.claude/settings.json`, all BOM-free. |
-| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. |
+| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). |
 | 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. |
 | 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. |
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
@@ -331,11 +337,17 @@ is not diagnosed here - worth investigating alongside the Rule 1 fix rather than
 are identical. This also means the suite has not yet achieved a clean run, so the "reproducible
 green 3x" acceptance bar (see "Cost and CI placement" above) remains open.
 
-**2. `spec-gate`'s `PreToolUse` matcher only covers the `Edit`, `Write`, and `MultiEdit` tools.** A
-model that is willing to bypass the intended workflow (unlike the well-aligned behavior seen while
-building this harness - see "Scenario prompts" above) could in principle write the same file
-change through `Bash` (`sed`, `cat <<EOF >`, ...), which the hook never sees. This is not a defect
-in this harness or in `spec-gate` as scoped; it is a real, previously-unverified boundary of what
-the hook covers, discovered by driving a real session instead of only unit-testing the hook script
-in isolation. Worth a follow-up ticket if Bash-mediated code edits during an active spec workflow
-turn out to matter in practice.
+**2. `spec-gate`'s `PreToolUse` matcher only covered the `Edit`, `Write`, and `MultiEdit` tools -
+addressed by SW-79.** A model could write the same file change through `Bash` (`sed`,
+`cat <<EOF >`, ...), which the hook never saw. The 2026-09-25 run of `02-feature-happy` (CLI
+2.1.282, kept transcript) showed that this was not hypothetical: `draft -> approved` and
+`approved -> in-progress` went through `Bash` `sed -i` on `.specs/index.md` and `00-spec.md`, so
+Rules 0, 0b and 1 were sidestepped and two `spec_transition` events were never recorded. The fix has
+two layers. Every workflow that writes the index or a status now says to do it with the Edit tool
+only, and contract-lint `CL206` keeps that sentence in place. `spec-gate` also matches `Bash` and
+`PowerShell` and denies a command that visibly writes a protected path or the spec index, recording
+a `gate:"shell-write"` event. The hook half reads the command text only, so it is a heuristic, not a
+guarantee: `cd .specs && sed -i ... index.md` still gets through. Scenario 02 now asserts all four
+transitions and no `shell-write` gate, so a regression of the prompt half fails the run.
+`acceptEdits` still overrides a hook deny (see above), so under that mode the assertions, not the
+deny, are what catch it.

@@ -1,0 +1,5 @@
+{
+  "spec": { "dir": ".specs", "indexFile": ".specs/index.md" },
+  "paths": { "protected": [".specs/constitution.md"] },
+  "hooks": { "specGate": { "enabled": true, "mode": "block" } }
+}

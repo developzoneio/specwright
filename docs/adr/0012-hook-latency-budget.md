@@ -11,7 +11,8 @@
 
 The shipped wiring (`templates/settings.template.json`) runs every PowerShell hook as a fresh
 `powershell -NoProfile -ExecutionPolicy Bypass -File ...` process: Windows PowerShell 5.1, not
-pwsh. `spec-gate` fires on every `Edit|Write|MultiEdit` and grew from about 250 to about 800 lines
+pwsh. `spec-gate` fires on every `Edit|Write|MultiEdit` (since SW-79 also every `Bash|PowerShell`
+call, which exits on a pure string check unless the command carries a write marker) and grew from about 250 to about 800 lines
 across 1.4.0-1.6.0. Nothing measured what that cost, and nothing in CI would notice if it doubled.
 The configured timeouts are 5 s (`spec-gate`, `prompt-router`) and 3 s (`subagent-retro`). The
 ticket's worry was that 5.1 cold start plus the script could approach them on a slow machine.

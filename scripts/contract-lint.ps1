@@ -230,7 +230,7 @@ foreach ($r in $cl.rules) {
 $dispatchIds = @(
     'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008', 'CL009',
     'CL100', 'CL101', 'CL102', 'CL103', 'CL104',
-    'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205',
+    'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205', 'CL206',
     'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
     'CL400', 'CL401', 'CL402',
     'CL900', 'CL901', 'CL902'
@@ -325,6 +325,32 @@ if ($cl.PSObject.Properties.Name.Contains('gates') -and $null -ne $cl.gates) {
         if ($null -ne $p.Value.conditional) { $conds = @($p.Value.conditional | ForEach-Object { [string]$_ }) }
         $gateCond[$gf] = $conds
         [void]$gateFiles.Add($gf)
+    }
+}
+
+# editToolOnly (CL206, SW-79): the phrase every listed command must carry.
+# Optional key; a listed file that does not exist, or files with no phrase,
+# is a broken contract (exit 2), the same as gates.
+$editToolOnlyPhrase = ''
+$editToolOnlyFiles = New-OrdinalSet
+if ($cl.PSObject.Properties.Name.Contains('editToolOnly') -and $null -ne $cl.editToolOnly) {
+    if ($cl.editToolOnly.PSObject.Properties.Name.Contains('phrase') -and $null -ne $cl.editToolOnly.phrase) {
+        $editToolOnlyPhrase = [string]$cl.editToolOnly.phrase
+    }
+    if ($cl.editToolOnly.PSObject.Properties.Name.Contains('files')) {
+        foreach ($ef in @($cl.editToolOnly.files)) {
+            $ef = [string]$ef
+            if ($ef.Length -eq 0) { continue }
+            if (-not (Test-Path -LiteralPath (Join-Path $Root $ef) -PathType Leaf)) {
+                Write-Err "contract-lint: contractLint.editToolOnly names a file that does not exist: $ef"
+                exit 2
+            }
+            if ($editToolOnlyPhrase.Length -eq 0) {
+                Write-Err "contract-lint: contractLint.editToolOnly lists files but no phrase"
+                exit 2
+            }
+            [void]$editToolOnlyFiles.Add($ef)
+        }
     }
 }
 
@@ -1081,6 +1107,37 @@ foreach ($a in $anchors) {
         if ([regex]::IsMatch((Get-StepText $a.File $startIdx $j), $RE_MAINTHREAD)) { continue }
         if (-not $cl205Seen.Add($a.File + ':' + ($j + 1))) { continue }
         Add-Finding 'CL205' $a.File ($j + 1) "step asserts a spec-artifact write inside the block of '$($a.Agent)', which has no write tool, and names no main-thread writer"
+    }
+}
+
+# CL206 - a workflow that writes .specs/index.md or a spec's status: must tell
+# the model to do it with the Edit tool, never a shell command (SW-79): a
+# shell write sidesteps spec-gate's Rules 0, 0b and 1 and records no
+# spec_transition event. The files are DECLARED (contractLint.editToolOnly),
+# not inferred - "does this command write the index" is not decidable from
+# prose. The phrase must sit on a non-fenced line, or be wrapped across it and
+# the next non-fenced line (trimmed, joined with one space, as CL009 joins).
+# Ordinal .Contains. Reported on line 1: the defect is an absence.
+if ($editToolOnlyFiles.Count -gt 0) {
+    $cl206Blank = [char[]]@([char]32, [char]9)
+    foreach ($rel in $scanFiles) {
+        if (-not $editToolOnlyFiles.Contains($rel)) { continue }
+        $lines = $fileLines[$rel]
+        $fence = $fileFence[$rel]
+        $found = $false
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($fence[$i]) { continue }
+            $cur = $lines[$i].Trim($cl206Blank)
+            if ($cur.Contains($editToolOnlyPhrase)) { $found = $true; break }
+            $j = $i + 1
+            if ($j -lt $lines.Length -and -not $fence[$j]) {
+                $nxt = $lines[$j].Trim($cl206Blank)
+                if (($cur + ' ' + $nxt).Contains($editToolOnlyPhrase)) { $found = $true; break }
+            }
+        }
+        if (-not $found) {
+            Add-Finding 'CL206' $rel 1 "workflow writes the spec index or a spec status but never says to do it with the Edit tool only (contractLint.editToolOnly.phrase)"
+        }
     }
 }
 

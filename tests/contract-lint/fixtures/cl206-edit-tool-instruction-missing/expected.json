@@ -1,0 +1,11 @@
+{
+  "note": "commands/alpha.md is declared in contractLint.editToolOnly but carries the phrase only inside a fenced example, which is quoted, not stated (SW-79)",
+  "findings": [
+    {
+      "rule": "CL206",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "file"
+    }
+  ]
+}

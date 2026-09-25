@@ -245,6 +245,9 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Gate 2 (Coverage) is HARD. No code edits until threshold met OR explicit exception logged.
 - Gate 5 (Tests green per batch) is HARD. A red batch is reverted or fixed - never deferred.
 - Implementer in refactor mode has the tightest scope discipline. Any "improvement" beyond restructuring is rejected.

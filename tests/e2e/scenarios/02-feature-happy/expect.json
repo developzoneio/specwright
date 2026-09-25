@@ -4,5 +4,10 @@
   { "type": "file-exists", "path": ".specs/FEAT-todo-count/02-tasks.md" },
   { "type": "file-exists", "path": ".specs/FEAT-todo-count/06-verify.md" },
   { "type": "file-matches", "path": ".specs/FEAT-todo-count/06-verify.md", "pattern": "(?im)^result:\\s*pass\\s*$" },
-  { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-todo-count\\s*\\|\\s*feature\\s*\\|\\s*done" }
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-todo-count\\s*\\|\\s*feature\\s*\\|\\s*done" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"draft\",\"event\":\"spec_transition\",\"from\":\"-\",\"decision\":\"allow\"" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"approved\",\"event\":\"spec_transition\",\"from\":\"draft\",\"decision\":\"allow\"" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"in-progress\",\"event\":\"spec_transition\",\"from\":\"approved\",\"decision\":\"allow\"" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"done\",\"event\":\"spec_transition\",\"from\":\"in-progress\",\"decision\":\"allow\"" },
+  { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }
 ]

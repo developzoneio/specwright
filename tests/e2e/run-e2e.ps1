@@ -27,6 +27,12 @@
     <SystemDrive>\sd-e2e there; Unix keeps GetTempPath(). SD_E2E_ROOT
     overrides both.
 
+    Debug switches (any non-empty value turns one on): SD_E2E_DEBUG prints
+    claude's result and the workspace's events.jsonl; SD_E2E_KEEP keeps the
+    workspace and fake home; SD_E2E_TRANSCRIPT (SW-79) drops
+    --no-session-persistence so the session transcript is written under
+    <fakeHome>/.claude/projects/, and implies SD_E2E_KEEP.
+
     Each scenario directory under scenarios/<name>/ may contain:
       source.txt   - optional, one line: a repo-relative path to copy as the
                       base workspace (e.g. examples/fixture-project).
@@ -302,9 +308,14 @@ function Invoke-ClaudeHeadless {
         '--output-format', 'json',
         '--setting-sources', 'project',
         '--add-dir', $FakeHome,
-        '--max-budget-usd', $MaxBudgetUsd.ToString([System.Globalization.CultureInfo]::InvariantCulture),
-        '--no-session-persistence'
+        '--max-budget-usd', $MaxBudgetUsd.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     )
+    # SD_E2E_TRANSCRIPT (SW-79) keeps the session transcript for diagnosis:
+    # without --no-session-persistence the CLI writes it under
+    # <FakeHome>/.claude/projects/, and the fake home is then kept (see the
+    # finally block in Invoke-Scenario). Off by default - a transcript is
+    # debugging evidence, not an assertion input.
+    if (-not $env:SD_E2E_TRANSCRIPT) { $cliArgs += '--no-session-persistence' }
     # PermissionMode matters a lot more here than it looks. Verified directly
     # (minimal repro: a trivial always-deny PreToolUse hook, no spec-gate
     # involved): under --permission-mode acceptEdits, OR under dontAsk
@@ -536,12 +547,15 @@ function Invoke-Scenario {
                 Get-Content -LiteralPath $eventsPath | ForEach-Object { Write-Info "  $_" }
             }
         }
-        if (-not $env:SD_E2E_KEEP) {
+        if (-not $env:SD_E2E_KEEP -and -not $env:SD_E2E_TRANSCRIPT) {
             if ($ws) { Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue }
             if ($fakeHome) { Remove-Item -LiteralPath $fakeHome -Recurse -Force -ErrorAction SilentlyContinue }
         } elseif ($ws) {
             Write-Info "kept workspace: $ws"
             Write-Info "kept fakeHome : $fakeHome"
+            if ($env:SD_E2E_TRANSCRIPT -and $fakeHome) {
+                Write-Info "transcripts  : $(Join-Path $fakeHome '.claude' 'projects')"
+            }
         }
     }
 }

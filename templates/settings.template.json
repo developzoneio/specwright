@@ -24,7 +24,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Edit|Write|MultiEdit|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
@@ -66,7 +66,7 @@
 
   "_timeout_notes": {
     "userPromptSubmit": "5s - inject routing hints and spec context",
-    "preToolUse": "5s - check spec-gate before code edits",
+    "preToolUse": "5s - check spec-gate before code edits and shell writes to protected paths (Bash | PowerShell, SW-79)",
     "subagentStop": "3s - debounced retro reminder"
   }
 }

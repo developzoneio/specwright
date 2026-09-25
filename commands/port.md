@@ -443,6 +443,9 @@ a resolution - it makes the diff justify itself.
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Phase 0 always runs, even on resume.
 - Gates 1, 2, 3, and 6 are HARD - no override path. Gates 4 and 5 are ordinary approvals; the
   workflow still declares 6 total gates.

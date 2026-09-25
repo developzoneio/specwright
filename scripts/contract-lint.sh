@@ -288,6 +288,7 @@ CL202
 CL203
 CL204
 CL205
+CL206
 CL300
 CL301
 CL302
@@ -422,6 +423,24 @@ while IFS=$'\x1f' read -r g_file g_hard g_cond; do
     GATE_DECL_TABLE="${GATE_DECL_TABLE}${g_file}"$'\x1f'"${g_hard}"$'\x1f'"${g_cond}"$'\n'
     set_add GATE_DECL_FILES "$g_file"
 done < <(mjq '.contractLint.gates // {} | to_entries[] | "\(.key)\u001f\(.value.hard)\u001f\(.value.conditional | join(","))"')
+
+# editToolOnly (CL206, SW-79): the phrase every listed command must carry.
+# Optional key; a listed file that does not exist, or files with no phrase,
+# is a broken contract (exit 2), the same as gates.
+EDIT_TOOL_ONLY_PHRASE="$(mjq '.contractLint.editToolOnly.phrase // ""')"
+EDIT_TOOL_ONLY_FILES=""
+while IFS= read -r _f; do
+    [[ -z "$_f" ]] && continue
+    if [[ ! -f "$ROOT/$_f" ]]; then
+        echo "contract-lint: contractLint.editToolOnly names a file that does not exist: $_f" >&2
+        exit 2
+    fi
+    if [[ -z "$EDIT_TOOL_ONLY_PHRASE" ]]; then
+        echo "contract-lint: contractLint.editToolOnly lists files but no phrase" >&2
+        exit 2
+    fi
+    set_add EDIT_TOOL_ONLY_FILES "$_f"
+done < <(mjq '.contractLint.editToolOnly.files[]?')
 
 # Scan files: every scanScope glob, deduplicated, byte-sorted for a stable
 # report order that the twin can reproduce exactly.
@@ -1276,6 +1295,40 @@ rule_CL205() {
     done <<< "$ANCHORS"
 }
 
+# CL206 - a workflow that writes .specs/index.md or a spec's status: must tell
+# the model to do it with the Edit tool, never a shell command (SW-79): a
+# shell write sidesteps spec-gate's Rules 0, 0b and 1 and records no
+# spec_transition event. The files are DECLARED (contractLint.editToolOnly),
+# not inferred - "does this command write the index" is not decidable from
+# prose. The phrase must sit on a non-fenced line, or be wrapped across it and
+# the next non-fenced line (trimmed, joined with one space, as CL009 joins).
+# Case-sensitive literal match. Reported on line 1: the defect is an absence.
+rule_CL206() {
+    local _rel _i _j _s _cur _nxt _found
+    [[ -z "$EDIT_TOOL_ONLY_FILES" ]] && return 0
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" ]] && continue
+        set_has EDIT_TOOL_ONLY_FILES "$_rel" || continue
+        load_file "$_rel"
+        _found=0
+        for ((_i = 0; _i < CUR_N; _i++)); do
+            [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
+            _s="${CUR_LINES[$_i]}"
+            _cur="${_s#"${_s%%[![:blank:]]*}"}"; _cur="${_cur%"${_cur##*[![:blank:]]}"}"
+            case "$_cur" in *"$EDIT_TOOL_ONLY_PHRASE"*) _found=1; break ;; esac
+            _j=$((_i + 1))
+            if [[ $_j -lt $CUR_N && "${CUR_FENCE[$_j]}" != "1" ]]; then
+                _s="${CUR_LINES[$_j]}"
+                _nxt="${_s#"${_s%%[![:blank:]]*}"}"; _nxt="${_nxt%"${_nxt##*[![:blank:]]}"}"
+                case "$_cur $_nxt" in *"$EDIT_TOOL_ONLY_PHRASE"*) _found=1; break ;; esac
+            fi
+        done
+        if [[ $_found -eq 0 ]]; then
+            add_finding CL206 "$_rel" 1 "workflow writes the spec index or a spec status but never says to do it with the Edit tool only (contractLint.editToolOnly.phrase)"
+        fi
+    done <<< "$SCAN_FILES"
+}
+
 # Collect a gate block's selectable OPTIONS: the slash-separated tokens of a
 # parenthetical, plus the backticked leading token of each top-level bullet.
 # Sets OPT_TOKENS (newline-delimited "line<US>token" records) and OPT_HAS_SET.
@@ -1537,6 +1590,7 @@ rule_CL201
 rule_CL202
 rule_CL203_CL204
 rule_CL205
+rule_CL206
 rule_CL300_CL301_CL305_CL306
 rule_CL302_CL303_CL304
 rule_CL400_CL401_CL402

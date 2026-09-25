@@ -357,7 +357,7 @@ Write-Info '4. Hook wiring (PowerShell - add to your project .claude/settings.js
 Write-Info '     "hooks": {'
 Write-Info '       "UserPromptSubmit": [{"matcher":"*","hooks":[{"type":"command",'
 Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/prompt-router.ps1" + '","timeout":5}]}],')
-Write-Info '       "PreToolUse": [{"matcher":"Edit|Write|MultiEdit","hooks":[{"type":"command",'
+Write-Info '       "PreToolUse": [{"matcher":"Edit|Write|MultiEdit|Bash|PowerShell","hooks":[{"type":"command",'
 Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/spec-gate.ps1" + '","timeout":5}]}],')
 Write-Info '       "SubagentStop": [{"matcher":"*","hooks":[{"type":"command",'
 Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/subagent-retro.ps1" + '","timeout":3}]}]')

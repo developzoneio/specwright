@@ -11,6 +11,10 @@
 #       mode=block -> emit block JSON (see emit_block below).
 #       mode=warn  -> warn to stderr; allow.
 #       mode=off   -> always allow.
+# A Bash / PowerShell tool call is checked by the shell-write rule instead
+# (SW-79): a command that visibly writes a protected path or the spec index
+# (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File) is
+# blocked in every mode. Heuristic - see shell_write_target below.
 # Exits 0 silently on any missing tool or parse error.
 #
 # Output schema (dual-format for forward + backward compatibility):
@@ -30,8 +34,10 @@ if [[ -z "${input}" ]]; then
 fi
 
 tool_name="$(printf '%s' "${input}" | jq -r '.tool_name // empty' 2>/dev/null)"
+is_shell=0
 case "${tool_name}" in
     Edit|Write|MultiEdit) ;;
+    Bash|PowerShell) is_shell=1 ;;
     *) exit 0 ;;
 esac
 
@@ -40,9 +46,27 @@ if [[ -z "${cwd}" ]]; then
     cwd="$(pwd)"
 fi
 
-file_path="$(printf '%s' "${input}" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
-if [[ -z "${file_path}" ]]; then
-    exit 0
+file_path=""
+shell_cmd_lower=""
+if [[ ${is_shell} -eq 1 ]]; then
+    # SW-79: a shell command has no file_path. This pre-filter is pure string
+    # work with no disk read, because the hook now runs on EVERY shell call
+    # (ADR 0012 latency budget): a command that carries none of the write
+    # markers the shell-write rule looks for cannot trip it, so it exits here.
+    shell_cmd="$(printf '%s' "${input}" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+    if [[ -z "${shell_cmd}" ]]; then
+        exit 0
+    fi
+    shell_cmd_lower="$(printf '%s' "${shell_cmd}" | tr '[:upper:]' '[:lower:]')"
+    case "${shell_cmd_lower}" in
+        *'>'*|*sed*|*perl*|*tee*|*set-content*|*add-content*|*out-file*) ;;
+        *) exit 0 ;;
+    esac
+else
+    file_path="$(printf '%s' "${input}" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+    if [[ -z "${file_path}" ]]; then
+        exit 0
+    fi
 fi
 
 # --- project root (SW-78) -----------------------------------------------------
@@ -268,14 +292,18 @@ normalize_rel() {
 # A relative file_path is relative to the SESSION cwd. When that is the root,
 # keep the historical relative handling untouched; otherwise anchor it on cwd
 # first so e.g. '../index.md' typed from .specs/FEAT-x lands on .specs/index.md.
-if [[ "${file_path}" != /* && "${file_path}" != ?:* ]] &&
-   [[ "$(collapse_dot_segments "${cwd//\\//}")" != "$(collapse_dot_segments "${project_root}")" ]]; then
-    file_path="${cwd%/}/${file_path}"
-fi
+# A shell command has no file_path; it is decided by the shell-write rule below.
+rel=""
+if [[ ${is_shell} -eq 0 ]]; then
+    if [[ "${file_path}" != /* && "${file_path}" != ?:* ]] &&
+       [[ "$(collapse_dot_segments "${cwd//\\//}")" != "$(collapse_dot_segments "${project_root}")" ]]; then
+        file_path="${cwd%/}/${file_path}"
+    fi
 
-rel="$(normalize_rel "${file_path}" "${project_root}")"
-if [[ -z "${rel}" ]]; then
-    exit 0
+    rel="$(normalize_rel "${file_path}" "${project_root}")"
+    if [[ -z "${rel}" ]]; then
+        exit 0
+    fi
 fi
 
 # --- emit-block helper --------------------------------------------------------
@@ -390,6 +418,169 @@ emit_gate_metric() {
     [[ -z "${body}" ]] && return 0
     write_metric_line "${body}"
 }
+
+# --- protected-path match (Rule 1 and the shell-write rule) ------------------
+# $1 = root-relative path. Case-insensitive exact match against every
+# paths.protected entry. Mirrors Test-IsProtected in spec-gate.ps1.
+is_protected_rel() {
+    local rel_l p p_norm
+    rel_l="$(to_lower "$1")"
+    while IFS= read -r p; do
+        # Some jq builds (e.g. Windows jq.exe) emit CRLF when a filter yields
+        # multiple values, as this array iteration does; strip a trailing CR so
+        # the exact-match comparison below isn't corrupted.
+        p="${p%$'\r'}"
+        [[ -z "${p}" ]] && continue
+        p_norm="$(to_lower "${p//\\//}")"
+        if [[ "${rel_l}" == "${p_norm}" ]]; then
+            return 0
+        fi
+    done < <(printf '%s' "${config_json}" | jq -r '.paths.protected // [] | .[]' 2>/dev/null)
+    return 1
+}
+
+# --- shell-write rule: Bash / PowerShell tool (SW-79) --------------------------
+# A shell command can change .specs/index.md or a protected file without the
+# Edit tool, which would sidestep Rules 0, 0b and 1 and leave no
+# spec_transition event. This rule denies a command that VISIBLY writes a
+# protected path or the spec index. It is a HEURISTIC, not a guarantee: it
+# reads the command text only, so `cd .specs && sed -i ... index.md`, an
+# interpreter one-liner (python -c, node -e) or a path held in a variable
+# gets through. The workflows' own "Edit tool only" instruction is the
+# primary control; this is the backstop.
+#
+# Algorithm (must stay identical to Get-ShellWriteTarget in spec-gate.ps1):
+#   1. Lowercase the command and turn '\' into '/'.
+#   2. Scan it once, tracking single / double quotes. Outside quotes:
+#      ';', '|', '&', CR and LF end the SEGMENT; blank, tab, '(' and ')' end
+#      the token; '>' ends the token and is a '>' token of its own; a quote
+#      character opens a quote and is dropped. Inside a quote every character
+#      is part of the token until the matching quote closes it. Empty tokens
+#      are dropped. So `sed -i 's/| draft |/| approved |/' f` stays one
+#      segment, and an unterminated quote simply runs to the end.
+#   3. The segment is a WRITER when its command word (basename of the first
+#      token) is tee / set-content / add-content / out-file, or is
+#      sed / gsed / perl with an in-place flag (a single-dash cluster that
+#      reaches an 'i', e.g. -i, -i.bak, -pi, or --in-place).
+#   4. Candidate paths: every token after the command word of a writer
+#      segment, and the token after any '>' (a redirect target, '>>'
+#      included) in any segment.
+#   5. A candidate starting with '$' or '~' drops its first segment
+#      ($ROOT/.specs/index.md -> .specs/index.md); any other relative one is
+#      anchored on cwd as file_path is; then normalize_rel. A result that is
+#      the spec index or matches paths.protected is a hit.
+# Prints the first hit's root-relative path; prints nothing on no hit.
+
+# Appends the pending token (if any) to SW_TOKS. Reads/clears the caller's
+# `tok` through bash's dynamic scoping.
+sw_flush_token() {
+    if [[ -n "${tok}" ]]; then
+        SW_TOKS+=("${tok}")
+    fi
+    tok=""
+}
+
+# Steps 3-5 for the segment held in SW_TOKS. Uses the caller's cwd_c,
+# root_c and index_l. Prints the hit and returns 0, or returns 1.
+sw_segment_hit() {
+    local verb writer k t prev cand rel
+    [[ ${#SW_TOKS[@]} -eq 0 ]] && return 1
+    verb="${SW_TOKS[0]##*/}"
+    writer=0
+    case "${verb}" in
+        tee|set-content|add-content|out-file) writer=1 ;;
+        sed|gsed|perl)
+            for (( k = 1; k < ${#SW_TOKS[@]}; k++ )); do
+                t="${SW_TOKS[$k]}"
+                if [[ "${t}" =~ ^-[a-z0-9.]*i || "${t}" == --in-place* ]]; then
+                    writer=1
+                    break
+                fi
+            done
+            ;;
+    esac
+    prev=""
+    for (( k = 0; k < ${#SW_TOKS[@]}; k++ )); do
+        t="${SW_TOKS[$k]}"
+        if [[ "${t}" == ">" ]]; then
+            prev=">"
+            continue
+        fi
+        if [[ "${prev}" == ">" ]] || [[ ${writer} -eq 1 && ${k} -ge 1 ]]; then
+            rel=""
+            if [[ "${t}" == '$'* || "${t}" == '~'* ]]; then
+                if [[ "${t}" == */* ]]; then
+                    rel="$(collapse_dot_segments "${t#*/}")"
+                fi
+            else
+                cand="${t}"
+                if [[ "${cand}" != /* && "${cand}" != ?:* && "${cwd_c}" != "${root_c}" ]]; then
+                    cand="${cwd%/}/${cand}"
+                fi
+                rel="$(normalize_rel "${cand}" "${project_root}")"
+            fi
+            if [[ -n "${rel}" ]]; then
+                if [[ "$(to_lower "${rel}")" == "${index_l}" ]] || is_protected_rel "${rel}"; then
+                    printf '%s' "${rel}"
+                    return 0
+                fi
+            fi
+        fi
+        prev=""
+    done
+    return 1
+}
+
+shell_write_target() {
+    # Byte-wise indexing: keeps ${cmd:i:1} O(1) on a long command.
+    local LC_ALL=C
+    local cmd="$1" n i c q="" tok="" cwd_c root_c index_l
+    cmd="${cmd//\\//}"
+    cwd_c="$(collapse_dot_segments "${cwd//\\//}")"
+    root_c="$(collapse_dot_segments "${project_root}")"
+    index_l="$(to_lower "$(collapse_dot_segments "${index_rel//\\//}")")"
+    SW_TOKS=()
+    n=${#cmd}
+    for (( i = 0; i <= n; i++ )); do
+        if (( i == n )); then
+            # End of input closes any open quote and the last segment.
+            q=""
+            c=$'\n'
+        else
+            c="${cmd:i:1}"
+        fi
+        if [[ -n "${q}" ]]; then
+            if [[ "${c}" == "${q}" ]]; then
+                q=""
+            else
+                tok+="${c}"
+            fi
+            continue
+        fi
+        case "${c}" in
+            "'"|'"') q="${c}" ;;
+            ' '|$'\t'|'('|')') sw_flush_token ;;
+            '>') sw_flush_token; SW_TOKS+=(">") ;;
+            ';'|'|'|'&'|$'\r'|$'\n')
+                sw_flush_token
+                sw_segment_hit && return 0
+                SW_TOKS=()
+                ;;
+            *) tok+="${c}" ;;
+        esac
+    done
+    return 0
+}
+
+if [[ ${is_shell} -eq 1 ]]; then
+    shell_hit="$(shell_write_target "${shell_cmd_lower}")"
+    if [[ -n "${shell_hit}" ]]; then
+        # Blocks in every mode, like Rule 1: mode only governs code edits.
+        emit_block "spec-gate: this shell command writes '${shell_hit}', which is protected (paths.protected or the spec index). Make the change with the Edit tool so spec-gate can check it (Rules 0, 0b, 1)."
+        emit_gate_metric "-" "-" "shell-write" "block"
+    fi
+    exit 0
+fi
 
 # spec_transition metric: $1=spec_id $2=phase $3=from $4=decision
 emit_transition_metric() {
@@ -776,18 +967,9 @@ fi
 
 is_protected=0
 rel_lower="$(to_lower "${rel}")"
-while IFS= read -r p; do
-    # Some jq builds (e.g. Windows jq.exe) emit CRLF when a filter yields
-    # multiple values, as this array iteration does; strip a trailing CR so
-    # the exact-match comparison below isn't corrupted.
-    p="${p%$'\r'}"
-    [[ -z "${p}" ]] && continue
-    p_norm="$(to_lower "${p//\\//}")"
-    if [[ "${rel_lower}" == "${p_norm}" ]]; then
-        is_protected=1
-        break
-    fi
-done < <(printf '%s' "${config_json}" | jq -r '.paths.protected // [] | .[]' 2>/dev/null)
+if is_protected_rel "${rel}"; then
+    is_protected=1
+fi
 
 if [[ ${is_protected} -eq 1 ]]; then
     emit_block "spec-gate: '${rel}' is listed under paths.protected in .claude/project-config.json. Update via /sd:refactor or an ADR; never edit directly."

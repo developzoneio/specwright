@@ -1,0 +1,1 @@
+{"tool_name":"Bash","cwd":"{{CWD}}","tool_input":{"command":"sed -i 's/draft/approved/' .specs/index.md"}}

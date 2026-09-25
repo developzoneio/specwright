@@ -201,7 +201,7 @@ Runs on every user prompt. Reads the prompt and the project config, then emits a
 
 The block is injected into the prompt as additional context, so Claude knows there's an active spec or a likely workflow without the user having to remind it.
 
-### `spec-gate` (`PreToolUse`, Edit / Write / MultiEdit)
+### `spec-gate` (`PreToolUse`, Edit / Write / MultiEdit / Bash / PowerShell)
 
 Runs before any code-editing tool. Decides:
 - Editing the spec index (`.specs/index.md`)? -> a FEAT row moving to `done` needs a passing
@@ -211,11 +211,18 @@ Runs before any code-editing tool. Decides:
 - Editing a path in `paths.protected`? -> block (constitution, index, license).
 - Editing an allow-listed path (.specs/, .claude/, tests/, *.md, *.json, etc.)? -> allow.
 - Editing a code file (cs/ts/py/rs/go/etc.) with no in-progress spec? -> block or warn (configurable).
+- A `Bash` / `PowerShell` command that visibly writes a protected path or the spec index
+  (`sed -i`, `perl -i`, `>` / `>>`, `tee`, `Set-Content`, `Add-Content`, `Out-File`)? -> block in
+  every mode (SW-79). Without this, a shell write would sidestep Rules 0, 0b and 1 and leave no
+  `spec_transition` event. It reads the command text only, so it is a **heuristic, not a
+  guarantee**: `cd .specs && sed -i ... index.md`, an interpreter one-liner or a path held in a
+  variable gets through. The primary control is each workflow's own "Edit tool only" rule, kept
+  in place by contract-lint `CL206`.
 
 This catches the common failure mode where the user (or Claude) jumps straight to editing code without creating a spec first.
 
 Alongside guarding, `spec-gate` also **records**: every gate decision (verify / protected /
-code-edit), every inferred Gate Complexity split, and every `.specs/index.md` lifecycle transition
+code-edit / shell-write), every inferred Gate Complexity split, and every `.specs/index.md` lifecycle transition
 it observes is appended as one JSON line to `.specs/_metrics/events.jsonl`. Recording is purely
 observational - it never alters a gate decision, only measures it after the fact. See the event
 log section below for the schema.
@@ -258,7 +265,7 @@ the PowerShell and bash implementations produce byte-comparable lines:
 | `spec_id` | always | `FEAT-x` / `BUG-x` / ... , or `-` when no spec is in scope |
 | `phase` | always | lifecycle status of `spec_id` (`draft` / `approved` / `in-progress` / `done`), or `-` |
 | `event` | always | `gate` \| `spec_transition` \| `subagent_stop` |
-| `gate` | when `event` is `gate` | `verify` \| `protected` \| `code-edit` \| `complexity` |
+| `gate` | when `event` is `gate` | `verify` \| `protected` \| `code-edit` \| `complexity` \| `shell-write` (a Bash / PowerShell command denied for writing a protected path or the spec index, SW-79) |
 | `decision` | when `event` is `gate` or `spec_transition` | `allow` \| `block` \| `warn` \| `split` (only on `gate:"complexity"`) - on a transition, whether the index edit was ultimately allowed through. Workflow status transitions and new-row registrations are allowed (Rule 0b), as is a verified FEAT `done` close-out; any other direct index edit is blocked by `paths.protected`. |
 | `from` | when `event` is `spec_transition` | previous lifecycle status, or `-` if not derivable |
 | `ext` | when `gate` is `code-edit` | lowercased file extension, e.g. `.ps1` - never a path |
@@ -399,7 +406,8 @@ These are rough ballparks. Actual cost depends on file sizes, MCP usage, and con
 ## Hook invocation latency
 
 Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
-`Edit|Write|MultiEdit`, `prompt-router` on every prompt, `subagent-retro` after every subagent,
+`Edit|Write|MultiEdit|Bash|PowerShell` (a shell command with no write marker exits before any
+disk read), `prompt-router` on every prompt, `subagent-retro` after every subagent,
 and each one is a fresh process: interpreter start-up, script parse, then the hook's own work.
 The PowerShell twins pay far more start-up than the bash ones.
 

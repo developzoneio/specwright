@@ -70,7 +70,7 @@ meet. The engine never changes per project - which is what lets one `/sd:feature
 Plenty of tools ask the model nicely to plan first. Four things here are structural instead:
 
 - **Gates halt the workflow.** Silence is not approval - the phase does not advance without an explicit answer. HARD gates (bug reproduction, perf baseline) have no override path at all.
-- **The block lives outside the prompt.** `spec-gate` is a `PreToolUse` hook: with no in-progress spec, `Edit` / `Write` is denied by the CLI, not discouraged by instructions. A prompt can be argued with; a tool-level deny cannot.
+- **The block lives outside the prompt.** `spec-gate` is a `PreToolUse` hook: with no in-progress spec, `Edit` / `Write` is denied by the CLI, not discouraged by instructions. A prompt can be argued with; a tool-level deny cannot. A `Bash` / `PowerShell` command that visibly rewrites `.specs/index.md` or a protected file is denied too (a best-effort text check, SW-79).
 - **The reviewer physically cannot auto-fix.** Its tool allowlist contains no write tools, so findings must route back through a fresh implementer call.
 - **Specs are inputs, not write-ups.** `00-spec.md` through `06-verify.md` are what each subagent is handed on invocation - so they cannot rot into documentation nobody reads.
 

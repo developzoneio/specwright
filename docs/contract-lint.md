@@ -17,6 +17,7 @@ Each of these shipped, and each was statically detectable the whole time:
 | An `mcp__*` tool name that does not exist | CL202 (wave 3) |
 | README claiming one gate count where `docs/architecture.md` claimed another | CL302 |
 | A command step asserting an artifact write in a read-only agent's block, with no writer named | CL205 (SW-51) |
+| A workflow that let the model move a spec's status with `sed -i`, past `spec-gate` | CL206 (SW-79) |
 
 It is a **script, not a prompt**: deterministic file operations, no subagent, no model, run per PR
 in CI on all three operating systems like every other check.
@@ -120,6 +121,7 @@ cannot auto-fix. That guarantee is only as good as the prompt text agreeing with
 | `CL203` | WARN | a non-write-capable agent's own frontmatter declares a tool its own body never mentions |
 | `CL204` | BLOCK | a write-capable agent's own frontmatter declares a tool its own body never mentions |
 | `CL205` | BLOCK | a command step inside a read-only agent's invocation block asserts a spec-artifact write and names no main-thread writer |
+| `CL206` | BLOCK | a command listed in `contractLint.editToolOnly` never states its phrase: change the spec index / a spec status with the Edit tool only |
 
 A **write tool** is exactly `Write`, `Edit` or `MultiEdit` -- never `Bash`, which technically can
 write a file but is a different, harder problem, deliberately out of scope here.
@@ -180,6 +182,23 @@ names a spec section but no artifact file. Both stay prose-review territory; wid
 predicate buys false positives on legitimate close-out prose. `CL205` **shipped BLOCK from its
 introduction on 2026-09-23** (SW-51) on the same grounds as `CL204`, and because
 `contractLint.warnBudget` is `0`, a WARN would already have failed validate's Check 8.
+
+`CL206` keeps the *prompt* half of the SW-79 fix from silently dropping out. In the e2e run that
+found it, `/sd:feature` moved `draft -> approved -> in-progress` with `Bash` `sed -i` on
+`.specs/index.md`: `spec-gate` never saw the writes, so Rules 0, 0b and 1 were sidestepped and two
+`spec_transition` events were never recorded. Every command in `contractLint.editToolOnly.files`
+must carry `contractLint.editToolOnly.phrase` ("with the Edit tool only - never a shell command")
+on a non-fenced line, or wrapped across it and the next non-fenced line (joined as `CL009` joins).
+The finding is a whole-file verdict on line 1, like `CL302`.
+
+- **Declared, not inferred.** Whether a command writes the index is not decidable from prose, so
+  the file list is written down. A command that starts writing the index or a status has to be
+  added by hand; `verify` is left out on purpose (it writes only `06-verify.md`). A listed file
+  that does not exist exits 2, like `gates`.
+- **Blind spot.** It proves the sentence is there, not that the model obeys it. The hook half of
+  SW-79 (`spec-gate`'s shell-write rule) is the backstop, and that is a text heuristic too.
+
+`CL206` **shipped BLOCK from its introduction on 2026-09-25** (SW-79).
 
 ### CL3xx -- gate integrity
 
@@ -349,6 +368,7 @@ and never touch `areas`, `derived` or `docClaims`.
 | `overrideOptionTokens` | the vocabulary CL305 treats as an escape hatch |
 | `gateProseEscapeTokens` | the phrase vocabulary CL306 scans HARD gate prose for |
 | `bootstrapGuardPhrases` | the phrase vocabulary CL009 scans a command's `## Phase 0` section for |
+| `editToolOnly` | CL206's contract: `phrase` plus the `files` that must state it (optional; absent means CL206 checks nothing) |
 | `stackTokens.commands` / `.languages` | the CL400 / CL401 stack vocabulary |
 | `readOnlyAgents` | agent names CL201 checks for a write tool gained since being declared read-only |
 | `knownMcpTools` | the `mcp__*` allowlist CL202 checks scan-scope tokens against |
@@ -385,7 +405,7 @@ implementation, one fixture, one row in the tables above.
 |---|---|---|
 | 1 | CL0xx reference resolution, CL3xx gate integrity, CL9xx suppression hygiene | shipped, BLOCK (CL009 added 2026-09-24, BLOCK from the start) |
 | 2 | CL1xx invocation contract (agent input declarations) | shipped, BLOCK+WARN |
-| 3a | CL2xx role and tool integrity (CL200-CL205) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02 and CL205 2026-09-23, both BLOCK from the start) |
+| 3a | CL2xx role and tool integrity (CL200-CL206) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02, CL205 2026-09-23 and CL206 2026-09-25, all BLOCK from the start) |
 | 3b | CL4xx stack-agnostic prose, CL306 | shipped 2026-07-30 WARN, now BLOCK (CL400/CL306 promoted 2026-07-31; CL401 stays WARN) |
 | 4 | CL5xx file budgets | shipped 2026-07-30, retired 2026-09-24 (SW-57) - see the prompt size report |
 

@@ -359,6 +359,7 @@
       { "id": "CL203", "severity": "WARN",  "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body, on an agent with no write tool of its own" },
       { "id": "CL204", "severity": "BLOCK", "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body, on a write-capable agent (Write/Edit/MultiEdit present) - CL203's BLOCK sibling" },
       { "id": "CL205", "severity": "BLOCK", "wave": 3, "summary": "command step asserts a spec-artifact write inside a read-only agent's invocation block and names no main-thread writer" },
+      { "id": "CL206", "severity": "BLOCK", "wave": 3, "summary": "command listed in contractLint.editToolOnly never says to change the spec index / a spec status with the Edit tool only" },
 
       { "id": "CL300", "severity": "BLOCK", "wave": 1, "summary": "gate block containing no literal STOP" },
       { "id": "CL301", "severity": "BLOCK", "wave": 1, "summary": "gate block offering no option set" },
@@ -435,6 +436,30 @@
       "'run `/sd:setup` first' is excluded on purpose: release, review, spec and verify say it for",
       "their own preconditions, which are not the guard. The guard's half of that sentence is",
       "'No `.specs/` found', which always travels with it. Added by SW-54."
+    ],
+
+    "editToolOnly": {
+      "phrase": "with the Edit tool only - never a shell command",
+      "files": [
+        "commands/bug.md",
+        "commands/feature.md",
+        "commands/perf.md",
+        "commands/port.md",
+        "commands/rca.md",
+        "commands/refactor.md",
+        "commands/release.md",
+        "commands/spec.md"
+      ]
+    },
+
+    "$editToolOnlyComment": [
+      "CL206's contract (SW-79). Every workflow that writes .specs/index.md or a spec's status:",
+      "field must say, in its own text, to do it with the Edit tool only. A shell write (sed -i,",
+      "'>', tee, Set-Content) sidesteps spec-gate's Rules 0, 0b and 1 and records no",
+      "spec_transition event - that is how scenario 02 lost two transitions. Declared, not",
+      "inferred: add a command here when it starts writing the index or a status. verify is",
+      "absent on purpose - it writes only 06-verify.md. Case-sensitive literal match with a",
+      "two-line wrap window; a listed file that does not exist exits 2, like gates."
     ],
 
     "stackTokens": {

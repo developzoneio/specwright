@@ -137,6 +137,12 @@
         "summary": "command step asserts a spec-artifact write inside a read-only agent's invocation block and names no main-thread writer"
       },
       {
+        "id": "CL206",
+        "severity": "BLOCK",
+        "wave": 3,
+        "summary": "command listed in contractLint.editToolOnly never says to change the spec index / a spec status with the Edit tool only"
+      },
+      {
         "id": "CL300",
         "severity": "BLOCK",
         "wave": 1,

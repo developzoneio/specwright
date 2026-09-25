@@ -45,7 +45,8 @@ been in a .NET project.
 - `--permission-mode acceptEdits` silently overrides a `PreToolUse` hook's deny. Only `dontAsk`,
   with no `--allowedTools` override, respects one.
 - `spec-gate`'s matcher covers `Edit` / `Write` / `MultiEdit` only, not file writes made through
-  `Bash`.
+  `Bash`. **Update (SW-79):** the matcher now also covers `Bash` / `PowerShell`; a command that
+  visibly writes a protected path or the spec index is denied, as a heuristic.
 
 ## Consequences
 

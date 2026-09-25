@@ -305,6 +305,9 @@ Treat findings:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Phase 0 always runs. No exceptions, even on resume.
 - Gates 1-3 are HARD. The workflow refuses to proceed without explicit approval.
 - **Gate Complexity is a face of Gate 2, not a fourth gate.** It fires ONLY when the plan is over

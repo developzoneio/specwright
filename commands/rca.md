@@ -153,6 +153,9 @@ No gate here - documentation-only phase.
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - **No code is changed in /sd:rca.** Period. If the user asks "while we're here, can you fix it?" -> redirect to `/sd:bug <ID>` after this workflow completes.
 - Reproduction is rarely possible for incidents (the incident is over). Verification relies on logs, traces, queries, and code reads from the relevant time window.
 - All evidence lives under `04-artifacts/` with descriptive filenames. Never reference "the dashboard" - save a screenshot or query.

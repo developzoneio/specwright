@@ -699,6 +699,9 @@ Behavior: print the subcommand table above with one-line examples.
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - This command NEVER invokes a subagent.
 - This command NEVER edits files outside `.specs/`. (Specifically: never touches code, never touches `.claude/`, never touches the constitution.)
 - Lifecycle transitions follow the validated state machine. Illegal transitions are refused.

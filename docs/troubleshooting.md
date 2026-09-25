@@ -300,7 +300,8 @@ If a path is there by mistake, remove it. If it should stay protected, update th
 ```
 /sd:spec validate --all
 ```
-If the index row is missing or has the wrong status, fix it via `/sd:spec status <ID> in-progress` or by editing `.specs/index.md` directly to add the row.
+If the index row is missing or has the wrong status, fix it via `/sd:spec status <ID> in-progress` or by editing `.specs/index.md` directly with the Edit tool to add the row. A shell write to it
+(`sed -i`, `>`, `Set-Content`) is denied by design (SW-79).
 
 ### I want to disable spec-gate temporarily
 
