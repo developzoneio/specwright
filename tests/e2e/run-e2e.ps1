@@ -19,6 +19,14 @@
     install. --setting-sources project is passed as a second, independent
     guarantee that no real user-scope settings.json can merge in.
 
+    Neither of those stops the ANCESTOR WALK (SW-73): when no git root stops
+    it, Claude Code loads every ancestor `.claude/` of the cwd as PROJECT
+    scope, which outranks the fake home's user scope. So the sandbox root
+    must have no `.claude/` above it. On Windows GetTempPath() sits under the
+    user profile (next to the real ~/.claude), so the root defaults to
+    <SystemDrive>\sd-e2e there; Unix keeps GetTempPath(). SD_E2E_ROOT
+    overrides both.
+
     Each scenario directory under scenarios/<name>/ may contain:
       source.txt   - optional, one line: a repo-relative path to copy as the
                       base workspace (e.g. examples/fixture-project).
@@ -35,7 +43,8 @@
     CLI (present, >= the minimum version), that some claude auth is
     available (CLAUDE_CODE_OAUTH_TOKEN, ~/.claude/.credentials.json, or
     ANTHROPIC_API_KEY - subscription auth needs no API key), and every
-    requires.txt command of the selected scenarios. A missing prerequisite
+    requires.txt command of the selected scenarios, and that no ancestor of
+    the sandbox root holds a `.claude/` (SW-73). A missing prerequisite
     exits 2 with the dependency named, never as a failed assertion.
 
     -SelfTest re-runs the negative scenarios (03, 04) with spec-gate's
@@ -151,14 +160,53 @@ function Assert-Prerequisites {
             }
         }
     }
+
+    $leak = Find-AncestorClaudeDir -Root $script:sandboxRoot
+    if ($leak) {
+        Write-Host "[FAIL] sandbox root '$($script:sandboxRoot)' is not isolated: '$leak' sits above it."
+        Write-Host '       Claude Code would load it as PROJECT scope, shadowing the fake-home engine (SW-73).'
+        Write-Host '       Set SD_E2E_ROOT to a directory with no .claude folder in it or any ancestor.'
+        Write-Host '       See tests/e2e/README.md "Isolation and auth".'
+        exit 2
+    }
+    Write-Host "[INFO] sandbox root: $($script:sandboxRoot)"
 }
 
 # ---- sandbox construction ---------------------------------------------------
 
+function Get-SandboxRoot {
+    # SW-73: the root every fake home and workspace is created under. It must
+    # sit outside the user profile - see Find-AncestorClaudeDir.
+    if (Test-EnvSet 'SD_E2E_ROOT') {
+        return [System.IO.Path]::GetFullPath($env:SD_E2E_ROOT)
+    }
+    if ($IsWindows) {
+        $drive = if ($env:SystemDrive) { $env:SystemDrive } else { 'C:' }
+        return (Join-Path ($drive + '\') 'sd-e2e')
+    }
+    return [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+}
+
+function Find-AncestorClaudeDir {
+    # Returns the first `.claude` directory in $Root or any of its ancestors,
+    # or $null. $Root itself counts: it is an ancestor of every workspace
+    # created under it. Works on a $Root that does not exist yet.
+    param([string]$Root)
+    $dir = [System.IO.DirectoryInfo]::new($Root)
+    while ($null -ne $dir) {
+        $candidate = Join-Path $dir.FullName '.claude'
+        if (Test-Path -LiteralPath $candidate -PathType Container) { return $candidate }
+        $dir = $dir.Parent
+    }
+    return $null
+}
+
+$script:sandboxRoot = Get-SandboxRoot
+
 function New-EmptyTempDir {
     param([string]$Prefix)
     $name = $Prefix + '-' + [System.Guid]::NewGuid().ToString('N').Substring(0, 12)
-    $dir = Join-Path ([System.IO.Path]::GetTempPath()) $name
+    $dir = Join-Path $script:sandboxRoot $name
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     return $dir
 }

@@ -31,6 +31,8 @@ dependency; it never shows up as a failed scenario assertion.
   [Auth](#auth) below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
   `02-feature-happy`, `06`-`10`).
+- A sandbox root with no `.claude` directory in it or in any directory above it. The defaults
+  already meet this; see [the ancestor-walk rule](#the-ancestor-walk-rule-sw-73) below.
 
 ## Running it
 
@@ -65,6 +67,32 @@ project under test (a throwaway copy of `examples/fixture-project` or
 `settings.json` hook command strings) both resolve into the sandbox, never the real user install.
 `--setting-sources project` is passed as a second, independent guarantee that no real user-scope
 settings can merge in. Both directories are deleted after every run.
+
+### The ancestor-walk rule (SW-73)
+
+Neither of those guarantees covers the directories *above* the workspace. When no git root stops
+the walk, Claude Code loads every ancestor `.claude/` directory of the cwd as **project** scope,
+and project scope outranks the fake home's user scope. The fixture workspaces have no `.git`, so
+the walk runs all the way to the filesystem root. On Windows, `GetTempPath()` is
+`C:\Users\<user>\AppData\Local\Temp`, which is under the user profile. The walk therefore reached
+the real `C:\Users\<user>\.claude`, and its agents and skills shadowed the engine under test (a
+stale real `sd-implementer` was served the wrong model). On Linux and macOS, `/tmp` is not under
+`$HOME`, so the leak never appeared there. The harness handles this in two steps:
+
+- **Sandbox root outside the profile.** Fake homes and workspaces are created under
+  `<SystemDrive>\sd-e2e\` on Windows (for example `C:\sd-e2e\`) and under `GetTempPath()` on Unix.
+  Set `SD_E2E_ROOT` to use a different root on any OS.
+- **Preflight guard.** Before any sandbox is built, the harness checks the root and every ancestor
+  of it. If any of them contains a `.claude` directory, the harness refuses to run, names the path,
+  and exits `2`, like any other missing prerequisite.
+
+```powershell
+# Use a custom sandbox root (no .claude folder in it or above it)
+$env:SD_E2E_ROOT = 'D:\sd-e2e'; .\tests\e2e\run-e2e.ps1
+```
+
+`git init` in each workspace would also stop the walk, but it was not chosen: it changes the
+fixture, and `/sd:setup` and other workflows can behave differently inside a git repository.
 
 Tool-level file access is a **separate** sandbox from the OS-level `HOME` override: Claude Code
 restricts Read/Write/Bash/Glob to the session's working directory plus any `--add-dir` grants, so

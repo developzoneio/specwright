@@ -286,6 +286,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   process-startup cost; see ADR 0012.
 
 ### Fixed
+- **`tests/e2e/run-e2e.ps1` sandbox was not isolated on Windows** (SW-73). Fake homes and
+  workspaces were created under `GetTempPath()`, which on Windows sits inside the user profile.
+  With no git root to stop it, Claude Code loads every ancestor `.claude/` as project scope, which
+  outranks the fake home's user scope. The developer's real `~/.claude` agents and skills therefore
+  shadowed the engine under test, and a stale real `sd-implementer` was served the wrong model.
+  Overriding `HOME`/`USERPROFILE` and passing `--setting-sources project` did not prevent this. The
+  sandbox root now defaults to `<SystemDrive>\sd-e2e` on Windows and stays at `GetTempPath()` on
+  Unix. `SD_E2E_ROOT` overrides both. A preflight guard exits `2` and names the path when the root
+  or any of its ancestors contains a `.claude` directory. Linux and macOS behaviour is unchanged.
 - **`/sd:feature` resume from `approved` no longer skips Phase 2** (SW-74) - the state machine
   sent `approved` with no `02-tasks.md` straight to Phase 3. A spec interrupted after Gate 1 was
   planned with no impact map, and `ESC-FEAT-02` never fired (ADR 0013 finding 4). The row is now
