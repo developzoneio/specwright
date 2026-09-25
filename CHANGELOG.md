@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Implementer escalation in `/sd:feature` Phase 4** (SW-61) - `sd-model-escalation` gains
+  `ESC-FEAT-04` (task `Estimated complexity` is `L`) and `ESC-FEAT-04b` (task `Reversibility` is
+  `hard`, alone, when `ESC-FEAT-04` did not fire), both `sd-implementer` `haiku -> sonnet`. Decided
+  once per task in Phase 4 step 2 and held for that task's step 5 re-invocations; one retro line
+  per task. An `unapplied` escalation never halts the loop for a model switch. `ceiling: "sonnet"`
+  leaves both rows uncapped. This keeps the promise `agents/implementer.md` already made in its
+  `description`, which now names the trigger fields. No step, gate or `model:` value changed.
+  New e2e scenario `06-escalation-implementer` asserts one applied, uncapped line for the `L` task
+  and none for the `S` task. `docs/walkthrough.md`'s T05 cost row now reflects a real rule (and no
+  longer counts T05 twice).
 - **`skills/sd-model-escalation/SKILL.md`** (SW-60) - single owner of the model escalation
   policy: the `haiku -> sonnet -> opus` ladder (`inherit` is not a rung), the three invariants from
   ADR 0002, a trigger table with stable rule IDs, precedence rules, and a logging contract - every

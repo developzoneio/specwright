@@ -1,0 +1,1 @@
+Needs Bash for npm test and file writes across Phase 4 with no human to approve them.

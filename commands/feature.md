@@ -36,9 +36,10 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Determine state from table above.
 3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 2 step 0, Phase 3 step 0 and Gate 2 `no-split`; this file names only rule IDs
-   and trigger inputs. If that file is unreadable, STOP: "specwright install incomplete - model
-   escalation skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+   applied at Phase 2 step 0, Phase 3 step 0, Gate 2 `no-split` and Phase 4 step 2; this file
+   names only rule IDs and trigger inputs. If that file is unreadable, STOP: "specwright install
+   incomplete - model escalation skill not found under `~/.claude/skills/sd/`. Re-run the
+   installer."
 
 ---
 
@@ -163,7 +164,11 @@ Process tasks from `02-tasks.md` in dependency order.
 For each unchecked task:
 
 1. **Pre-flight**: re-read `00-spec.md`, the specific task block, and the constitution sections cited under the spec's "Constitution check".
-2. **Invoke `sd-implementer`** with:
+2. **Model escalation check, then the implementer.** Before this task's first implementer call,
+   apply rules `ESC-FEAT-04` and `ESC-FEAT-04b` of **sd-model-escalation** (read in Phase 0).
+   Trigger inputs: the task block's `Estimated complexity` and `Reversibility` fields. The decision
+   also covers this task's re-invocations in step 5; its retro line precedes the task's step 7 line.
+   **Invoke `sd-implementer`** (model: default, or as resolved above) with:
    - `TASK_DETAILS = <full task block>`
    - `SPEC_REF = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT_REF = .specs/FEAT-<arg>/03-decisions.md`
@@ -304,9 +309,10 @@ Treat findings:
   `sd-replan-loop` skill; `02-tasks.md` is re-planned only through it - never by a silent hand-edit.
   Any revision is recorded append-only in `01-plan.md`'s `## Revisions` log with the original plan
   prose left intact.
-- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-FEAT-02`, `ESC-FEAT-03` and
-  `ESC-FEAT-03b` are applied where named above; the ladder, precedence, `models.escalation` config
-  and the `05-retro.md` line format live in the skill and are not restated here.
+- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-FEAT-02`, `ESC-FEAT-03`,
+  `ESC-FEAT-03b`, `ESC-FEAT-04` and `ESC-FEAT-04b` are applied where named above; the ladder,
+  precedence, `models.escalation` config and the `05-retro.md` line format live in the skill and
+  are not restated here.
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.

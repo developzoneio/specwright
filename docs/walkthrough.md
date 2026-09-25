@@ -257,6 +257,7 @@ T05 - Wire LowStockDetector to WebhookClient via event bus
   Files: src/Application/Inventory/UpdateStockHandler.cs,
          src/Application/Events/LowStockEventHandler.cs
   Layer: Application
+  Estimated complexity: L
   ...
 
 T06 - Integration test: end-to-end stock-drop -> webhook fire
@@ -292,7 +293,17 @@ T03: Add threshold-breach detector
 T04: Add webhook delivery client with HMAC signing
   Invoking sd-implementer...
   ...
+
+T05: Wire LowStockDetector to WebhookClient via event bus
+  Estimated complexity: L -> ESC-FEAT-04 fires.
+  05-retro.md: escalation: sd-implementer haiku -> sonnet (trigger: ESC-FEAT-04)
+  Invoking sd-implementer (model: sonnet)...
+  ...
 ```
+
+T05 is the one task whose `Estimated complexity` is `L`, so the main thread raises that single
+invocation to sonnet per the `sd-model-escalation` skill (a `Reversibility: hard` task would trip
+`ESC-FEAT-04b` the same way). T06 starts back at the haiku default.
 
 All 6 tasks complete without spawning a single reviewer. Violations that would have been caught per-task (like T03's layer issue - see Phase 5 below) are caught in the batch review instead.
 
@@ -398,12 +409,12 @@ For this run, approximate cost (illustrative):
 | Phase 1 spec (architect, 1 call) | sonnet | $0.40 | Includes JIRA fetch context |
 | Phase 2 impact (explorer, 1 call) | haiku | $0.06 | Read-only navigation |
 | Phase 3 plan (architect, 1 call) | sonnet | $0.30 | 6-task plan + sequencing |
-| Phase 4 execute (implementer x6, no reviewer) | haiku | $0.36 | Self-check by main thread |
-| Phase 4 T05 (complex: bumped to sonnet by main thread) | sonnet | $0.20 | Override at main thread's discretion |
+| Phase 4 execute (implementer x5, no reviewer) | haiku | $0.30 | Self-check by main thread |
+| Phase 4 T05 (`Estimated complexity: L`, escalated by `ESC-FEAT-04`) | sonnet | $0.20 | One invocation; T06 is back on haiku |
 | Phase 5 batch review (reviewer x1 + 1 re-review after fix) | sonnet | $0.25 | Single holistic pass + fix cycle |
-| **Total** | | **~$1.57** | |
+| **Total** | | **~$1.51** | |
 
-Compare with the per-task reviewer approach (~$2.45): the batch pattern saves ~36% on this 6-task feature by eliminating 6 redundant reviewer spawns. Each reviewer invocation loads the full context (CLAUDE.md + constitution + spec + changed files), so avoiding that repetition is where the savings come from.
+Compare with the per-task reviewer approach (~$2.39): the batch pattern saves ~37% on this 6-task feature by eliminating 6 redundant reviewer spawns. Each reviewer invocation loads the full context (CLAUDE.md + constitution + spec + changed files), so avoiding that repetition is where the savings come from.
 
 ---
 

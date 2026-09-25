@@ -1,7 +1,7 @@
 ---
 name: sd-implementer
 color: green
-description: Executes ONE atomic task per invocation. Scope-disciplined - edits only files declared in TASK_DETAILS.Files. Workflow-specific constraints for feature/bug/refactor/perf/port. Main thread can override to sonnet model for complex tasks.
+description: Executes ONE atomic task per invocation. Scope-disciplined - edits only files declared in TASK_DETAILS.Files. Workflow-specific constraints for feature/bug/refactor/perf/port. In /sd:feature Phase 4 the main thread escalates one invocation to sonnet from the task's Estimated complexity and Reversibility fields (sd-model-escalation ESC-FEAT-04, ESC-FEAT-04b).
 model: haiku
 tools: Read, Write, Edit, MultiEdit, Grep, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs
 skills:
