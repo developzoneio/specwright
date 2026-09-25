@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **ADR 0013: model override mechanism** (SW-72) - `docs/adr/0013-model-override-mechanism.md`
+  records Verdict A from sandbox transcript evidence on Claude Code 2.1.282, with a control call
+  per pair: the Agent tool's `model` parameter overrides agent frontmatter. `message.model` in each
+  subagent transcript shows the requested tier for `sd-implementer` haiku->opus,
+  `sd-spec-architect` sonnet->opus and `sd-code-explorer` haiku->sonnet, and the frontmatter tier
+  for each control. This replaces SW-61's self-reported retro line as the evidence for SW-58.
+  Open item: a workflow-level L-vs-control run of `/sd:feature`. Note that `run-e2e.ps1` passes
+  `--no-session-persistence`, so `SD_E2E_KEEP=1` keeps no transcript.
 - **Task check-off marker for `02-tasks.md`** (SW-71) - `sd-atomic-task-format` gains a
   "Check-off marker" section and is its only owner. The canonical form is a last line in each block,
   `- **Status**: <open | done>`. It is execution state, not one of the 11 contract fields.
