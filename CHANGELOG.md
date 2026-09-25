@@ -16,9 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refactor, perf, rca, port) could not pass Gate 1 under a permission mode that enforces hook
   denies. The hook rebuilds the post-edit index and allows only new rows at `draft`/`approved`
   plus Status-only moves along a workflow edge. A FEAT `-> done` move still needs a passing
-  `06-verify.md` (Rule 0), and any other hand-edit stays blocked. There are 9 new `tests/hooks`
+  `06-verify.md` (Rule 0), and any other hand-edit stays blocked. There are 10 new `tests/hooks`
   fixtures. `block-index-done-bug-row-protected` is now `allow-index-done-bug-row-transition`, and
-  `metrics-transition-event` now records `allow`.
+  `metrics-transition-event` now records `allow`. On an edit Rule 0b allows, the `spec_transition`
+  events come from Rule 0b's own diff. A workflow edit that rewrites only the Status cell is
+  therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
 - **ADR 0013: model override mechanism** (SW-72) - `docs/adr/0013-model-override-mechanism.md`

@@ -706,6 +706,19 @@ index_transition_changes() {
 if [[ "${rel_lower}" == "${index_rel_lower}" ]]; then
     index_changes="$(index_transition_changes)"
     if [[ -n "${index_changes}" ]]; then
+        # Record the transitions from Rule 0b's own diff, not the fragment
+        # scan: a workflow edit that rewrites only the Status cell (old
+        # "| draft |" -> new "| approved |") carries no full row in
+        # new_string, so collect_spec_transitions would miss it entirely.
+        transition_id=()
+        transition_phase=()
+        transition_from=()
+        while IFS=$'\t' read -r c_id c_from c_to; do
+            [[ -z "${c_id}" ]] && continue
+            transition_id+=("${c_id}")
+            transition_phase+=("${c_to}")
+            transition_from+=("${c_from}")
+        done <<< "${index_changes}"
         emit_transition_metrics "allow"
         emit_complexity_split_metrics
         exit 0

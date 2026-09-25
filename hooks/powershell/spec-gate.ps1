@@ -970,8 +970,13 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
 if ([string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
     $indexChanges = Test-IndexTransitionEdit -HookInput $hookInput -IndexPath (Join-Path $cwd $indexRel) -Prefixes $specPrefixes
     if ($indexChanges.Count -gt 0) {
-        Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
-        Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath (Join-Path $cwd $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
+        # Record the transitions from Rule 0b's own diff, not the fragment
+        # scan: a workflow edit that rewrites only the Status cell (old
+        # "| draft |" -> new "| approved |") carries no full row in
+        # new_string, so Get-SpecStatusTransitions would miss it entirely.
+        $ruleTransitions = @($indexChanges | ForEach-Object { [pscustomobject]@{ Id = $_.Id; Phase = $_.To; From = $_.From } })
+        Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $ruleTransitions -Decision 'allow'
+        Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $ruleTransitions -IndexPath (Join-Path $cwd $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
         exit 0
     }
 }

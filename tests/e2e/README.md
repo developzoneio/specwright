@@ -313,9 +313,14 @@ the post-edit `index.md` and allows the edit only when its net effect is new row
 `draft`/`approved` and/or Status-only moves along a workflow edge. A FEAT `-> done` move still
 needs Rule 0's verify artifact. Anything else (title change, deleted row, illegal jump) is still
 blocked. `tests/hooks` covers both sides (`allow-index-*` / `block-index-*` fixtures).
-**Still open:** scenario 2 has not yet been re-run live under `dontAsk`. It also still needs
-`skip-permissions` for its Bash steps (`npm test`), so SW-27's "no skip-permissions" bar needs a
-Bash grant that does not override hook denies. That is tracked with SW-77, not here.
+**Live re-run, 2026-09-25** (Windows, CLI 2.1.282, subscription auth): `02-feature-happy`, `03`,
+`04` and `-SelfTest` were all green. Scenario 02's `events.jsonl` recorded no
+`"gate":"protected","decision":"block"` line; the previous run recorded three. That run also
+showed the `spec_transition` metric missing partial Status-cell edits, so Rule 0b now records
+transitions from its own diff (`metrics-transition-partial-edit` fixture). **Still open:** scenario
+2 still runs with `skip-permissions` for its Bash steps (`npm test`), and that overrides hook
+denies. SW-27's "no skip-permissions" bar therefore needs a Bash grant that does not override hook
+denies. That work is tracked with SW-77, not here.
 
 **Update, 2026-08-01 full-suite run:** this time `02-feature-happy` did not merely proceed despite
 repeated Rule 1 denials - it stalled outright and hit the 600s timeout. `events.jsonl` shows the
