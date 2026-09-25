@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   leaves both rows uncapped. This keeps the promise `agents/implementer.md` already made in its
   `description`, which now names the trigger fields. No step, gate or `model:` value changed.
   New e2e scenario `06-escalation-implementer` asserts one applied, uncapped line for the `L` task
-  and none for the `S` task. `docs/walkthrough.md`'s T05 cost row now reflects a real rule (and no
+  and none for the `S` task; `07-escalation-disabled` asserts `enabled: false` leaves no line for
+  an `L` task or a `hard` task. `docs/walkthrough.md`'s T05 cost row now reflects a real rule (and no
   longer counts T05 twice).
 - **`skills/sd-model-escalation/SKILL.md`** (SW-60) - single owner of the model escalation
   policy: the `haiku -> sonnet -> opus` ladder (`inherit` is not a rung), the three invariants from

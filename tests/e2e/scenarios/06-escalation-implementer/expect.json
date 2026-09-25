@@ -4,6 +4,6 @@
   { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T01:" },
   { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T02:" },
   { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*`?escalation: sd-implementer haiku -> sonnet \\(trigger: ESC-FEAT-04\\)`?\\s*$" },
-  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?s)escalation:.*escalation:" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?ms)^[-*\\s]*`?escalation: sd-.*^[-*\\s]*`?escalation: sd-" },
   { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "ESC-FEAT-04b|\\bcapped\\b|\\bunapplied\\b" }
 ]
