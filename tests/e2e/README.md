@@ -94,7 +94,8 @@ $env:SD_E2E_ROOT = 'D:\sd-e2e'; .\tests\e2e\run-e2e.ps1
 Verified on Windows, 2026-09-25, `claude` 2.1.282: scenario `06-escalation-implementer` passed
 under `C:\sd-e2e`. A kept-transcript `tests/e2e/probe-model-override.ps1 -Case feat04` run, which
 uses the same drive-root layout, served every `sd-implementer` call that had no `model` parameter
-on `claude-haiku-4-5-20251001`, the fake home's `model: haiku`. `run-e2e.ps1` itself keeps no
+on `claude-haiku-4-5-20251001`, the fake home's `model: haiku`. The real `~/.claude` still had a
+conflicting `sd-implementer` with `model: sonnet` during that run. `run-e2e.ps1` itself keeps no
 transcript (`--no-session-persistence`), so the served-model evidence comes from the probe.
 
 `git init` in each workspace would also stop the walk, but it was not chosen: it changes the
