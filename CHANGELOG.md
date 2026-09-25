@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`hooks/bash/spec-gate.sh`, `hooks/powershell/spec-gate.ps1`** (SW-75) - new Rule 0b lets the
+  workflows' own `.specs/index.md` status transitions through `paths.protected`. Previously Rule 1
+  denied every `draft -> approved` / `approved -> in-progress` edit, so `/sd:feature` (and bug,
+  refactor, perf, rca, port) could not pass Gate 1 under a permission mode that enforces hook
+  denies. The hook rebuilds the post-edit index and allows only new rows at `draft`/`approved`
+  plus Status-only moves along a workflow edge. A FEAT `-> done` move still needs a passing
+  `06-verify.md` (Rule 0), and any other hand-edit stays blocked. There are 9 new `tests/hooks`
+  fixtures. `block-index-done-bug-row-protected` is now `allow-index-done-bug-row-transition`, and
+  `metrics-transition-event` now records `allow`.
+
 ### Added
 - **ADR 0013: model override mechanism** (SW-72) - `docs/adr/0013-model-override-mechanism.md`
   records Verdict A on Claude Code 2.1.282, from transcript evidence with a control for every

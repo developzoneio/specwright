@@ -6,7 +6,10 @@
 .DESCRIPTION
     Reads Claude Code hook JSON from stdin. If the tool is Edit / Write /
     MultiEdit, the hook decides whether the edit is allowed:
-      - Edits to paths listed under paths.protected -> ALWAYS blocked.
+      - Edits to the spec index: a FEAT- row -> done needs a passing
+        /sd:verify artifact (Rule 0); an edit that is only legal status
+        transitions / new draft rows is allowed (Rule 0b, SW-75).
+      - Other edits to paths listed under paths.protected -> ALWAYS blocked.
       - Edits to allow-listed paths (.specs/, .claude/, tests/, *.md, *.json,
         *.yaml, README, CHANGELOG, LICENSE) -> always allowed.
       - Edits to code files (cs, ts, py, rs, go, java, kt, rb, php, swift,
@@ -416,6 +419,142 @@ function Get-SpecStatusTransitions {
     return ,$result
 }
 
+# Rule 0b helpers (SW-75). Mirrors index_transition_changes in spec-gate.sh,
+# which does the same work in ONE jq program - every step below (CRLF
+# normalization, "\n" split, one trailing CR stripped, literal ordinal
+# replacement, '|' split, masked Status cell) is chosen to match jq's string
+# semantics exactly, so both implementations reach the same decision.
+function ConvertTo-IndexLines {
+    param([string]$Text)
+    if ($Text.Length -gt 0 -and $Text[0] -eq [char]0xFEFF) { $Text = $Text.Substring(1) }
+    $Text = $Text.Replace("`r`n", "`n")
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($l in $Text.Split("`n")) {
+        # Char compare, not EndsWith(string): the string overload is
+        # culture-sensitive on PS 5.1 / .NET Framework.
+        if ($l.Length -gt 0 -and $l[$l.Length - 1] -eq [char]13) { $l = $l.Substring(0, $l.Length - 1) }
+        $out.Add($l) | Out-Null
+    }
+    return ,$out
+}
+
+function ConvertTo-IndexRow {
+    param([string]$Line, [string]$Prefixes)
+    $f = $Line.Split('|')
+    if ($f.Count -lt 5) { return $null }
+    $id = $f[1].Trim(' ', "`t")
+    $st = $f[3].Trim(' ', "`t")
+    if ($id -cnotmatch "^($Prefixes)-[A-Za-z0-9_-]+$") { return $null }
+    if (@('draft', 'approved', 'in-progress', 'done', 'archived') -cnotcontains $st) { return $null }
+    $f[3] = '@'
+    return [pscustomobject]@{ Id = $id; St = $st; Mask = ($f -join '|') }
+}
+
+function Invoke-IndexLiteralEdit {
+    param([string]$Text, [object]$Edit)
+    # $null result = the edit cannot be applied (empty or absent old_string);
+    # the caller then falls through to Rule 1.
+    if ($null -eq $Text) { return $null }
+    $o = if ($null -ne $Edit.old_string) { ([string]$Edit.old_string).Replace("`r`n", "`n") } else { '' }
+    $n = if ($null -ne $Edit.new_string) { ([string]$Edit.new_string).Replace("`r`n", "`n") } else { '' }
+    if ($o -eq '') { return $null }
+    $i = $Text.IndexOf($o, [System.StringComparison]::Ordinal)
+    if ($i -lt 0) { return $null }
+    if (($Edit.replace_all -is [bool]) -and $Edit.replace_all) { return $Text.Replace($o, $n) }
+    return $Text.Substring(0, $i) + $n + $Text.Substring($i + $o.Length)
+}
+
+function Get-PostEditIndexText {
+    param([object]$HookInput, [string]$OldText)
+    $tool = $HookInput.tool_name
+    if ($tool -eq 'Write') {
+        if ($HookInput.tool_input.content -is [string]) { return [string]$HookInput.tool_input.content }
+        return $null
+    }
+    if ($tool -eq 'Edit') {
+        return (Invoke-IndexLiteralEdit -Text $OldText -Edit $HookInput.tool_input)
+    }
+    if ($tool -eq 'MultiEdit') {
+        $t = $OldText
+        if ($null -eq $HookInput.tool_input.edits) { return $t }
+        foreach ($e in @($HookInput.tool_input.edits)) {
+            # A null element is an unappliable edit (jq: $e.old_string -> "").
+            if ($null -eq $e) { return $null }
+            $t = Invoke-IndexLiteralEdit -Text $t -Edit $e
+        }
+        return $t
+    }
+    return $null
+}
+
+# Returns the changed rows ({Id, From, To}, in post-edit row order) when the
+# pending index edit is a pure legal transition, else an empty list. See the
+# Rule 0b comment at the call site for what "pure legal transition" means.
+function Test-IndexTransitionEdit {
+    param([object]$HookInput, [string]$IndexPath, [string]$Prefixes)
+    $empty = New-Object System.Collections.Generic.List[object]
+    try {
+        if (-not (Test-Path -LiteralPath $IndexPath)) { return ,$empty }
+        $oldText = [System.IO.File]::ReadAllText($IndexPath, (New-Object System.Text.UTF8Encoding($false)))
+        if ($oldText.Length -gt 0 -and $oldText[0] -eq [char]0xFEFF) { $oldText = $oldText.Substring(1) }
+        $oldText = $oldText.Replace("`r`n", "`n")
+        $newText = Get-PostEditIndexText -HookInput $HookInput -OldText $oldText
+        if ($null -eq $newText) { return ,$empty }
+
+        $oldLines = ConvertTo-IndexLines -Text $oldText
+        $newLines = ConvertTo-IndexLines -Text $newText
+
+        $oldStatus = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
+        $oldMask = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $oldLines) {
+            $r = ConvertTo-IndexRow -Line $l -Prefixes $Prefixes
+            if ($null -eq $r) { $oldMask.Add($l) | Out-Null; continue }
+            if ($oldStatus.ContainsKey($r.Id)) { return ,$empty }
+            $oldStatus[$r.Id] = $r.St
+            $oldMask.Add($r.Mask) | Out-Null
+        }
+
+        $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+        $newMask = New-Object System.Collections.Generic.List[string]
+        $changes = New-Object System.Collections.Generic.List[object]
+        foreach ($l in $newLines) {
+            $r = ConvertTo-IndexRow -Line $l -Prefixes $Prefixes
+            if ($null -eq $r) { $newMask.Add($l) | Out-Null; continue }
+            if (-not $seen.Add($r.Id)) { return ,$empty }
+            $from = '-'
+            if ($oldStatus.ContainsKey($r.Id)) {
+                $from = $oldStatus[$r.Id]
+                $newMask.Add($r.Mask) | Out-Null
+            }
+            if ($from -cne $r.St) {
+                $changes.Add([pscustomobject]@{ Id = $r.Id; From = $from; To = $r.St }) | Out-Null
+            }
+        }
+
+        if ($changes.Count -eq 0) { return ,$empty }
+        if ($oldMask.Count -ne $newMask.Count) { return ,$empty }
+        for ($i = 0; $i -lt $oldMask.Count; $i++) {
+            if (-not [string]::Equals($oldMask[$i], $newMask[$i], [System.StringComparison]::Ordinal)) { return ,$empty }
+        }
+
+        $edges = @('draft>approved', 'approved>in-progress', 'in-progress>done',
+                   'done>archived', 'archived>in-progress', 'draft>archived',
+                   'approved>archived')
+        foreach ($c in $changes) {
+            if ($c.From -ceq '-') {
+                if (@('draft', 'approved') -cnotcontains $c.To) { return ,$empty }
+            } elseif ($c.Id.StartsWith('FEAT-', [System.StringComparison]::Ordinal) -and $c.To -ceq 'done') {
+                return ,$empty
+            } elseif ($edges -cnotcontains ($c.From + '>' + $c.To)) {
+                return ,$empty
+            }
+        }
+        return ,$changes
+    } catch {
+        return ,$empty
+    }
+}
+
 function Test-MetricsPathSafe {
     param([string]$RelPath)
     # A metrics path is not an arbitrary-write primitive: reject anything
@@ -582,7 +721,8 @@ function Write-TransitionMetrics {
 # metrics pipeline the rest of this file keeps strictly hook-authored.
 #
 # Callers MUST only invoke this on a path where the edit was actually
-# ALLOWED through (Rule 0's verify-allow exit, Rule 2's allow-listed exit).
+# ALLOWED through (Rule 0's verify-allow exit, Rule 0b's transition-allow
+# exit, Rule 2's allow-listed exit).
 # On a block exit the edit never reached disk, so recording "split" there
 # would assert a split that did not happen - never add a call site here on a
 # block/deny path.
@@ -728,8 +868,9 @@ if ($mode -eq 'off') { exit 0 }
 # Scope: FEAT- rows only. Bug/refactor/perf/rca workflows do not produce
 # 02-tasks.md and never run /sd:verify, so gating them here would hard-STOP
 # their close-out at VF002 with no way through. Non-FEAT rows fall through to
-# the unconditional Rule 1 protected-path block, exactly as before this
-# gate existed - until their workflows integrate /sd:verify (follow-up spec).
+# Rule 0b, which allows their in-progress -> done like any other legal
+# status transition (SW-75) - until their workflows integrate /sd:verify
+# (follow-up spec).
 #
 # Bundled-edit limitation: when every newly-done FEAT row in the pending edit
 # has a passing artifact, the WHOLE edit is allowed - including any unrelated
@@ -810,6 +951,27 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
         }
         Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
         Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath $indexAbs -HookInput $hookInput -FeaturePrefix $featurePrefix
+        exit 0
+    }
+}
+
+# Rule 0b: legal status transitions on the spec index (SW-75). Every workflow
+# (/sd:feature, /sd:bug, /sd:refactor, /sd:perf, /sd:rca, /sd:port, /sd:spec,
+# /sd:release) registers its row and moves its Status by editing index.md with
+# the Edit tool; Rule 1 alone would deny all of that under a permission mode
+# that honors hook decisions. This rule lets through an edit whose NET effect
+# is only new rows registered at draft/approved and/or existing rows whose
+# Status cell - and nothing else - moves along a workflow edge. Anything else
+# (title/date change, deleted or reordered row, header change, illegal jump)
+# falls through to Rule 1. The post-edit file is rebuilt and compared with
+# each row's Status cell masked, so a bundled change cannot ride along. A FEAT-
+# row moving to done is not an edge here: Rule 0 owns it, and with verifyGate
+# off it stays blocked by Rule 1 as before. Mirrors spec-gate.sh Rule 0b.
+if ([string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $indexChanges = Test-IndexTransitionEdit -HookInput $hookInput -IndexPath (Join-Path $cwd $indexRel) -Prefixes $specPrefixes
+    if ($indexChanges.Count -gt 0) {
+        Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
+        Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath (Join-Path $cwd $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
         exit 0
     }
 }

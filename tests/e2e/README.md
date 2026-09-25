@@ -289,20 +289,14 @@ the real `~/.claude`, including its installed `feature.md`.
 
 ## Known product gaps this harness surfaced
 
-**1. Rule 1 (`paths.protected`) appears to make `/sd:feature` unable to complete under a
-permission posture that actually respects hooks - this looks like a real, pre-existing bug, not a
-new regression.** `.specs/index.md` is listed in `paths.protected` by default
-(`templates/project-config.template.json`), and `spec-gate.ps1`/`.sh` Rule 1 blocks EVERY edit to a
-protected path unconditionally (no `mode` check, unlike Rule 3) - except the narrow Rule 0
-carve-out for a FEAT- row's `in-progress -> done` transition with a passing `06-verify.md`. But
-`/sd:feature`'s own Gate 1 (spec approval, `draft -> approved`) and Gate 2 (plan approval,
-`approved -> in-progress`) work by editing that exact same `index.md` row with the `Edit` tool -
-there is no separate "`/sd:spec status` mechanism" at the tool-call level, so the hook cannot tell
-apart the workflow's own legitimate transition from a careless hand-edit. Scenario 2's real run
-against the unmodified `examples/fixture-project` config confirms this happening live - the exact
-sequence spec-gate recorded in `.specs/_metrics/events.jsonl`:
+**1. [FIXED - SW-75] Rule 1 (`paths.protected`) made `/sd:feature` unable to complete under a
+permission posture that actually respects hooks.** `.specs/index.md` is in `paths.protected` by
+default, and `spec-gate` Rule 1 blocked every edit to it except Rule 0's FEAT `-> done` carve-out.
+But every workflow records its own gates (`draft -> approved`, `approved -> in-progress`, ...) by
+editing that row with the `Edit` tool. Scenario 2's run against the unmodified
+`examples/fixture-project` config recorded the denials live:
 
-```
+```text
 {"...","gate":"protected","decision":"block"}          <- draft -> approved edit
 {"...","spec_id":"FEAT-todo-count","phase":"draft","event":"spec_transition","from":"-","decision":"block"}
 {"...","gate":"protected","decision":"block"}          <- approved -> in-progress edit
@@ -313,20 +307,15 @@ sequence spec-gate recorded in `.specs/_metrics/events.jsonl`:
 {"...","spec_id":"FEAT-todo-count","phase":"done","event":"gate","gate":"verify","decision":"allow"}   <- Rule 0 finally allows the LAST one
 ```
 
-Every one of those edits nonetheless landed in the real file, and the scenario passed - only
-because scenario 2 deliberately runs under `acceptEdits` (see "Permission mode" above), which this
-harness independently proved overrides a hook's deny. Under the harness's own default `dontAsk`
-(the mode that actually enforces hook decisions), the very first status transition of any
-`/sd:feature` run would be denied and the workflow could never progress past Gate 1. This was never
-caught before because `tests/hooks/run-conformance.ps1` only pipes crafted JSON into the hook
-script in isolation - it has no way to know the real workflow's own operation collides with Rule 1
-- and no prior mechanism drove a real session through `/sd:feature` under an enforcing permission
-mode. Likely candidate fixes (not attempted here - out of scope for SW-27, and touching `spec-gate`
-means a twin-implementation change plus new `tests/hooks` fixtures): widen Rule 0's scope beyond
-"FEAT- done transitions only" to cover legitimate in-workflow status transitions generally, or
-special-case `index.md` row edits that only change the `Status` column via a recognized transition
-pattern. **Recommend filing this as its own ticket** rather than folding a `hooks/` fix into SW-27's
-scope.
+The edits landed only because scenario 2 runs with `--dangerously-skip-permissions`, which
+overrides a hook's deny. SW-75 added **Rule 0b** to both `spec-gate` implementations. It rebuilds
+the post-edit `index.md` and allows the edit only when its net effect is new rows at
+`draft`/`approved` and/or Status-only moves along a workflow edge. A FEAT `-> done` move still
+needs Rule 0's verify artifact. Anything else (title change, deleted row, illegal jump) is still
+blocked. `tests/hooks` covers both sides (`allow-index-*` / `block-index-*` fixtures).
+**Still open:** scenario 2 has not yet been re-run live under `dontAsk`. It also still needs
+`skip-permissions` for its Bash steps (`npm test`), so SW-27's "no skip-permissions" bar needs a
+Bash grant that does not override hook denies. That is tracked with SW-77, not here.
 
 **Update, 2026-08-01 full-suite run:** this time `02-feature-happy` did not merely proceed despite
 repeated Rule 1 denials - it stalled outright and hit the 600s timeout. `events.jsonl` shows the

@@ -1,0 +1,1 @@
+{"tool_name":"MultiEdit","cwd":"{{CWD}}","tool_input":{"file_path":"{{CWD}}/.specs/index.md","edits":[{"old_string":"| FEAT-001 | feature | approved |","new_string":"| FEAT-001 | feature | in-progress |"},{"old_string":"| REF-002 | refactor | draft |","new_string":"| REF-002 | refactor | approved |"}]}}

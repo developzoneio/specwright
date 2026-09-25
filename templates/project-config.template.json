@@ -133,7 +133,7 @@
       "_modes": "block = refuse Edit/Write on code without in-progress spec; warn = log to stderr only; off = skip",
       "_use": "Guard rail blocking code edits when no spec is in-progress",
       "verifyGate": true,
-      "_verifyGate_use": "Scoped to FEAT- (feature-spec) rows only - other types (bug, refactor, perf, rca, port) have no /sd:verify integration yet. true: a FEAT- row may transition to done only when <spec.dir>/<ID>/06-verify.md records 'result: pass' (written by /sd:verify); non-FEAT rows and any false setting keep index.md fully protected as before SW-6."
+      "_verifyGate_use": "Scoped to FEAT- (feature-spec) rows only - other types (bug, refactor, perf, rca, port) have no /sd:verify integration yet. true: a FEAT- row may transition to done only when <spec.dir>/<ID>/06-verify.md records 'result: pass' (written by /sd:verify); false: a FEAT- row can never be moved to done by an index.md edit. Every other index.md edit is decided by spec-gate Rule 0b (SW-75): new rows at draft/approved and Status-only moves along a workflow edge are allowed (including non-FEAT in-progress -> done); anything else stays blocked as a protected path."
     },
     "subagentRetro": {
       "enabled": true,

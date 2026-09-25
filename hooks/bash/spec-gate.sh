@@ -2,7 +2,10 @@
 # specwright: PreToolUse hook - spec-gate (bash).
 #
 # Decides whether an Edit / Write / MultiEdit is allowed:
-#   - Protected paths   -> always block.
+#   - Spec index        -> FEAT- done needs a passing /sd:verify (Rule 0); an
+#                          edit that is only legal status transitions / new
+#                          draft rows is allowed (Rule 0b, SW-75).
+#   - Protected paths   -> otherwise always block.
 #   - Allow-listed dirs / extensions -> always allow.
 #   - Code files        -> require an in-progress spec in .specs/index.md.
 #       mode=block -> emit block JSON (see emit_block below).
@@ -445,7 +448,8 @@ emit_transition_metrics() {
 # metrics pipeline the rest of this file keeps strictly hook-authored.
 #
 # Callers MUST only invoke this on a path where the edit was actually
-# ALLOWED through (Rule 0's verify-allow exit, Rule 2's allow-listed exit).
+# ALLOWED through (Rule 0's verify-allow exit, Rule 0b's transition-allow
+# exit, Rule 2's allow-listed exit).
 # On a block exit the edit never reached disk, so recording "split" there
 # would assert a split that did not happen - never add a call site here on a
 # block/deny path.
@@ -499,8 +503,9 @@ emit_complexity_split_metrics() {
 # Scope: FEAT- rows only. Bug/refactor/perf/rca workflows do not produce
 # 02-tasks.md and never run /sd:verify, so gating them here would hard-STOP
 # their close-out at VF002 with no way through. Non-FEAT rows fall through to
-# the unconditional Rule 1 protected-path block, exactly as before this gate
-# existed - until their workflows integrate /sd:verify (follow-up spec).
+# Rule 0b, which allows their `in-progress -> done` like any other legal
+# status transition (SW-75) - until their workflows integrate /sd:verify
+# (follow-up spec).
 #
 # Bundled-edit limitation: when every newly-done FEAT row in the pending edit
 # has a passing artifact, the WHOLE edit is allowed - including any unrelated
@@ -606,6 +611,104 @@ if [[ "${verify_gate}" == "true" && "${rel_lower}" == "${index_rel_lower}" ]]; t
             emit_complexity_split_metrics
             exit 0
         fi
+    fi
+fi
+
+# --- Rule 0b: legal status transitions on the spec index (SW-75) -------------
+# Every workflow (/sd:feature, /sd:bug, /sd:refactor, /sd:perf, /sd:rca,
+# /sd:port, /sd:spec, /sd:release) registers its row and moves its Status by
+# editing index.md with the Edit tool. Rule 1 alone would deny all of that
+# under a permission mode that honors hook decisions. This rule lets through
+# an edit whose NET effect is only:
+#   - new rows registered at `draft` or `approved` (refactor registers at its
+#     Gate 1), and/or
+#   - existing rows whose Status cell - and nothing else - moves along a
+#     workflow edge (index_edges below).
+# Everything else - a title/date change, a deleted or reordered row, a header
+# change, an illegal jump - falls through to Rule 1 and is blocked.
+#
+# The post-edit file is rebuilt (Write content, or Edit/MultiEdit literal
+# replacement applied to the on-disk file) and compared row-by-row with each
+# row's Status cell masked, so a change riding along with a legal transition
+# cannot slip through (unlike Rule 0's fragment scan). A FEAT- row moving to
+# `done` is NOT an edge here: Rule 0 owns it (verify artifact required), and
+# with verifyGate off it stays blocked by Rule 1 exactly as before.
+#
+# The whole decision runs in ONE jq program so line splitting and literal
+# replacement match spec-gate.ps1's .NET string ops (Test-IndexTransitionEdit)
+# exactly. Output: one "id<TAB>from<TAB>to" line per changed row, or nothing
+# when the edit is not a pure legal transition.
+index_transition_changes() {
+    [[ -f "${index_path}" ]] || return 0
+    printf '%s' "${input}" | jq -r --rawfile old "${index_path}" --arg prefixes "${spec_prefixes}" '
+        def norm: gsub("\r\n"; "\n");
+        def lines: ltrimstr("﻿") | norm | split("\n") | map(rtrimstr("\r"));
+        def trimws: gsub("^[ \t]+|[ \t]+$"; "");
+        def row: (split("|")) as $f
+            | if ($f | length) >= 5 then
+                  ($f[1] | trimws) as $id | ($f[3] | trimws) as $st
+                  | if ($id | test("^(" + $prefixes + ")-[A-Za-z0-9_-]+$"))
+                       and ($st | IN("draft", "approved", "in-progress", "done", "archived"))
+                    then {id: $id, st: $st, mask: ($f | .[3] = "@" | join("|"))}
+                    else null end
+              else null end;
+        def apply($e):
+            if . == null then null
+            else
+                (($e.old_string // "") | tostring | norm) as $o
+                | (($e.new_string // "") | tostring | norm) as $n
+                | if $o == "" then null
+                  else split($o) as $parts
+                  | if ($parts | length) < 2 then null
+                    elif $e.replace_all == true then $parts | join($n)
+                    else $parts[0] + $n + ($parts[1:] | join($o)) end
+                  end
+            end;
+        def edges: ["draft>approved", "approved>in-progress", "in-progress>done",
+                    "done>archived", "archived>in-progress", "draft>archived",
+                    "approved>archived"];
+
+        . as $in
+        | ($old | ltrimstr("﻿") | norm) as $oldtext
+        | (if $in.tool_name == "Write" then
+               (if ($in.tool_input.content | type) == "string" then $in.tool_input.content else null end)
+           elif $in.tool_name == "Edit" then
+               ($oldtext | apply($in.tool_input))
+           elif $in.tool_name == "MultiEdit" then
+               reduce ($in.tool_input.edits // [])[] as $e ($oldtext; apply($e))
+           else null end) as $newtext
+        | if $newtext == null then empty else
+            ($oldtext | lines) as $ol | ($newtext | lines) as $nl
+            | [$ol[] | row | select(. != null)] as $orows
+            | [$nl[] | row | select(. != null)] as $nrows
+            | ($orows | map(.id)) as $oids | ($nrows | map(.id)) as $nids
+            | if ($oids | unique | length) != ($oids | length)
+                 or ($nids | unique | length) != ($nids | length) then empty
+              else
+                ($orows | map({(.id): .st}) | add // {}) as $ost
+                | [$ol[] | (row) as $r | if $r == null then . else $r.mask end] as $omask
+                | [$nl[] | (row) as $r
+                    | if $r == null then .
+                      elif ($ost | has($r.id)) then $r.mask
+                      else empty end] as $nmask
+                | [$nrows[] | {id, from: ($ost[.id] // "-"), to: .st} | select(.from != .to)] as $chg
+                | if $omask != $nmask or ($chg | length) == 0 then empty
+                  elif any($chg[];
+                        if .from == "-" then (.to | IN("draft", "approved")) | not
+                        elif (.id | startswith("FEAT-")) and .to == "done" then true
+                        else ((.from + ">" + .to) | IN(edges[])) | not end) then empty
+                  else $chg[] | "\(.id)\t\(.from)\t\(.to)" end
+              end
+          end
+    ' 2>/dev/null
+}
+
+if [[ "${rel_lower}" == "${index_rel_lower}" ]]; then
+    index_changes="$(index_transition_changes)"
+    if [[ -n "${index_changes}" ]]; then
+        emit_transition_metrics "allow"
+        emit_complexity_split_metrics
+        exit 0
     fi
 fi
 

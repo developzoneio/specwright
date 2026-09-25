@@ -342,7 +342,8 @@ Proves criterion -> task -> test traceability for one spec and writes
 `.specs/<ID>/06-verify.md` with `result: pass|fail`. The spec-gate hook blocks a FEAT
 (feature-spec) `index.md` row from transitioning to `done` without a passing artifact
 (`hooks.specGate.verifyGate`, default on). Other spec types (bug, refactor, perf, rca, port) close
-out through the unconditional protected-path rule, same as before this gate existed.
+out like any other legal status transition: spec-gate allows an `index.md` edit whose only effect is
+Status-only moves along a workflow edge and/or new rows at `draft`/`approved`.
 
     /sd:verify FEAT-1042
 
@@ -525,7 +526,10 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
 - Loosening: set `enabled: false` on any hook during noisy debug sessions. Don't forget to flip back.
 - Pace tuning: `retroStaleMinutes` and `debounceMinutes` control how often the retro reminder fires. Set both higher for long-form work; lower for tight iteration cycles.
 
-`paths.protected` controls which files trigger an unconditional `decision=block`:
+`paths.protected` controls which files trigger a `decision=block`. The one exception is the spec
+index: spec-gate still lets through an `index.md` edit that is purely a workflow status transition
+or a new `draft`/`approved` row (and a verified FEAT `done` close-out). Any other edit to it is
+blocked:
 
 ```json
 {

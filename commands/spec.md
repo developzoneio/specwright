@@ -95,8 +95,8 @@ archived -> in-progress (only via 'revive', with reason)
 The `in-progress -> done` transition of a feature (FEAT) spec is hook-enforced: spec-gate
 blocks the `index.md` edit unless `<spec.dir>/<ID>/06-verify.md` exists and records
 `result: pass`. Run `/sd:verify <ID>` first. Disable only via `hooks.specGate.verifyGate: false`
-in project-config. Other spec types (bug, refactor, perf, rca, port) close out as before - the hook
-does not gate their `index.md` row.
+in project-config. spec-gate lets any other `index.md` edit through
+only if it adds a draft row or changes just a Status cell legally.
 
 3. Illegal transitions are REFUSED. Do NOT mutate any file. Print a refusal that names the current
    state, the requested state, the valid next state(s) for the current state (from the machine above),

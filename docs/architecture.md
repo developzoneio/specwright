@@ -204,6 +204,10 @@ The block is injected into the prompt as additional context, so Claude knows the
 ### `spec-gate` (`PreToolUse`, Edit / Write / MultiEdit)
 
 Runs before any code-editing tool. Decides:
+- Editing the spec index (`.specs/index.md`)? -> a FEAT row moving to `done` needs a passing
+  `/sd:verify` artifact (Rule 0). An edit whose only effect is new rows at `draft`/`approved`
+  and/or Status-only moves along a workflow edge is allowed (Rule 0b) - this is how every
+  workflow records its own gates. Anything else falls through to the protected-path block.
 - Editing a path in `paths.protected`? -> block (constitution, index, license).
 - Editing an allow-listed path (.specs/, .claude/, tests/, *.md, *.json, etc.)? -> allow.
 - Editing a code file (cs/ts/py/rs/go/etc.) with no in-progress spec? -> block or warn (configurable).
@@ -255,7 +259,7 @@ the PowerShell and bash implementations produce byte-comparable lines:
 | `phase` | always | lifecycle status of `spec_id` (`draft` / `approved` / `in-progress` / `done`), or `-` |
 | `event` | always | `gate` \| `spec_transition` \| `subagent_stop` |
 | `gate` | when `event` is `gate` | `verify` \| `protected` \| `code-edit` \| `complexity` |
-| `decision` | when `event` is `gate` or `spec_transition` | `allow` \| `block` \| `warn` \| `split` (only on `gate:"complexity"`) - on a transition, whether the index edit was ultimately allowed through. Most direct index edits are blocked by `paths.protected`, so `block` is the common case; a verified `done` close-out is the path that yields `allow`. |
+| `decision` | when `event` is `gate` or `spec_transition` | `allow` \| `block` \| `warn` \| `split` (only on `gate:"complexity"`) - on a transition, whether the index edit was ultimately allowed through. Workflow status transitions and new-row registrations are allowed (Rule 0b), as is a verified FEAT `done` close-out; any other direct index edit is blocked by `paths.protected`. |
 | `from` | when `event` is `spec_transition` | previous lifecycle status, or `-` if not derivable |
 | `ext` | when `gate` is `code-edit` | lowercased file extension, e.g. `.ps1` - never a path |
 | `stale` | when `event` is `subagent_stop` | `0` or `1` - a flag, not a count. One event is emitted per in-progress spec per subagent stop; `1` means that spec's `05-retro.md` was stale or missing at that moment. Retro pressure is measured by counting `1`s over time, never by reading a single value as a quantity |
@@ -285,12 +289,11 @@ than closed by having the Gate 2 prose itself write a marker.
 It is emitted **only on an edit that was actually allowed through** - never on a `block` exit, at
 any of the four rules above. A blocked `index.md` edit never reaches disk, so a detected
 parent-archive-plus-child pattern inside a denied edit did not really happen; recording `split`
-there would be a false positive. Combined with the note on `decision` above (most direct
-`index.md` edits are blocked by `paths.protected` under the default config), this means the split
-count is expected to under-count real splits whenever a project leaves `index.md` protected -
-which is the default. A project that wants this signal to be reliable needs `index.md` reachable
-by whatever edit actually performs the split (see `commands/spec.md`'s existing `verifyGate`
-carve-out for the same tension on the `done` transition).
+there would be a false positive. The `/sd:feature` split itself (parent `approved -> archived`
+plus child rows registered at `draft`) is a legal Rule 0b transition, so it is allowed and
+recorded when the workflow makes it as one edit, or as a parent-archive edit after the child rows
+already exist. A split performed through an edit Rule 0b rejects (for example one that also
+rewrites a title) is blocked and therefore not counted.
 
 The log is metadata-only by design: no file paths, no code content, no commit messages - only spec
 IDs, lifecycle phases, decisions, and file extensions. Controlled by `hooks.metrics` in
