@@ -5,5 +5,9 @@
   { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T02:" },
   { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*`?escalation: sd-implementer haiku -> sonnet \\(trigger: ESC-FEAT-04\\)`?\\s*$" },
   { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "(?ms)^[-*\\s]*`?escalation: sd-.*^[-*\\s]*`?escalation: sd-" },
-  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "ESC-FEAT-04b|\\bcapped\\b|\\bunapplied\\b" }
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/05-retro.md", "pattern": "ESC-FEAT-04b|\\bcapped\\b|\\bunapplied\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT01\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-escalation-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT02\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/02-tasks.md", "pattern": "(?mi)^[-*\\s]*\\**Status\\**\\s*:\\**\\s*open\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-escalation-demo/02-tasks.md", "pattern": "(?m)^#{3,}\\s*(\\[[xX ]\\]|\\u2705)" }
 ]

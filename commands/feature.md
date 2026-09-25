@@ -26,6 +26,11 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
 | status=`archived`, spawned children (has `spawns` links) | `umbrella` | Print the child IDs + `/sd:feature <child-arg>` for each, in dependency order; exit |
 | status=`archived` | `archived` | Print archived notice, exit |
 
+"Checked" and "unchecked" mean the task's check-off marker as defined in the "Check-off marker"
+section of the **sd-atomic-task-format** skill - the one definition; do not invent a marker. Task
+rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
+frontmatter first and is never resumed from its task markers.
+
 ---
 
 ## Phase 0 - Bootstrap (always runs)
@@ -185,7 +190,8 @@ For each unchecked task:
      NOT hack-edit `02-tasks.md`. Enter **Gate Re-plan** below. This is distinct from an ordinary
      in-task adjustment, which the implementer handles within its own scope (see `sd-replan-loop` for
      the boundary).
-6. **Check off** the task in `02-tasks.md`.
+6. **Check off** the task in `02-tasks.md`: set its `Status` line to `done`, per the "Check-off
+   marker" section of the **sd-atomic-task-format** skill. Change nothing else in the block.
 7. Log a one-line summary to `.specs/FEAT-<arg>/05-retro.md`: `T<NN>: <status> - <note>`.
 
 > **Why no per-task reviewer?** Each reviewer invocation spawns a sonnet-class subagent that reloads the full context (CLAUDE.md + constitution + spec + changed files). For N tasks, that is N expensive calls. The main thread self-check catches scope violations and test failures. Constitution compliance and cross-task issues are caught more efficiently by the batch review in Phase 5.

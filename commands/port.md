@@ -48,6 +48,11 @@ hunk vocabulary this file wires together - it does not restate them.
 | status `done` | `done` | Print summary, exit |
 | status `archived` | `archived` | Print archived notice, exit |
 
+"Checked" and "unchecked" mean the task's check-off marker as defined in the "Check-off marker"
+section of the **sd-atomic-task-format** skill - the one definition; do not invent a marker. Task
+rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
+frontmatter first and is never resumed from its task markers.
+
 ---
 
 ## Phase 0 - Bootstrap (always runs)
@@ -351,7 +356,9 @@ current batch:
 4. **Self-check** (main thread, no per-task reviewer - same cost argument as `/sd:feature` Phase
    4): only files in `Files` were touched; the diff touches only what the cited member range
    accounts for, or a licensed deviation row; the test passes.
-5. Check off the task in `02-tasks.md`. Log one line to `05-retro.md`: `T<NN>: <status> - <note>`.
+5. Check off the task in `02-tasks.md` (set its `Status` line to `done`, per the "Check-off
+   marker" section of the **sd-atomic-task-format** skill). Log one line to `05-retro.md`:
+   `T<NN>: <status> - <note>`.
 
 ### ⛔ Gate 5 - Batch tests green
 

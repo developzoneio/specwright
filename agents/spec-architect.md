@@ -92,6 +92,10 @@ Apply the **sd-atomic-task-format** skill: task block (11 required fields, inclu
   proves. Before finishing, cross-check that every SC and AC ID in the spec appears in at
   least one task's `Covers` - an uncovered criterion means the task list is incomplete, not
   that the criterion is optional.
+- End every task block with `- **Status**: open` - the check-off marker, per the skill's
+  "Check-off marker" section. Always write it, never leave it out: `open` states that the task is
+  unchecked. Never write `done`, and never mark a heading (`### [x] T01`) - only the executing
+  workflow checks a task off.
 
 ### Pattern refs protocol
 
@@ -149,7 +153,8 @@ number, e.g. `R2`), and the trigger the main thread passed.
    `REPLAN_SCOPE` is left byte-for-byte unchanged - do not reflow, renumber, or re-order them.
 2. **Mark each regenerated block** with the `Revised-by: <REVISION>` field (per the "Re-plan adds one
    field" section of `sd-atomic-task-format`). Every other field stays fully populated per the
-   11-field format.
+   11-field format, and the block ends with `- **Status**: open` - a regenerated task is unchecked
+   work, whatever the task it replaces had reached.
 3. **Append the `## Revisions` entry** to `01-plan.md` using the format in `sd-replan-loop`
    (`### <REVISION> - <UTC timestamp>`, with `Trigger`, `Phase`, `Gate: re-plan`, `Affected tasks`,
    `Delta`, `revised-from`). **Append only** - never edit the original plan prose or a prior revision

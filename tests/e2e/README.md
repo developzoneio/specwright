@@ -30,7 +30,7 @@ dependency; it never shows up as a failed scenario assertion.
 - **One** way to authenticate `claude`. **No API key is needed**: a Claude subscription works. See
   [Auth](#auth) below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
-  `02-feature-happy`).
+  `02-feature-happy`, `06`-`08`).
 
 ## Running it
 
@@ -150,6 +150,7 @@ modes.
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
 | 6 | `06-escalation-implementer` | `/sd:feature` Phase 4 resumed on a seeded 2-task spec under `models.escalation.ceiling: "sonnet"`: the `Estimated complexity: L` task logs exactly one uncapped, applied `escalation: sd-implementer haiku -> sonnet (trigger: ESC-FEAT-04)` line in `05-retro.md`; the `S` / `trivial` task logs none. |
 | 7 | `07-escalation-disabled` | Same seeded spec under `models.escalation.enabled: false`, with T01 at `Estimated complexity: L` and T02 at `Reversibility: hard`: both tasks run and `05-retro.md` carries no `escalation:` line - the suppression covers `ESC-FEAT-04` and `ESC-FEAT-04b` alike. |
+| 8 | `08-resume-checkoff` | `/sd:feature` re-invoked on a seeded 2-task spec whose T01 is already checked off (`Status: done`, code landed, retro line written) and T02 is `open`: the resume executes T02 only - `05-retro.md` gains a `T02:` line and still has exactly one `T01:` line, `countTodos` is not re-added - and both tasks end at the canonical `Status: done` marker (SW-71). |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the

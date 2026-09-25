@@ -1,0 +1,14 @@
+/sd:feature e2e-resume-demo
+
+FEAT-e2e-resume-demo is a synthetic fixture spec seeded by this e2e scenario. It is already
+`in-progress` with an approved plan and part of its work already done. Detect where to resume from
+the workflow's state machine exactly as written; do not edit `02-tasks.md` other than checking
+tasks off.
+
+This is a headless, scripted test run with no human available to reply mid-workflow. Do not stop
+and wait for a real person. If Gate Re-plan fires, treat "approve" as the standing reply and
+continue within this single turn.
+
+Execute Phase 4 for every task that still needs it, following each step as written. Stop once every
+task is checked off and its Phase 4 line is in `05-retro.md`. Do not start Phase 5. Report which
+tasks ran in your last message.

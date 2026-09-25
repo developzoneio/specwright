@@ -305,6 +305,7 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 | `SL064` | Citation's line range falls outside the member range(s) `MANIFEST.md` records for that path | 🔴 BLOCK |
 | `SL065` | Port-spec task's `Acceptance` field carries no `Licensed deviations:` line | 🔴 BLOCK |
 | `SL066` | A `Licensed deviations:` list cites a deviation ID absent from the spec's `## Deviation table` | 🔴 BLOCK |
+| `SL067` | Task check-off marker is non-canonical: `Status` value is not `open`/`done`, or the heading carries a check-off prefix (`[x]`, `[ ]`, `✅`) | 🟠 WARN |
 | `SL070` | Task carries `Revised-by: R<n>` but `01-plan.md` has no matching `## Revisions` entry `R<n>` | 🔴 BLOCK |
 | `SL071` | A `## Revisions` entry `R<n>` names an `Affected task` that does not carry `Revised-by: R<n>` (or does not exist) | 🔴 BLOCK |
 | `SL072` | Revision numbering is non-contiguous, duplicated, or a prior entry was rewritten (append-only violated) | 🔴 BLOCK |
@@ -317,9 +318,10 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 
 `SL061`-`SL066` are the **port task-block** band - the anti-drift contract every port task must
 carry (a snapshot-member-range `Pattern refs` citation and a licensed-deviation ID list in
-`Acceptance`), checked at validate time instead of only at `/sd:port` Phase 6 execution. `SL067`-
-`SL069` remain **reserved** for further task-block content rules. Claim from this band rather than
-extending another one - `SL05x` is link integrity and has nothing to do with task content.
+`Acceptance`), checked at validate time instead of only at `/sd:port` Phase 6 execution.
+`SL067` is the **check-off marker** rule and applies to every spec type. `SL068`-`SL069` remain
+**reserved** for further task-block content rules. Claim from this band rather than extending
+another one - `SL05x` is link integrity and has nothing to do with task content.
 
 `SL070`-`SL079` are the **revision-log integrity** band (the `sd-replan-loop` `## Revisions` log in
 `01-plan.md`, cross-checked against `Revised-by` markers in `02-tasks.md`). It is a distinct band on
@@ -360,6 +362,12 @@ every task authored after the field shipped already carried it (22 of 22), while
 without it predate the field entirely. Blocking would fail old specs for a rule they could not
 have followed, and would gain nothing on new ones.
 
+`SL067` is WARN by the same test. The tolerant reader in `sd-atomic-task-format` "Check-off marker"
+still resolves every drifted marker to a definite checked/unchecked state, so resume behavior stays
+decidable and the fix is a one-line edit. An **absent** `Status` is not a finding at all: every spec
+authored before the marker existed would fail otherwise, and a finished legacy spec is kept out of
+resume by its frontmatter status, not by its markers.
+
 `SL061`-`SL066` are BLOCK: a port task block that lints clean while citing a fabricated or
 out-of-range snapshot precedent, or an unlicensed deviation, is a registry that **lies** about the
 fidelity contract `sd-port-fidelity` requires it to carry - the same test that makes `SL080`-`SL083`
@@ -388,6 +396,14 @@ A field's value runs to the next field label, not to the next newline - `Accepta
 Report one `SL060` per offending task block, citing the task heading (e.g. `02-tasks.md` `T01`).
 A block that writes `Pattern refs: none` is **compliant** - the explicit `none` is the assertion
 the rule is asking for. Only an absent field is a finding.
+
+Report one `SL067` per offending task block, citing the task heading and the offending line. A
+block is a finding when its `Status` value (read case-insensitively, per the grammar above) is
+anything other than `open` or `done`, **or** its heading carries a check-off prefix (`[x]`, `[ ]`,
+`✅`) before the `T<NN>` token - whether or not a `Status` line is also present. A block with no
+`Status` line and a plain heading is **compliant** (legacy, reads as unchecked). The check-off
+semantics themselves are defined in `sd-atomic-task-format` "Check-off marker"; do not restate them
+here.
 
 ### Port task-block checks
 

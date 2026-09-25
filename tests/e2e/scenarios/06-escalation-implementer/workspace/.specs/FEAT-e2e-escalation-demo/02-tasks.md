@@ -18,6 +18,7 @@ Test command: `npm test` (`commands.test` in `.claude/project-config.json`).
 - **Estimated complexity**: L
 - **Reversibility**: trivial
 - **Pattern refs**: src/application/todo-service.js:31 - mirror `listTodos()`; tests/todo-service.test.js:11 - mirror test shape
+- **Status**: open
 
 ### T02 - Add countDone to TodoService
 
@@ -33,3 +34,4 @@ Test command: `npm test` (`commands.test` in `.claude/project-config.json`).
 - **Estimated complexity**: S
 - **Reversibility**: trivial
 - **Pattern refs**: src/application/todo-service.js:31 - mirror `listTodos()`; tests/todo-service.test.js:19 - mirror test shape
+- **Status**: open

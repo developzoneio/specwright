@@ -37,6 +37,11 @@ Spec ID = `REF-<slug>-<YYYYMMDD>`.
 | All tasks checked, no holistic review | Resume Phase 6 |
 | status `done` | Refuse |
 
+"Checked" and "unchecked" mean the task's check-off marker as defined in the "Check-off marker"
+section of the **sd-atomic-task-format** skill - the one definition; do not invent a marker. Task
+rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
+frontmatter first and is never resumed from its task markers.
+
 ---
 
 ## Phase 0 - Bootstrap
@@ -162,7 +167,8 @@ For each batch (up to 3 tasks in parallel):
 
 STOP after every batch. Display test results.
 
-- All green -> check off tasks in `02-tasks.md`, proceed to next batch.
+- All green -> check off the batch's tasks in `02-tasks.md` (set each `Status` line to `done`, per
+  the "Check-off marker" section of the **sd-atomic-task-format** skill), proceed to next batch.
 - Any red -> REFUSE to proceed. Revert the batch or fix the regression. The point of batched-with-tests-between is to localize failures.
 
 ### Gate Re-plan (HARD) - adaptive re-plan on a plan-invalidating discovery

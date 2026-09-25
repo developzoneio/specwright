@@ -124,9 +124,10 @@ of the rules, which is precisely the drift that SW-1 and SW-3 exist to prevent. 
 trade-off is decided, this fixture makes the acceptance criterion **reproducible**, not
 **enforced**.
 
-**Rule coverage is partial: 31 of the 43 rules are seeded.** `SL061`-`SL066` (port task-block) are
-seeded directly in this fixture (`PORT-CLEAN-004` / `PORT-BROKEN-016` above). The `SL07x`
-revision-log and `SL08x` port-fidelity bands are exercised by their own fixtures instead - see
+**Rule coverage is partial: 31 of the 44 rules are seeded.** `SL061`-`SL066` (port task-block) are
+seeded directly in this fixture (`PORT-CLEAN-004` / `PORT-BROKEN-016` above). `SL067` (task
+check-off marker), the `SL07x` revision-log band and the `SL08x` port-fidelity band are exercised
+by their own fixtures instead - see `tests/task-format/fixtures/checkoff-*.md` for `SL067` and
 `tests/revision-log/fixtures/` for `SL07x`; `SL08x` has no fixture anywhere yet, a pre-existing gap
 this ticket does not close. Not seeded in this fixture, and why:
 

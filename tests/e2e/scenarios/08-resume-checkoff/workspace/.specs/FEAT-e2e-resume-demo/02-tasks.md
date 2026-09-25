@@ -1,6 +1,6 @@
-# Tasks - FEAT-e2e-escalation-demo
+# Tasks - FEAT-e2e-resume-demo
 
-Spec: `.specs/FEAT-e2e-escalation-demo/00-spec.md` | Plan: `.specs/FEAT-e2e-escalation-demo/01-plan.md`
+Spec: `.specs/FEAT-e2e-resume-demo/00-spec.md` | Plan: `.specs/FEAT-e2e-resume-demo/01-plan.md`
 
 Test command: `npm test` (`commands.test` in `.claude/project-config.json`).
 
@@ -15,10 +15,10 @@ Test command: `npm test` (`commands.test` in `.claude/project-config.json`).
 - **Covers**: SC-1, AC-1
 - **Depends on**: none
 - **Conflicts with**: T02
-- **Estimated complexity**: L
+- **Estimated complexity**: S
 - **Reversibility**: trivial
-- **Pattern refs**: src/application/todo-service.js:31 - mirror `listTodos()`; tests/todo-service.test.js:11 - mirror test shape
-- **Status**: open
+- **Pattern refs**: src/application/todo-service.js:31 - mirror `listTodos()`; tests/todo-service.test.js:31 - mirror test shape
+- **Status**: done
 
 ### T02 - Add countDone to TodoService
 
@@ -32,6 +32,6 @@ Test command: `npm test` (`commands.test` in `.claude/project-config.json`).
 - **Depends on**: T01
 - **Conflicts with**: T01
 - **Estimated complexity**: S
-- **Reversibility**: hard
-- **Pattern refs**: src/application/todo-service.js:31 - mirror `listTodos()`; tests/todo-service.test.js:19 - mirror test shape
+- **Reversibility**: trivial
+- **Pattern refs**: src/application/todo-service.js:35 - mirror `countTodos()`; tests/todo-service.test.js:65 - mirror test shape
 - **Status**: open

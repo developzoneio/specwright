@@ -21,7 +21,11 @@ Used by `sd-spec-architect` when authoring `02-tasks.md` and by `sd-implementer`
 - **Estimated complexity**: <S | M | L>
 - **Reversibility**: <trivial | moderate | hard>
 - **Pattern refs**: <1-3 file:line precedent citations + what to mirror | none>
+- **Status**: open
 ```
+
+The last line, `Status`, is the **check-off marker** - execution state, not part of the task's
+contract. See "Check-off marker" below; it is not counted among the 11 required fields.
 
 All 11 fields are **required**, not optional. A task block missing any of them is malformed.
 
@@ -83,6 +87,62 @@ re-plan gate regenerated, and absent on every task authored in the original Plan
 task to its `## Revisions` entry in `01-plan.md`; `/sd:spec validate` checks the two agree in both
 directions (`SL070`-`SL073`). A task authored at Plan phase never carries it - do not add it
 speculatively.
+
+---
+
+## Check-off marker
+
+`/sd:feature`, `/sd:port` and `/sd:refactor` resume from whether a task is **checked**. This
+section is the only definition of what that means - commands reference it and never restate it.
+
+### Canonical form
+
+```markdown
+- **Status**: <open | done>
+```
+
+- It is the **last line** of the block - after `Pattern refs`, and after `Parallel batch` /
+  `Revised-by` when those are present.
+- `sd-spec-architect` writes `- **Status**: open` on **every** task it authors, including tasks a
+  re-plan regenerates. "Unchecked" is then an assertion on the page, not an absence.
+- The main thread **checks off** a task by rewriting that one line to `- **Status**: done`. Nothing
+  else in the block changes. `sd-implementer` never edits `02-tasks.md`.
+- Unlike the 11 contract fields, `Status` is the one value that changes after planning. It records
+  execution state, so it is not one of the 11 required fields.
+
+**Why a field and not a heading prefix** (`### [x] T01 - ...`, the form a model picks unprompted):
+the heading is the task's identity. `T<NN>` is cited by `Depends on`, `Conflicts with`,
+`Revised-by`, `/sd:spec validate` findings, `05-retro.md` lines and `/sd:status` counters.
+Rewriting the heading on check-off is the exact drift ADR 0002 recorded: `### ✅ T01` read as zero
+tasks by a naive counter. A field keeps the heading stable and reuses the field label grammar
+below, so there is no second parser. It also has a written-out unchecked state (`open`), while a
+heading has none. And a `[x]` in a heading is not rendered as a checkbox anyway - GitHub-flavored
+Markdown renders task-list boxes only on list items.
+
+### Reading
+
+Match the label and value with the field label grammar below; the value is case-insensitive.
+Resolve each task in this order:
+
+| Block carries | Reads as |
+|---|---|
+| `Status: done` | checked |
+| `Status: open` | unchecked |
+| `Status` with any other value | unchecked, reported as `SL067` |
+| No `Status`, heading has `[x]` or `✅` before the `T<NN>` token | checked (drift), reported as `SL067` |
+| No `Status`, no heading prefix | unchecked (legacy) |
+
+When `Status` is present it decides - a heading prefix never overrides it. A heading prefix is
+honoured only as a fallback so a run that checked off in a drifted form is not re-executed.
+
+**Spec status decides first.** Task markers are read **only while the spec's frontmatter status
+is `in-progress`**. A `done` or `archived` spec resolves from its frontmatter before any task row in
+a resume state machine is evaluated. So a legacy spec with no markers at all (authored before this
+section existed) and status `done` - e.g. `examples/fixture-project/.specs/FEAT-todo-priority` - is
+never resumed into task execution, even though every one of its tasks reads as unchecked.
+
+`/sd:spec validate` reports a non-canonical marker as `SL067` (WARN). An absent `Status` is **not**
+a finding: legacy blocks read as unchecked and the rule above keeps finished specs out of resume.
 
 ---
 
@@ -199,5 +259,7 @@ Drive sequencing and batch planning. Tasks that **conflict** cannot run in the s
 - Authoring a new-file task with `Pattern refs: none` - the implementer has no precedent to mirror.
 - Citing Pattern refs you did not verify exist.
 - Omitting `Pattern refs` instead of writing `none`. Silence is not an assertion; `SL060` flags it.
+- Checking off a task by editing its heading (`### [x] T01`, `### ✅ T01`) or appending a list
+  checkbox. The only check-off is `Status: done` - see "Check-off marker". `SL067` flags the rest.
 - Burying a precedent in prose beside the block instead of putting it in the field. `sd-implementer`
   reads `TASK_DETAILS`, not the surrounding narrative - a ref outside the field does not reach it.

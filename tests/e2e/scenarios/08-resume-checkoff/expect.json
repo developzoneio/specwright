@@ -1,0 +1,10 @@
+[
+  { "type": "file-matches", "path": "src/application/todo-service.js", "pattern": "countDone\\s*\\(" },
+  { "type": "file-not-matches", "path": "src/application/todo-service.js", "pattern": "(?ms)^\\s*countTodos\\s*\\([^)]*\\)\\s*\\{.*^\\s*countTodos\\s*\\([^)]*\\)\\s*\\{" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T02:" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-resume-demo/05-retro.md", "pattern": "(?ms)^[-*\\s]*T01:.*^[-*\\s]*T01:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT01\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT02\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-resume-demo/02-tasks.md", "pattern": "(?mi)^[-*\\s]*\\**Status\\**\\s*:\\**\\s*open\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-resume-demo/02-tasks.md", "pattern": "(?m)^#{3,}\\s*(\\[[xX ]\\]|\\u2705)" }
+]

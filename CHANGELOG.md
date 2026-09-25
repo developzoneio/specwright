@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Task check-off marker for `02-tasks.md`** (SW-71) - `sd-atomic-task-format` gains a
+  "Check-off marker" section and is its only owner. The canonical form is a last line in each block,
+  `- **Status**: <open | done>`. It is execution state, not one of the 11 contract fields.
+  `sd-spec-architect` writes `open` on every task, including re-planned ones. A field was chosen
+  over the heading prefix (`### [x] T01`) because rewriting the heading on check-off breaks the task
+  ID that `Depends on`, `Revised-by`, lint findings and `/sd:status` counters rely on.
+  The reader is tolerant:
+  - a `[x]` / `✅` heading prefix with no `Status` reads as checked;
+  - an unknown value reads as unchecked;
+  - a block with no marker reads as unchecked (legacy);
+  - task markers are read only while the spec is `in-progress`, so a finished legacy spec is never
+    resumed.
+
+  `/sd:feature`, `/sd:port` and `/sd:refactor` resume rows and check-off steps now point at the
+  skill. New `SL067` (WARN) in `/sd:spec validate` flags non-canonical markers. It uses the reserved
+  task-block slot; `SL068`-`SL069` stay reserved. New conformance fixtures
+  `tests/task-format/fixtures/checkoff-*.md`. e2e scenarios `06` and `07` now assert that both tasks
+  end at `Status: done`. New scenario `08-resume-checkoff` seeds T01 as done and T02 as open, then
+  asserts the resume runs T02 only.
 - **Implementer escalation in `/sd:feature` Phase 4** (SW-61) - `sd-model-escalation` gains
   `ESC-FEAT-04` (task `Estimated complexity` is `L`) and `ESC-FEAT-04b` (task `Reversibility` is
   `hard`, alone, when `ESC-FEAT-04` did not fire), both `sd-implementer` `haiku -> sonnet`. Decided
