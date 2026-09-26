@@ -535,6 +535,12 @@ rm -rf /tmp/sd-test
 
 Hooks read JSON from stdin. You can simulate Claude Code locally:
 
+**session-context (SessionStart):**
+```bash
+echo '{"source":"resume","session_id":"test-session-001","cwd":"/path/to/repo"}' \
+  | bash hooks/bash/session-context.sh
+```
+
 **prompt-router (UserPromptSubmit):**
 ```bash
 echo '{"prompt":"fix bug INV-2501 in stock service","cwd":"/path/to/repo"}' \
@@ -557,7 +563,7 @@ echo '{"cwd":"/path/to/repo","session_id":"test-session-001"}' \
   | bash hooks/bash/subagent-retro.sh
 ```
 
-Expected behaviour: every hook exits `0` and either prints a `<context-router>` / `<retro-reminder>` block to stdout, prints a warning to stderr, or stays silent.
+Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a warning to stderr, or stays silent.
 
 ---
 

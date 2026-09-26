@@ -355,6 +355,8 @@ Write-Info '3. Restart Claude Code so hooks are picked up.'
 Write-Info ''
 Write-Info '4. Hook wiring (PowerShell - add to your project .claude/settings.json):'
 Write-Info '     "hooks": {'
+Write-Info '       "SessionStart": [{"matcher":"*","hooks":[{"type":"command",'
+Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/session-context.ps1" + '","timeout":5}]}],')
 Write-Info '       "UserPromptSubmit": [{"matcher":"*","hooks":[{"type":"command",'
 Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/prompt-router.ps1" + '","timeout":5}]}],')
 Write-Info '       "PreToolUse": [{"matcher":"Edit|Write|MultiEdit|Bash|PowerShell","hooks":[{"type":"command",'

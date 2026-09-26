@@ -123,6 +123,15 @@ run_hook "$repo_root/hooks/bash/prompt-router.sh" "$payload"
 assert_exit0 "prompt-router keyword match" "$CODE"
 assert_contains "prompt-router keyword match" "$STDOUT" "<context-router>"
 assert_contains "prompt-router keyword match" "$STDOUT" "/sd:bug"
+
+# ---- session-context: in-progress spec surfaced at session start ------------
+
+section "session-context (bash): startup surfaces the in-progress spec"
+payload="$(printf '{"source":"startup","cwd":"%s"}' "$fixture")"
+run_hook "$repo_root/hooks/bash/session-context.sh" "$payload"
+assert_exit0 "session-context startup" "$CODE"
+assert_contains "session-context startup" "$STDOUT" "<session-context>"
+assert_contains "session-context startup" "$STDOUT" "FEAT-TEST-001"
 BASH_ROUTER_OUT="$STDOUT"
 
 # ---- spec-gate: (a) code edit with in-progress spec -> allow ----------------

@@ -129,6 +129,15 @@ Assert-Exit0 'prompt-router keyword match' $script:Code
 Assert-Contains 'prompt-router keyword match' $script:Stdout '<context-router>'
 Assert-Contains 'prompt-router keyword match' $script:Stdout '/sd:bug'
 
+# ---- session-context: in-progress spec surfaced at session start ------------
+
+Write-Section 'session-context (PowerShell): startup surfaces the in-progress spec'
+$payload = "{`"source`":`"startup`",`"cwd`":`"$($fixture -replace '\\','\\\\')`"}"
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\session-context.ps1') $payload
+Assert-Exit0 'session-context startup' $script:Code
+Assert-Contains 'session-context startup' $script:Stdout '<session-context>'
+Assert-Contains 'session-context startup' $script:Stdout 'FEAT-TEST-001'
+
 # ---- spec-gate: (a) code edit with in-progress spec -> allow ----------------
 
 Write-Section 'spec-gate (PowerShell): (a) code edit with in-progress spec -> allow'

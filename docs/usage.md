@@ -454,6 +454,19 @@ The system surfaces; the human decides. The gates exist precisely so the decisio
 
 Hooks emit output inline during a session. Examples:
 
+**session-context** once at session start (and again on resume, fork, compact or clear):
+
+```
+<session-context>
+Spec context from specwright (SessionStart hook, source: startup):
+
+Constitution: .specs/constitution.md
+
+Specs currently in-progress (from .specs/index.md):
+  - FEAT-INV-2501 [status: approved] Stock reservation retry
+</session-context>
+```
+
 **prompt-router** on `"fix bug INV-2501 in stock service"`:
 
 ```
@@ -465,9 +478,6 @@ Workflow keyword matches:
 
 Ticket IDs detected: INV-2501
 Matching spec folders under .specs/:
-  - FEAT-INV-2501
-
-Specs currently in-progress (from .specs/index.md):
   - FEAT-INV-2501
 </context-router>
 ```

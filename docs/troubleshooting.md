@@ -91,7 +91,12 @@ If `/sd:*` commands work but `<context-router>` blocks never appear, run through
 cat .claude/settings.json
 ```
 
-The file should contain `hooks` entries for `UserPromptSubmit`, `PreToolUse`, and `SubagentStop`. If empty or missing, re-run `/sd:setup`.
+The file should contain `hooks` entries for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, and `SubagentStop`. If empty or missing, re-run `/sd:setup`.
+
+In-progress specs no longer appear on each prompt? Since SW-67 they come from the `SessionStart`
+hook (`session-context`), once per session start, resume, fork, compact or clear - not from
+`prompt-router`. A project set up before SW-67 has no `SessionStart` entry; re-run `/sd:setup`,
+whose drift check adds it.
 
 ### Check 2: Hook scripts are executable (Unix)
 
@@ -99,7 +104,7 @@ The file should contain `hooks` entries for `UserPromptSubmit`, `PreToolUse`, an
 ls -l ~/.claude/hooks/sd/
 ```
 
-All three should have `-rwxr-xr-x`. If not:
+Every `.sh` hook should have `-rwxr-xr-x`. If not:
 ```bash
 chmod +x ~/.claude/hooks/sd/*.sh
 ```
@@ -113,6 +118,7 @@ cat .claude/project-config.json
 Look at the `hooks` section:
 ```json
 "hooks": {
+  "sessionContext":   { "enabled": true },
   "userPromptRouter": { "enabled": true },
   "specGate":         { "enabled": true, "mode": "warn" },
   "subagentRetro":    { "enabled": true, "retroStaleMinutes": 30, "debounceMinutes": 10 }
