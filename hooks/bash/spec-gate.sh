@@ -155,6 +155,10 @@ resolve_spec_prefixes() {
         return 0
     fi
     while IFS= read -r p; do
+        # A native Windows jq.exe ends every output line with CRLF, and only
+        # the last line's CR is dropped by Git Bash's $(...); strip it so a valid
+        # prefix is not rejected by the shape check below.
+        p="${p%$'\r'}"
         [[ -z "${p}" ]] && continue
         if [[ "${p}" =~ ^[A-Z][A-Z0-9]{1,9}$ ]]; then
             valid+=("${p}")
@@ -601,7 +605,10 @@ emit_transition_metric() {
 # rather than a loose substring match, so a Title that happens to mention
 # another id/status word cannot be misread as that row's own id or status.
 extract_id_status_pairs() {
+    # sub() drops a CRLF line ending (a CRLF index, or new_string text from a
+    # jq.exe that writes CRLF) before the row is split, so no cell carries a CR.
     awk -F'|' -v prefixes="${spec_prefixes}" '
+        { sub(/\r$/, "") }
         NF >= 5 {
             id = $2; gsub(/^[ \t]+|[ \t]+$/, "", id)
             status = $4; gsub(/^[ \t]+|[ \t]+$/, "", status)
@@ -952,6 +959,10 @@ if [[ "${rel_lower}" == "${index_rel_lower}" ]]; then
         transition_phase=()
         transition_from=()
         while IFS=$'\t' read -r c_id c_from c_to; do
+            # A native Windows jq.exe ends every line but the last (which Git Bash's
+            # $(...) trims) with CR, and it lands on c_to - the recorded phase,
+            # and the "archived" test that detects a complexity split.
+            c_to="${c_to%$'\r'}"
             [[ -z "${c_id}" ]] && continue
             transition_id+=("${c_id}")
             transition_phase+=("${c_to}")

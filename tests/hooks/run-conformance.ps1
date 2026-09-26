@@ -15,7 +15,9 @@
          The session cwd is the workspace unless setup.json names a `cwd`
          subdirectory (SW-78). The child environment never inherits
          CLAUDE_PROJECT_DIR; setup.json `env` sets it (or any other variable)
-         per case, with {{ROOT}} substituted.
+         per case, with {{ROOT}} substituted. setup.json `crlfJq: true` runs
+         the bash side with a jq shim that writes CRLF, as a native Windows
+         jq.exe does (see New-CrlfJqShim).
       4. Normalize what the hook did into a small decision object.
       5. Assert bash decision == pwsh decision == expected.json golden.
 
@@ -265,6 +267,7 @@ function Invoke-HookImpl {
         [string]$CaseDir
     )
     $ws = New-CaseWorkspace -CaseDir $CaseDir
+    $jqShimDir = $null
     try {
         $wsForward = $ws.Replace('\', '/')
         $setup = Get-CaseSetup -CaseDir $CaseDir
@@ -290,6 +293,10 @@ function Invoke-HookImpl {
         $inputPath = Join-Path $CaseDir 'input.json'
         $payload = (Get-Content -LiteralPath $inputPath -Raw).Replace('{{ROOT}}', $wsForward).Replace('{{CWD}}', $cwdForward)
         if ($Impl -eq 'bash') {
+            if ($null -ne $setup -and $setup.crlfJq -eq $true) {
+                $jqShimDir = New-CrlfJqShim
+                $envMap['PATH'] = $jqShimDir + [System.IO.Path]::PathSeparator + $env:PATH
+            }
             $run = Invoke-HookProcess -Exe $script:bashExe -ProcArgs @($HookScript) -Payload $payload -Env $envMap
         } else {
             $run = Invoke-HookProcess -Exe 'pwsh' -ProcArgs @('-NoProfile', '-File', $HookScript) -Payload $payload -Env $envMap
@@ -311,7 +318,35 @@ function Invoke-HookImpl {
         }
     } finally {
         Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue
+        if ($jqShimDir) { Remove-Item -LiteralPath $jqShimDir -Recurse -Force -ErrorAction SilentlyContinue }
     }
+}
+
+# setup.json `crlfJq: true` puts this shim first on the bash child's PATH. It
+# reproduces what a bash hook sees from a native Windows jq.exe under Git Bash:
+# every output line ends in CRLF except the last, whose CR Git Bash's $(...)
+# drops. The CI runners' jq writes LF, so without the shim a hook that trusts
+# jq's line endings passes everywhere but a user's Windows machine. The shim
+# normalizes first (a local jq.exe may already write CRLF), and uses awk, not
+# sed, because BSD sed (macOS) has no \r escape. pipefail keeps jq's exit
+# status, which `jq -e` callers test.
+function New-CrlfJqShim {
+    # The shim drops ITS OWN directory from PATH before calling jq, not "the
+    # first entry": the Git Bash launcher may put its own dirs ahead of ours,
+    # and dropping the wrong one would make the shim call itself forever.
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ('sd-jqshim-' + [System.Guid]::NewGuid().ToString('N').Substring(0, 12))
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    $shim = @(
+        '#!/usr/bin/env bash'
+        'set -o pipefail'
+        'self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
+        'p=":${PATH}:"; p="${p//:${self}:/:}"; p="${p#:}"; PATH="${p%:}"'
+        'jq "$@" | awk ''{ sub(/\r$/, "") } NR > 1 { printf "%s\r\n", prev } { prev = $0 } END { if (NR > 0) print prev }'''
+    ) -join "`n"
+    $shimPath = Join-Path $dir 'jq'
+    [System.IO.File]::WriteAllText($shimPath, $shim + "`n")
+    if (-not $IsWindows) { & chmod +x $shimPath }
+    return $dir
 }
 
 function Test-EventsLeakNoPath {

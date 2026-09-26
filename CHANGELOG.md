@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`hooks/bash/spec-gate.sh` recorded a stray CR with a native Windows jq** - a native
+  `jq.exe` (e.g. jq 1.8.1 from winget) ends every output line with CRLF, and Git Bash's `$(...)`
+  trims only the last one. Rule 0b's `id<TAB>from<TAB>to` loop kept the CR on `to`, so a
+  `spec_transition` event recorded `"phase":"in-progress\r"`, and an `archived\r` parent failed
+  the split test, dropping the `complexity` `split` gate event. The `spec.prefixes` loop had the
+  same flaw: a CR made a valid custom prefix fail its shape check and silently fall back to the
+  built-in set. Both loops now strip the trailing CR, and `extract_id_status_pairs` drops a CRLF
+  ending before splitting a row. This was not a line-ending problem in the fixtures: the two
+  failing cases (`allow-index-approved-to-inprogress-multiedit`, `allow-index-split-parent-archived`)
+  failed the same way with an LF `index.md`; CI's jq writes LF, so CI never saw it.
+  `spec-gate.ps1` was already correct. New `run-conformance.ps1` option `crlfJq: true` in
+  `setup.json` runs the bash side behind a jq shim that writes CRLF the way `jq.exe` does, so the
+  new fixture `allow-index-crlf-jq-split-custom-prefix` (CRLF `index.md` and
+  `project-config.json`, a custom `STORY` prefix, a split) fails against the old hook on every OS.
+  `.gitattributes` now pins `tests/hooks/fixtures/**` to LF, with only that fixture's workspace
+  pinned CRLF, so every runner feeds the hooks the same bytes. The same unguarded jq loop remains
+  in `prompt-router.sh` (`spec.prefixes`) and `subagent-retro.sh` (`spec.prefixes`,
+  `shownLessons`); they are not changed here.
 - **`/sd:bug` Phase 0 named the wrong escalation step** (SW-63) - it said the model escalation
   policy is "applied at Phase 3 step 1"; the check is Phase 3 step 0. Found while wiring CL601.
 - **e2e scenario `11-escalation-rca-capped`** (SW-62) - its seeded incident log was named

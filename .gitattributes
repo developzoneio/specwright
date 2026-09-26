@@ -42,6 +42,17 @@ tests/revision-log/** text eol=lf
 # as the fixture pins above.
 tests/hooks/fixtures/**/_metrics/events.jsonl text eol=lf
 
+# The rest of tests/hooks/fixtures/** is pinned LF too, so every OS feeds the
+# hooks the same bytes: before this, Windows CI ran the conformance suite
+# against CRLF workspaces and Linux/macOS against LF ones, so line-ending
+# coverage depended on the runner. CRLF tolerance is now tested on purpose:
+# the one fixture whose workspace is pinned CRLF below (a CRLF index.md and
+# project-config.json, on every platform), plus run-conformance.ps1's crlfJq
+# shim for the CRLF a native Windows jq.exe writes. Later lines win, so the
+# CRLF pin must stay below the LF one.
+tests/hooks/fixtures/** text eol=lf
+tests/hooks/fixtures/spec-gate/allow-index-crlf-jq-split-custom-prefix/workspace/** text eol=crlf
+
 # tests/metrics/** is the /sd:status verification corpus (SW-16). The command
 # counts events by exact substring over an LF-terminated log, and the malformed
 # fixture asserts an exact skipped count - a CRLF checkout on Windows would
