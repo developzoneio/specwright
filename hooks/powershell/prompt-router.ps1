@@ -62,7 +62,7 @@ $script:DefaultKeywords = [pscustomobject]@{
 #   4. Cwd itself - the pre-SW-78 behaviour.
 # Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
 # left behind by an older hook cannot shadow a configured root. Identical in all
-# four hooks; mirrors resolve_project_root in the .sh twins.
+# five hooks; mirrors resolve_project_root in the .sh twins.
 function Resolve-ProjectRoot {
     param([string]$Cwd)
     $envRoot = $env:CLAUDE_PROJECT_DIR

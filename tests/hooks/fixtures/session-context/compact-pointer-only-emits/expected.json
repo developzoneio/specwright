@@ -1,0 +1,1 @@
+{"exitCode":0,"emitted":true,"source":"compact","constitution":null,"inProgress":[],"active":{"id":"PERF-TEST-007","trigger":"manual","status":"approved","phaseHint":"spec approved","resume":"/sd:perf TEST-007 - its state machine re-derives the exact phase from .specs/"},"stderr":"","events":[]}

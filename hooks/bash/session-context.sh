@@ -9,8 +9,15 @@
 # (ADR 0015); every source gets the same block. prompt-router keeps the
 # per-prompt part.
 #
+# On `compact` only (SW-68), the block also names the spec the session was
+# working on before the compaction. precompact-state records that pointer in
+# .claude/.hookstate/precompact-<session_id>.json; this hook stays the one
+# context builder and derives the rest from disk: the spec's status, a phase
+# hint (open gate or task progress) and the /sd:<type> command to resume.
+#
 # Exits 0 silently if jq is missing, if stdin is empty/invalid, if the hook is
-# disabled, or if there is nothing to say. Never writes to disk.
+# disabled, or if there is nothing to say. Never writes to disk; it only reads
+# the PreCompact pointer.
 #
 # Note: we deliberately do NOT use `set -u` because bash 3.2's empty-array
 # expansion is brittle under it; the hook must never fail noisily.
@@ -63,7 +70,7 @@ fi
 #   4. cwd itself - the pre-SW-78 behaviour.
 # Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
 # left behind by an older hook cannot shadow a configured root. Pure string
-# walk, no `cd`/`realpath`. Identical in all four hooks; mirrors
+# walk, no `cd`/`realpath`. Identical in all five hooks; mirrors
 # Resolve-ProjectRoot in the .ps1 twins.
 resolve_project_root() {
     local start="${1//\\//}"
@@ -180,11 +187,12 @@ row_title() {
     printf '%s' "${last}"
 }
 
-# `status:` from the leading `---` frontmatter block of 00-spec.md. Only a
-# plain token ([A-Za-z0-9_-]+) is accepted. Anything else, a missing file or a
-# missing line all yield '' and the spec is listed without a status.
-spec_status() {
-    local file="$1" l n=0
+# A plain-token frontmatter value (`status:`, `type:`) from the leading `---`
+# block of 00-spec.md. Only [A-Za-z0-9_-]+ is accepted. Anything else, a
+# missing file or a missing line all yield '' and the value is left out.
+spec_field() {
+    local file="$1" key="$2" l n=0 rx
+    rx="^${key}:[[:blank:]]*([A-Za-z0-9_-]+)[[:blank:]]*$"
     [[ -f "${file}" ]] || return 0
     while IFS= read -r l || [[ -n "${l}" ]]; do
         l="${l%$'\r'}"
@@ -196,7 +204,7 @@ spec_status() {
             continue
         fi
         [[ ${n} -gt 200 || "${l}" == "---" ]] && return 0
-        if [[ "${l}" =~ ^status:[[:blank:]]*([A-Za-z0-9_-]+)[[:blank:]]*$ ]]; then
+        if [[ "${l}" =~ ${rx} ]]; then
             printf '%s' "${BASH_REMATCH[1]}"
             return 0
         fi
@@ -231,9 +239,113 @@ fi
 has_constitution=0
 [[ -f "${const_path}" ]] && has_constitution=1
 
+# --- active spec after a compaction (SW-68) -----------------------------------
+
+# How old a PreCompact pointer may be and still describe this compaction.
+# SessionStart `compact` follows PreCompact within seconds; the margin covers a
+# slow auto-compaction, and a pointer left by a failed earlier run expires.
+readonly POINTER_MAX_AGE_MINUTES=30
+
+get_mtime() {
+    local f="$1"
+    if stat -c %Y "${f}" >/dev/null 2>&1; then
+        stat -c %Y "${f}"
+    elif stat -f %m "${f}" >/dev/null 2>&1; then
+        stat -f %m "${f}"
+    else
+        echo "0"
+    fi
+}
+
+# Task progress from 02-tasks.md: every `- **Status**: open|done` line is one
+# task (the check-off marker, skills/sd-atomic-task-format). Next is the
+# `### T<NN>` heading above the first open marker. Sets tp_total, tp_done and
+# tp_next.
+task_progress() {
+    local file="$1" l current=""
+    local head_rx='^###[[:blank:]]+(T[0-9]+)([^0-9]|$)'
+    local status_rx='^- \*\*Status\*\*:[[:blank:]]*(open|done)[[:blank:]]*$'
+    tp_total=0; tp_done=0; tp_next=""
+    [[ -f "${file}" ]] || return 0
+    while IFS= read -r l || [[ -n "${l}" ]]; do
+        l="${l%$'\r'}"
+        if [[ "${l}" =~ ${head_rx} ]]; then
+            current="${BASH_REMATCH[1]}"
+            continue
+        fi
+        if [[ "${l}" =~ ${status_rx} ]]; then
+            tp_total=$((tp_total + 1))
+            if [[ "${BASH_REMATCH[1]}" == "done" ]]; then
+                tp_done=$((tp_done + 1))
+            elif [[ -z "${tp_next}" ]]; then
+                tp_next="${current}"
+            fi
+        fi
+    done < "${file}"
+    return 0
+}
+
+# A type-agnostic hint of where the workflow stands, from the status and the
+# task file alone. It is a hint: the workflow command's own state machine is
+# the authority, which is why the block also names the command to re-invoke.
+phase_hint() {
+    local status="$1" folder="$2" tasks="$2/02-tasks.md" hint
+    case "${status}" in
+        draft)
+            printf '%s' 'open gate: spec approval' ;;
+        approved)
+            if [[ -f "${tasks}" ]]; then
+                printf '%s' 'open gate: plan approval'
+            else
+                printf '%s' 'spec approved'
+            fi ;;
+        in-progress)
+            # bug, perf and rca keep no task list; their phase lives in the
+            # spec's own sections, which only the workflow command reads.
+            task_progress "${tasks}"
+            if [[ ${tp_total} -eq 0 ]]; then
+                printf '%s' 'in progress - no task list'
+            elif [[ ${tp_done} -ge ${tp_total} ]]; then
+                printf '%s' 'all tasks done - open gate: close-out / review'
+            else
+                hint="executing - ${tp_done}/${tp_total} tasks done"
+                [[ -n "${tp_next}" ]] && hint="${hint}, next ${tp_next}"
+                printf '%s' "${hint}"
+            fi ;;
+    esac
+    return 0
+}
+
+# The pointer precompact-state wrote for this session. Sets active_id and
+# active_trigger, or leaves them empty when the pointer is missing, stale,
+# malformed, or names a spec that has no 00-spec.md.
+active_id=""
+active_trigger=""
+if [[ "${source_val}" == "compact" ]]; then
+    session_id="$(jq_str "${input}" '(.session_id // "no-session") | tostring')"
+    [[ -z "${session_id//[[:space:]]/}" ]] && session_id="no-session"
+    safe_id="$(printf '%s' "${session_id}" | tr -c 'A-Za-z0-9_-' '_')"
+    pointer="${project_root}/.claude/.hookstate/precompact-${safe_id}.json"
+    if [[ -f "${pointer}" ]]; then
+        p_mtime="$(get_mtime "${pointer}")"
+        p_age=$(( $(date +%s) - p_mtime ))
+        if [[ "${p_mtime}" =~ ^[0-9]+$ && ${p_mtime} -gt 0 && ${p_age} -le $(( POINTER_MAX_AGE_MINUTES * 60 )) ]] &&
+           jq -e 'type == "object"' "${pointer}" >/dev/null 2>&1; then
+            p_json="$(cat "${pointer}")"
+            p_id="$(jq_str "${p_json}" 'if (.specId | type) == "string" then .specId else empty end')"
+            p_trigger="$(jq_str "${p_json}" 'if (.trigger | type) == "string" then .trigger else empty end')"
+            if [[ "${p_id}" =~ ^(${spec_prefixes})-[A-Za-z0-9_-]+$ && -f "${spec_path}/${p_id}/00-spec.md" ]]; then
+                active_id="${p_id}"
+                active_trigger="${p_trigger}"
+                [[ "${active_trigger}" =~ ^[a-z]+$ ]] || active_trigger="unknown"
+            fi
+        fi
+    fi
+fi
+
 # --- nothing to say? ----------------------------------------------------------
 
-if [[ ${has_constitution} -eq 0 && ${#ip_ids[@]} -eq 0 ]]; then
+if [[ ${has_constitution} -eq 0 && ${#ip_ids[@]} -eq 0 && -z "${active_id}" ]]; then
     exit 0
 fi
 
@@ -253,11 +365,28 @@ fi
         echo "Specs currently in-progress (from ${index_rel}):"
         for ((i=0; i<${#ip_ids[@]}; i++)); do
             item="  - ${ip_ids[i]}"
-            st="$(spec_status "${spec_path}/${ip_ids[i]}/00-spec.md")"
+            st="$(spec_field "${spec_path}/${ip_ids[i]}/00-spec.md" status)"
             [[ -n "${st}" ]] && item="${item} [status: ${st}]"
             [[ -n "${ip_titles[i]}" ]] && item="${item} ${ip_titles[i]}"
             printf '%s\n' "${item}"
         done
+    fi
+
+    if [[ -n "${active_id}" ]]; then
+        a_folder="${spec_path}/${active_id}"
+        a_status="$(spec_field "${a_folder}/00-spec.md" status)"
+        echo ''
+        head="Active spec before compaction (trigger: ${active_trigger}): ${active_id}"
+        [[ -n "${a_status}" ]] && head="${head} [status: ${a_status}]"
+        printf '%s\n' "${head}"
+        a_hint="$(phase_hint "${a_status}" "${a_folder}")"
+        [[ -n "${a_hint}" ]] && printf '  Phase hint: %s\n' "${a_hint}"
+        # The workflow commands take the ID without its prefix (FEAT-<arg>).
+        a_type="$(spec_field "${a_folder}/00-spec.md" type)"
+        if [[ "${a_type}" =~ ^(feature|bug|refactor|perf|rca|port)$ ]]; then
+            printf '  Resume: /sd:%s %s - its state machine re-derives the exact phase from %s/\n' \
+                "${a_type}" "${active_id#*-}" "${spec_rel}"
+        fi
     fi
 
     echo '</session-context>'

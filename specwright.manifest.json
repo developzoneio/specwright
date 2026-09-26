@@ -606,6 +606,7 @@
   "bashStrictMode": {
     "$comment": "validate Check 10: every *.sh must open with set -euo pipefail. Each exception carries its reason; a path that no longer exists fails the check.",
     "exceptions": [
+      { "path": "hooks/bash/precompact-state.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits. A non-zero exit here is worse still: exit 2 on PreCompact blocks the compaction (ADR 0015)." },
       { "path": "hooks/bash/prompt-router.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
       { "path": "hooks/bash/session-context.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
       { "path": "hooks/bash/spec-gate.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
@@ -660,6 +661,10 @@
         "powershell": { "p95": 1100 }
       },
       "session-context": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
+      },
+      "precompact-state": {
         "pwsh": { "p95": 1300 },
         "powershell": { "p95": 1000 }
       }

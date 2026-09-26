@@ -17,6 +17,11 @@
   ],
   "session-context": [
     "silent-no-specs-tree",
-    "startup-emits"
+    "startup-emits",
+    "compact-active-executing"
+  ],
+  "precompact-state": [
+    "silent-no-specs-tree",
+    "records-last-mentioned-spec"
   ]
 }

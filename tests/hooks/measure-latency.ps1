@@ -4,8 +4,8 @@
     specwright: per-invocation latency measurement for the shipped hooks (SW-50).
 
 .DESCRIPTION
-    Spawns each hook (spec-gate, prompt-router, subagent-retro, session-context) as a fresh child
-    process, once per curated fixture case, under every available PowerShell
+    Spawns each hook (spec-gate, prompt-router, subagent-retro, session-context,
+    precompact-state) as a fresh child process, once per curated fixture case, under every available PowerShell
     flavor (Windows PowerShell 5.1 "powershell" and PowerShell 7+ "pwsh"), and
     reports p50/p95 wall-clock latency per (hook, flavor).
 
@@ -194,6 +194,11 @@ function Test-HookRunMatchesGolden {
             foreach ($s in @($Expected.inProgress)) {
                 if ($s -and -not $out.Contains($s.id)) { return "expected in-progress spec '$($s.id)' on stdout" }
             }
+        }
+        'precompact-state' {
+            # PreCompact stdout has no documented effect; the hook must stay silent.
+            # The pointer file it writes is asserted by run-conformance.ps1.
+            if ($out.Trim().Length -gt 0) { return 'expected silence, got stdout' }
         }
         'subagent-retro' {
             $lessons = @($Expected.lessons | Where-Object { $_ })

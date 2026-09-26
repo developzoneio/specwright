@@ -253,6 +253,32 @@ Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\subagent-retro.ps1') $payload
 Assert-Exit0 'subagent-retro second run (debounced)' $script:Code
 Assert-Empty 'subagent-retro second run (debounced)' $script:Stdout
 
+# ---- precompact-state -> session-context: state survives a compaction -------
+
+Write-Section 'precompact-state (PowerShell): records the spec named in the transcript'
+Set-Content -LiteralPath (Join-Path $fixture '.specs\FEAT-TEST-001\00-spec.md') -Encoding UTF8 -NoNewline `
+    -Value "---`nid: FEAT-TEST-001`ntype: feature`nstatus: in-progress`n---`n"
+$transcript = Join-Path $fixture 'transcript.jsonl'
+Set-Content -LiteralPath $transcript -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"resume FEAT-TEST-001"}}'
+$payload = "{`"session_id`":`"smoke-compact`",`"trigger`":`"manual`",`"cwd`":`"$fixtureEsc`",`"transcript_path`":`"$($transcript -replace '\\','\\\\')`"}"
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\precompact-state.ps1') $payload
+Assert-Exit0 'precompact-state manual' $script:Code
+Assert-Empty 'precompact-state manual' $script:Stdout
+$pointer = Join-Path $fixture '.claude\.hookstate\precompact-smoke-compact.json'
+if ((Test-Path -LiteralPath $pointer) -and ((Get-Content -LiteralPath $pointer -Raw) -match 'FEAT-TEST-001')) {
+    Add-Ok 'precompact-state manual: pointer names FEAT-TEST-001'
+} else {
+    Add-Bad 'precompact-state manual: pointer missing or wrong'
+}
+
+Write-Section 'session-context (PowerShell): compact re-injects the active spec'
+$payload = "{`"session_id`":`"smoke-compact`",`"source`":`"compact`",`"cwd`":`"$fixtureEsc`"}"
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\session-context.ps1') $payload
+Assert-Exit0 'session-context compact' $script:Code
+Assert-Contains 'session-context compact' $script:Stdout 'Active spec before compaction (trigger: manual): FEAT-TEST-001'
+Assert-Contains 'session-context compact' $script:Stdout '/sd:feature TEST-001'
+
 # ---- cleanup + summary --------------------------------------------------------
 
 Remove-Item -Recurse -Force $fixture -ErrorAction SilentlyContinue

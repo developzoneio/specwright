@@ -246,6 +246,27 @@ function Get-NestedStateDirs {
     return $found.ToArray()
 }
 
+# SW-68: the PreCompact pointers left in .claude/.hookstate/, read BEFORE the
+# caller deletes the workspace. Sorted by file name so the decision object is
+# stable; an unparseable file keeps its name and is flagged, never dropped.
+function Get-PrecompactPointers {
+    param([string]$Ws)
+    $dir = Join-Path $Ws '.claude/.hookstate'
+    $found = [System.Collections.Generic.List[object]]::new()
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { return , @() }
+    foreach ($f in (Get-ChildItem -LiteralPath $dir -File -Filter 'precompact-*.json' | Sort-Object Name)) {
+        $specId = '<UNPARSEABLE>'
+        $trigger = '<UNPARSEABLE>'
+        try {
+            $obj = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $specId = [string]$obj.specId
+            $trigger = [string]$obj.trigger
+        } catch { }
+        $found.Add([pscustomobject][ordered]@{ file = $f.Name; specId = $specId; trigger = $trigger })
+    }
+    return , @($found)
+}
+
 function Get-CaseEvents {
     param([string]$Ws)
     return Read-NormalizedEventLines -Path (Get-MetricsEventsPath -Ws $Ws)
@@ -303,6 +324,7 @@ function Invoke-HookImpl {
         }
         $events = Get-CaseEvents -Ws $ws
         $rotated = Get-CaseRotatedEvents -Ws $ws
+        $pointers = Get-PrecompactPointers -Ws $ws
         $nestedCreated = @()
         if ($cwdForward -ne $wsForward) {
             $nestedCreated = @(Get-NestedStateDirs -CwdPath $cwdForward | Where-Object { $nestedBefore -notcontains $_ })
@@ -313,6 +335,7 @@ function Invoke-HookImpl {
             Stderr        = $run.Stderr
             Events        = $events
             RotatedEvents = $rotated
+            Pointers      = $pointers
             NestedCreated = $nestedCreated
             Workspace     = $ws
         }
@@ -514,12 +537,29 @@ function ConvertTo-SessionContextDecision {
     # implementations list index rows in file order, and a divergence in that
     # order is a real parity failure (same reasoning as subagent-retro lessons).
     $inProgress = [System.Collections.Generic.List[object]]::new()
+    # The active-spec section (SW-68) is only emitted on `compact` with a live
+    # PreCompact pointer. It is added to the decision only when present, so
+    # every golden written before it stays valid unchanged.
+    $active = $null
     $section = ''
     foreach ($line in ($Run.Stdout -split "`n")) {
         $l = $line.TrimEnd("`r")
         if ($l -cmatch '^Spec context from specwright \(SessionStart hook, source: ([^)]*)\):$') {
             $source = $Matches[1]; continue
         }
+        if ($l -cmatch '^Active spec before compaction \(trigger: ([^)]*)\): (\S+)( \[status: ([^\]]+)\])?$') {
+            $section = 'active'
+            $active = [pscustomobject][ordered]@{
+                id        = $Matches[2]
+                trigger   = $Matches[1]
+                status    = if ($Matches[4]) { $Matches[4] } else { $null }
+                phaseHint = $null
+                resume    = $null
+            }
+            continue
+        }
+        if ($section -eq 'active' -and $l -cmatch '^  Phase hint: (.+)$') { $active.phaseHint = $Matches[1]; continue }
+        if ($section -eq 'active' -and $l -cmatch '^  Resume: (.+)$') { $active.resume = $Matches[1]; continue }
         if ($l -cmatch '^Constitution: (.+)$') { $constitution = $Matches[1]; $section = ''; continue }
         if ($l -cmatch '^Specs currently in-progress') { $section = 'inprogress'; continue }
         if ($section -eq 'inprogress' -and
@@ -531,14 +571,31 @@ function ConvertTo-SessionContextDecision {
             })
         }
     }
-    return [pscustomobject][ordered]@{
+    $decision = [ordered]@{
         exitCode     = $Run.ExitCode
         emitted      = $Run.Stdout.Contains('<session-context>')
         source       = $source
         constitution = $constitution
         inProgress   = @($inProgress)
-        stderr       = $Run.Stderr.Trim()
-        events       = @($Run.Events)
+    }
+    if ($null -ne $active) { $decision['active'] = $active }
+    $decision['stderr'] = $Run.Stderr.Trim()
+    $decision['events'] = @($Run.Events)
+    return [pscustomobject]$decision
+}
+
+# precompact-state (SW-68) must print nothing - PreCompact stdout has no
+# documented effect - so its whole decision is the pointer files it left.
+# Planted pointers show up too, which is how the pruning case proves a stale
+# one was removed and a fresh one kept.
+function ConvertTo-PrecompactStateDecision {
+    param($Run)
+    return [pscustomobject][ordered]@{
+        exitCode = $Run.ExitCode
+        stdout   = $Run.Stdout.Trim()
+        pointers = @($Run.Pointers)
+        stderr   = $Run.Stderr.Trim()
+        events   = @($Run.Events)
     }
 }
 
@@ -547,6 +604,7 @@ $hookNormalizers = @{
     'prompt-router'   = ${function:ConvertTo-PromptRouterDecision}
     'subagent-retro'  = ${function:ConvertTo-SubagentRetroDecision}
     'session-context' = ${function:ConvertTo-SessionContextDecision}
+    'precompact-state' = ${function:ConvertTo-PrecompactStateDecision}
 }
 
 function Get-CanonicalJson {

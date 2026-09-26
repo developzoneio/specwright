@@ -17,8 +17,14 @@
     compact and clear (ADR 0015). Every source gets the same block; the source
     is only echoed in the header. prompt-router keeps the per-prompt part.
 
+    On `compact` only (SW-68), the block also names the spec the session was
+    working on before the compaction. precompact-state records that pointer in
+    .claude/.hookstate/precompact-<sessionId>.json; this hook stays the one
+    context builder and derives the rest from disk: the spec's status, a phase
+    hint (open gate or task progress) and the /sd:<type> command to resume.
+
     The hook is defensive: any failure exits 0 silently to avoid blocking the
-    user. It never writes to disk.
+    user. It never writes to disk; it only reads the PreCompact pointer.
 
 .NOTES
     PURE ASCII ONLY. PowerShell 5.1 reads UTF-8 without BOM as Windows-1252;
@@ -51,7 +57,7 @@ function Read-StdinJson {
 #   4. Cwd itself - the pre-SW-78 behaviour.
 # Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
 # left behind by an older hook cannot shadow a configured root. Identical in all
-# four hooks; mirrors resolve_project_root in the .sh twins.
+# five hooks; mirrors resolve_project_root in the .sh twins.
 function Resolve-ProjectRoot {
     param([string]$Cwd)
     $envRoot = $env:CLAUDE_PROJECT_DIR
@@ -165,11 +171,11 @@ function Get-RowTitle {
     return $last
 }
 
-# `status:` from the leading `---` frontmatter block of 00-spec.md. Only a
-# plain token ([A-Za-z0-9_-]+) is accepted. Anything else, a missing file or a
-# missing line all yield '' and the spec is listed without a status.
-function Get-SpecStatus {
-    param([string]$SpecFile)
+# A plain-token frontmatter value (`status:`, `type:`) from the leading `---`
+# block of 00-spec.md. Only [A-Za-z0-9_-]+ is accepted. Anything else, a
+# missing file or a missing line all yield '' and the value is left out.
+function Get-SpecField {
+    param([string]$SpecFile, [string]$Key)
     if (-not (Test-Path -LiteralPath $SpecFile -PathType Leaf)) { return '' }
     try {
         $lines = @(Get-Content -LiteralPath $SpecFile -TotalCount 200 -Encoding UTF8 -ErrorAction Stop)
@@ -177,10 +183,11 @@ function Get-SpecStatus {
         return ''
     }
     if ($lines.Count -eq 0 -or $lines[0] -cne '---') { return '' }
+    $rx = '^' + $Key + ':[ \t]*([A-Za-z0-9_-]+)[ \t]*$'
     for ($i = 1; $i -lt $lines.Count; $i++) {
         $l = $lines[$i]
         if ($l -ceq '---') { break }
-        if ($l -cmatch '^status:[ \t]*([A-Za-z0-9_-]+)[ \t]*$') { return $Matches[1] }
+        if ($l -cmatch $rx) { return $Matches[1] }
     }
     return ''
 }
@@ -212,6 +219,90 @@ function Get-InProgressSpecs {
     return ,$result
 }
 
+# --- active spec after a compaction (SW-68) -----------------------------------
+
+# How old a PreCompact pointer may be and still describe this compaction.
+# SessionStart `compact` follows PreCompact within seconds; the margin covers a
+# slow auto-compaction, and a pointer left by a failed earlier run expires.
+$script:PointerMaxAgeMinutes = 30
+
+# The pointer precompact-state wrote for this session, or $null when it is
+# missing, stale, malformed, or names a spec that has no 00-spec.md.
+function Get-CompactPointer {
+    param([string]$Root, [string]$SafeId, [string]$SpecDir, [string]$Prefixes)
+    $path = Join-Path $Root ".claude/.hookstate/precompact-$SafeId.json"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+    try {
+        $age = [System.DateTime]::UtcNow - (Get-Item -LiteralPath $path -ErrorAction Stop).LastWriteTimeUtc
+        if ($age.TotalSeconds -gt ($script:PointerMaxAgeMinutes * 60)) { return $null }
+        $obj = Get-Content -LiteralPath $path -Raw -Encoding UTF8 -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return $null
+    }
+    if ($null -eq $obj) { return $null }
+    $id = [string]$obj.specId
+    if ($id -cnotmatch "^($Prefixes)-[A-Za-z0-9_-]+$") { return $null }
+    if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $SpecDir $id) '00-spec.md') -PathType Leaf)) { return $null }
+    $trigger = [string]$obj.trigger
+    if ($trigger -cnotmatch '^[a-z]+$') { $trigger = 'unknown' }
+    return [pscustomobject]@{ Id = $id; Trigger = $trigger }
+}
+
+# Task progress from 02-tasks.md: every `- **Status**: open|done` line is one
+# task (the check-off marker, skills/sd-atomic-task-format). Next is the
+# `### T<NN>` heading above the first open marker.
+function Get-TaskProgress {
+    param([string]$TasksFile)
+    $result = [pscustomobject]@{ Total = 0; Done = 0; Next = '' }
+    try {
+        $lines = @(Get-Content -LiteralPath $TasksFile -Encoding UTF8 -ErrorAction Stop)
+    } catch {
+        return $result
+    }
+    $current = ''
+    foreach ($l in $lines) {
+        if ($l -cmatch '^###[ \t]+(T[0-9]+)([^0-9]|$)') { $current = $Matches[1]; continue }
+        if ($l -cmatch '^- \*\*Status\*\*:[ \t]*(open|done)[ \t]*$') {
+            $result.Total++
+            if ($Matches[1] -ceq 'done') {
+                $result.Done++
+            } elseif (-not $result.Next) {
+                $result.Next = $current
+            }
+        }
+    }
+    return $result
+}
+
+# A type-agnostic hint of where the workflow stands, from the status and the
+# task file alone. It is a hint: the workflow command's own state machine is
+# the authority, which is why the block also names the command to re-invoke.
+function Get-PhaseHint {
+    param([string]$Status, [string]$SpecFolder)
+    $tasksFile = Join-Path $SpecFolder '02-tasks.md'
+    $hasTasks = Test-Path -LiteralPath $tasksFile -PathType Leaf
+    switch -CaseSensitive ($Status) {
+        'draft' { return 'open gate: spec approval' }
+        'approved' {
+            if ($hasTasks) { return 'open gate: plan approval' }
+            return 'spec approved'
+        }
+        'in-progress' {
+            # bug, perf and rca keep no task list; their phase lives in the
+            # spec's own sections, which only the workflow command reads.
+            if (-not $hasTasks) { return 'in progress - no task list' }
+            $p = Get-TaskProgress -TasksFile $tasksFile
+            if ($p.Total -eq 0) { return 'in progress - no task list' }
+            if ($p.Done -ge $p.Total) { return 'all tasks done - open gate: close-out / review' }
+            $hint = "executing - $($p.Done)/$($p.Total) tasks done"
+            if ($p.Next) { $hint += ", next $($p.Next)" }
+            return $hint
+        }
+    }
+    return ''
+}
+
 # ---- main ----
 
 $hookInput = Read-StdinJson
@@ -241,7 +332,15 @@ $hasConstitution = Test-Path -LiteralPath $constPath -PathType Leaf
 $prefixes        = Get-SpecPrefixAlternation -Config $config
 $inProgress      = Get-InProgressSpecs -IndexPath $indexPath -Prefixes $prefixes
 
-if (-not $hasConstitution -and $inProgress.Count -eq 0) { exit 0 }
+$active = $null
+if ($source -ceq 'compact') {
+    $sessionId = [string]$hookInput.session_id
+    if ([string]::IsNullOrWhiteSpace($sessionId)) { $sessionId = 'no-session' }
+    $safeId = ($sessionId -replace '[^A-Za-z0-9_\-]', '_')
+    $active = Get-CompactPointer -Root $projectRoot -SafeId $safeId -SpecDir $specDir -Prefixes $prefixes
+}
+
+if (-not $hasConstitution -and $inProgress.Count -eq 0 -and $null -eq $active) { exit 0 }
 
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add('<session-context>') | Out-Null
@@ -257,10 +356,28 @@ if ($inProgress.Count -gt 0) {
     $lines.Add("Specs currently in-progress (from ${indexRel}):") | Out-Null
     foreach ($s in $inProgress) {
         $item = "  - $($s.Id)"
-        $status = Get-SpecStatus -SpecFile (Join-Path (Join-Path $specDir $s.Id) '00-spec.md')
+        $status = Get-SpecField -SpecFile (Join-Path (Join-Path $specDir $s.Id) '00-spec.md') -Key 'status'
         if ($status) { $item += " [status: $status]" }
         if ($s.Title) { $item += " $($s.Title)" }
         $lines.Add($item) | Out-Null
+    }
+}
+
+if ($null -ne $active) {
+    $folder = Join-Path $specDir $active.Id
+    $specFile = Join-Path $folder '00-spec.md'
+    $status = Get-SpecField -SpecFile $specFile -Key 'status'
+    $lines.Add('') | Out-Null
+    $head = "Active spec before compaction (trigger: $($active.Trigger)): $($active.Id)"
+    if ($status) { $head += " [status: $status]" }
+    $lines.Add($head) | Out-Null
+    $hint = Get-PhaseHint -Status $status -SpecFolder $folder
+    if ($hint) { $lines.Add("  Phase hint: $hint") | Out-Null }
+    # The workflow commands take the ID without its prefix (FEAT-<arg>).
+    $type = Get-SpecField -SpecFile $specFile -Key 'type'
+    if ($type -cmatch '^(feature|bug|refactor|perf|rca|port)$') {
+        $slug = $active.Id.Substring($active.Id.IndexOf('-') + 1)
+        $lines.Add("  Resume: /sd:$type $slug - its state machine re-derives the exact phase from ${specRel}/") | Out-Null
     }
 }
 

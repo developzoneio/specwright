@@ -241,6 +241,26 @@ run_hook "$repo_root/hooks/bash/subagent-retro.sh" "$payload"
 assert_exit0 "subagent-retro second run (debounced)" "$CODE"
 assert_empty "subagent-retro second run (debounced)" "$STDOUT"
 
+# ---- precompact-state -> session-context: state survives a compaction -------
+
+section "precompact-state (bash): records the spec named in the transcript"
+printf -- '---\nid: FEAT-TEST-001\ntype: feature\nstatus: in-progress\n---\n' \
+    > "$fixture/.specs/FEAT-TEST-001/00-spec.md"
+printf '%s\n' '{"type":"user","message":{"content":"resume FEAT-TEST-001"}}' > "$fixture/transcript.jsonl"
+payload="$(printf '{"session_id":"smoke-compact","trigger":"manual","cwd":"%s","transcript_path":"%s/transcript.jsonl"}' "$fixture" "$fixture")"
+run_hook "$repo_root/hooks/bash/precompact-state.sh" "$payload"
+assert_exit0 "precompact-state manual" "$CODE"
+assert_empty "precompact-state manual" "$STDOUT"
+pointer="$fixture/.claude/.hookstate/precompact-smoke-compact.json"
+assert_contains "precompact-state manual: pointer" "$(cat "$pointer" 2>/dev/null)" "FEAT-TEST-001"
+
+section "session-context (bash): compact re-injects the active spec"
+payload="$(printf '{"session_id":"smoke-compact","source":"compact","cwd":"%s"}' "$fixture")"
+run_hook "$repo_root/hooks/bash/session-context.sh" "$payload"
+assert_exit0 "session-context compact" "$CODE"
+assert_contains "session-context compact" "$STDOUT" "Active spec before compaction (trigger: manual): FEAT-TEST-001"
+assert_contains "session-context compact" "$STDOUT" "/sd:feature TEST-001"
+
 # ---- summary -----------------------------------------------------------------
 
 section "Summary"
