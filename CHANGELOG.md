@@ -68,6 +68,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **ADR 0015: hook event behaviour** (SW-66) - `docs/adr/0015-hook-event-behaviour.md` records,
+  on Claude Code 2.1.283, what E11 had only read in the docs:
+  - **Blocking:** Stop, SubagentStop and PreCompact block on exit 2 (Stop also on JSON
+    `decision: block`). PostToolUse is observe-only: the write stays, and stderr reaches the model.
+  - **Prompt-type hooks:** they run on Stop, SubagentStop, UserPromptSubmit, PreToolUse and
+    PostToolUse. SessionStart rejects them. PreCompact skips them silently.
+  - **SessionStart `source`:** `startup`, `resume` (also for `--continue`), `fork` (new session
+    id) and `compact`.
+  - **Latency:** about 330 ms p50 per hook spawn on PS 5.1 and 420 ms on pwsh, whatever the event.
+  - **Go for SW-67..70**, with constraints. The SW-69 proposal keeps a command hook, not a
+    prompt hook. Also found: an untrusted workspace ignores project `permissions.allow` in `-p`
+    mode (relevant to SW-80).
+- **`tests/e2e/probe-hook-events.ps1`** (SW-66) - manual, paid probe (about USD 0.50 for all
+  cases) that re-derives ADR 0015.
+  - A PS 5.1 recorder hook on eight events logs payloads and blocks once per case.
+  - The evidence is payloads, transcripts, the `--debug-file` log and the workspace, never the
+    model's own account.
+  - It runs under `dontAsk` with no skip-permissions, and pre-trusts the sandbox workspace.
+  - `-EvaluateOnly` rebuilds the report at no cost.
+  - Not part of `run-e2e.ps1` or CI.
 - **Contract-lint band CL6xx - the escalation policy cannot drift** (SW-63) - new
   `contractLint.escalationTriggers` is the assertable copy of `sd-model-escalation`'s trigger
   table (`id`, `command`, `phase`, `agent`, `from`, `to`), and `contractLint.escalationPolicy`
