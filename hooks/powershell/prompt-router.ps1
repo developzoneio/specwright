@@ -12,9 +12,12 @@
          / perf / rca / port) and suggests the relevant /sd:* command.
       2. Detects ticket IDs in the prompt using ticket.pattern and looks up
          matching folders under .specs/.
-      3. Reads .specs/index.md and surfaces any spec currently in-progress.
-      4. Emits a <context-router> block to stdout that Claude Code injects
+      3. Emits a <context-router> block to stdout that Claude Code injects
          into the prompt as additional context.
+
+    Only per-prompt work lives here. The in-progress spec list and the
+    constitution pointer do not change within a session, so the
+    session-context SessionStart hook emits them once instead (SW-67).
 
     The hook is defensive: any failure exits 0 silently to avoid blocking the
     user. It never writes to disk.
@@ -89,8 +92,7 @@ function Get-ProjectConfig {
 
     $defaults = [pscustomobject]@{
         spec    = [pscustomobject]@{
-            dir       = '.specs'
-            indexFile = '.specs/index.md'
+            dir = '.specs'
         }
         ticket  = [pscustomobject]@{
             pattern = '^[A-Z]+-[0-9]+$'
@@ -208,53 +210,6 @@ function Find-SpecsByTicket {
     return $hits
 }
 
-function Get-InProgressSpecs {
-    param([string]$IndexPath, [string]$Prefixes)
-    $result = New-Object System.Collections.Generic.List[string]
-    if (-not (Test-Path -LiteralPath $IndexPath)) { return $result }
-    try {
-        $lines = Get-Content -LiteralPath $IndexPath -Encoding UTF8 -ErrorAction Stop
-    } catch {
-        return $result
-    }
-    foreach ($line in $lines) {
-        # Match a table row containing "in-progress" and an ID like FEAT-..., BUG-..., REF-...
-        if ($line -match 'in-progress' -and $line -match "($Prefixes)-[A-Za-z0-9_\-]+") {
-            $result.Add($Matches[0]) | Out-Null
-        }
-    }
-    return $result
-}
-
-# --- spec prefix alternation (SW-44) ------------------------------------------
-# Built-in fallback covers every prefix shipped in
-# templates/project-config.template.json (FEAT, BUG, REF, PERF, RCA, PORT).
-# Any config-declared prefix that fails the shape check
-# ^[A-Z][A-Z0-9]{1,9}$ is dropped silently and the built-in default is used
-# only if NOTHING declared validates. Must stay in sync with
-# resolve_spec_prefixes in prompt-router.sh.
-$script:DefaultSpecPrefixes = @('FEAT','BUG','REF','PERF','RCA','PORT')
-
-function Get-SpecPrefixAlternation {
-    param([object]$Config)
-    $raw = $null
-    try { $raw = $Config.spec.prefixes } catch { $raw = $null }
-    if ($null -eq $raw) {
-        return ($script:DefaultSpecPrefixes -join '|')
-    }
-    $valid = New-Object System.Collections.Generic.List[string]
-    foreach ($prop in $raw.PSObject.Properties) {
-        $val = [string]$prop.Value
-        if ($val -match '^[A-Z][A-Z0-9]{1,9}$') {
-            $valid.Add($val)
-        }
-    }
-    if ($valid.Count -eq 0) {
-        return ($script:DefaultSpecPrefixes -join '|')
-    }
-    return ($valid -join '|')
-}
-
 # ---- main ----
 
 $hookInput = Read-StdinJson
@@ -270,17 +225,14 @@ $config = Get-ProjectConfig -Root $projectRoot
 if (-not (Test-HookEnabled -Config $config)) { exit 0 }
 
 $specDir   = if ($config.spec.dir)       { Join-Path $projectRoot $config.spec.dir }       else { Join-Path $projectRoot '.specs' }
-$indexFile = if ($config.spec.indexFile) { Join-Path $projectRoot $config.spec.indexFile } else { Join-Path $projectRoot '.specs/index.md' }
 $pattern   = if ($config.ticket.pattern) { $config.ticket.pattern }                else { '^[A-Z]+-[0-9]+$' }
 $kwMap     = $config.workflow.keywords
 
 $workflowMatches = Get-KeywordMatches -Prompt $prompt -KeywordMap $kwMap -DefaultKeywordMap $script:DefaultKeywords
 $ticketIds       = Get-TicketIds      -Prompt $prompt -Pattern $pattern
 $ticketSpecs     = Find-SpecsByTicket -SpecDir $specDir -TicketIds $ticketIds
-$specPrefixes    = Get-SpecPrefixAlternation -Config $config
-$inProgress      = Get-InProgressSpecs -IndexPath $indexFile -Prefixes $specPrefixes
 
-if ($workflowMatches.Count -eq 0 -and $ticketIds.Count -eq 0 -and $inProgress.Count -eq 0) {
+if ($workflowMatches.Count -eq 0 -and $ticketIds.Count -eq 0) {
     exit 0
 }
 
@@ -307,12 +259,6 @@ if ($ticketIds.Count -gt 0) {
     } else {
         $lines.Add('No matching spec folder found. Consider /sd:feature or /sd:bug to create one.') | Out-Null
     }
-}
-
-if ($inProgress.Count -gt 0) {
-    $lines.Add('') | Out-Null
-    $lines.Add('Specs currently in-progress (from .specs/index.md):') | Out-Null
-    foreach ($s in $inProgress) { $lines.Add("  - $s") | Out-Null }
 }
 
 $lines.Add('</context-router>') | Out-Null

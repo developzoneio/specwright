@@ -129,7 +129,7 @@
     },
     "userPromptRouter": {
       "enabled": true,
-      "_use": "Keyword routing + spec-context injection on every user prompt"
+      "_use": "Per-prompt routing hints on every user prompt: workflow keywords and ticket IDs (with matching spec folders). In-progress specs moved to sessionContext (SW-67)"
     },
     "specGate": {
       "enabled": true,

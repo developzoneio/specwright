@@ -2,9 +2,11 @@
 # specwright: UserPromptSubmit hook - prompt-router (bash).
 #
 # Reads Claude Code hook JSON from stdin. Emits a <context-router> block on
-# stdout when workflow keywords, ticket IDs, or in-progress specs are detected.
-# Exits 0 silently if jq is missing, if stdin is empty/invalid, or if no hints
-# apply. Never writes to disk.
+# stdout when workflow keywords or ticket IDs are detected. Only per-prompt
+# work lives here: the in-progress spec list and the constitution pointer do
+# not change within a session, so session-context.sh (SessionStart) emits them
+# once instead (SW-67). Exits 0 silently if jq is missing, if stdin is
+# empty/invalid, or if no hints apply. Never writes to disk.
 #
 # Note: we deliberately do NOT use `set -u` because bash 3.2's empty-array
 # expansion is brittle under it; the hook must never fail noisily.
@@ -95,43 +97,9 @@ if [[ "${enabled}" == "false" ]]; then
 fi
 
 spec_dir="$(printf '%s' "${config_json}"   | jq -r '.spec.dir       // ".specs"'         2>/dev/null)"
-index_rel="$(printf '%s' "${config_json}"  | jq -r '.spec.indexFile // ".specs/index.md"' 2>/dev/null)"
 ticket_pat="$(printf '%s' "${config_json}" | jq -r '.ticket.pattern // "^[A-Z]+-[0-9]+$"' 2>/dev/null)"
 
 spec_path="${project_root}/${spec_dir}"
-index_path="${project_root}/${index_rel}"
-
-# --- spec prefix alternation (SW-44) ------------------------------------------
-# Built-in fallback covers every prefix shipped in
-# templates/project-config.template.json (FEAT, BUG, REF, PERF, RCA, PORT).
-# Any config-declared prefix that fails the shape check
-# ^[A-Z][A-Z0-9]{1,9}$ is dropped silently and the built-in default is used
-# only if NOTHING declared validates. Must stay in sync with
-# Get-SpecPrefixAlternation in prompt-router.ps1.
-readonly SD_DEFAULT_SPEC_PREFIXES='FEAT|BUG|REF|PERF|RCA|PORT'
-
-resolve_spec_prefixes() {
-    local raw valid=() p
-    raw="$(printf '%s' "${config_json}" | jq -r '.spec.prefixes // {} | to_entries[]?.value // empty' 2>/dev/null)"
-    if [[ -z "${raw}" ]]; then
-        printf '%s' "${SD_DEFAULT_SPEC_PREFIXES}"
-        return 0
-    fi
-    while IFS= read -r p; do
-        [[ -z "${p}" ]] && continue
-        if [[ "${p}" =~ ^[A-Z][A-Z0-9]{1,9}$ ]]; then
-            valid+=("${p}")
-        fi
-    done <<< "${raw}"
-    if [[ ${#valid[@]} -eq 0 ]]; then
-        printf '%s' "${SD_DEFAULT_SPEC_PREFIXES}"
-        return 0
-    fi
-    local IFS='|'
-    printf '%s' "${valid[*]}"
-}
-
-spec_prefixes="$(resolve_spec_prefixes)"
 
 # --- keyword match ------------------------------------------------------------
 
@@ -213,23 +181,9 @@ if [[ -d "${spec_path}" && ${#ticket_ids[@]} -gt 0 ]]; then
     done < <(find "${spec_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
 fi
 
-# --- in-progress specs --------------------------------------------------------
-
-declare -a in_progress=()
-if [[ -f "${index_path}" ]]; then
-    while IFS= read -r id; do
-        [[ -z "${id}" ]] && continue
-        dup=0
-        for existing in "${in_progress[@]:-}"; do
-            if [[ "${existing}" == "${id}" ]]; then dup=1; break; fi
-        done
-        [[ ${dup} -eq 0 ]] && in_progress+=("${id}")
-    done < <(grep 'in-progress' "${index_path}" 2>/dev/null | grep -oE "(${spec_prefixes})-[A-Za-z0-9_-]+" || true)
-fi
-
 # --- nothing to say? ----------------------------------------------------------
 
-if [[ ${#matched_workflows[@]} -eq 0 && ${#ticket_ids[@]} -eq 0 && ${#in_progress[@]} -eq 0 ]]; then
+if [[ ${#matched_workflows[@]} -eq 0 && ${#ticket_ids[@]} -eq 0 ]]; then
     exit 0
 fi
 
@@ -260,12 +214,6 @@ fi
         else
             echo 'No matching spec folder found. Consider /sd:feature or /sd:bug to create one.'
         fi
-    fi
-
-    if [[ ${#in_progress[@]} -gt 0 ]]; then
-        echo ''
-        echo 'Specs currently in-progress (from .specs/index.md):'
-        for s in "${in_progress[@]}"; do echo "  - ${s}"; done
     fi
 
     echo '</context-router>'

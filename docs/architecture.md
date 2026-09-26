@@ -192,14 +192,33 @@ A skill is **not** an agent. It cannot be invoked directly, has no tools of its 
 `session-context` and `prompt-router` inject context, `spec-gate` guards edits (and records),
 `subagent-retro` reminds about stale retros (and records).
 
+### `session-context` (`SessionStart`)
+
+Runs once per session entry point: `startup`, `resume` (which also covers `--continue`), `fork`,
+`compact` and `clear` (ADR 0015). Every source gets the same `<session-context>` block:
+- The constitution pointer (`spec.constitutionFile`), when the file exists.
+- Every spec marked in-progress in `.specs/index.md`, with the row's title and the `status:` from
+  that spec's `00-spec.md` frontmatter.
+
+This is the part of the spec context that does not change within a session, so it is paid for
+once, not on every prompt. Re-firing on `resume` and `compact` re-primes a session whose earlier
+context is stale or was summarized away (SW-68 builds on the `compact` entry). The hook is silent
+when there is neither a constitution nor an in-progress spec, so a project with no `.specs/` tree
+sees nothing. It never writes and records no metrics. Opt out with
+`hooks.sessionContext.enabled: false`.
+
 ### `prompt-router` (`UserPromptSubmit`)
 
 Runs on every user prompt. Reads the prompt and the project config, then emits a `<context-router>` block when it detects:
-- Workflow keywords (`bug`, `feature`, `refactor`, `perf`, `rca`).
-- Ticket IDs matching the configured pattern.
-- Specs currently in-progress (from `.specs/index.md`).
+- Workflow keywords (`bug`, `feature`, `refactor`, `perf`, `rca`, `port`).
+- Ticket IDs matching the configured pattern (plus any spec folder whose name contains one).
 
-The block is injected into the prompt as additional context, so Claude knows there's an active spec or a likely workflow without the user having to remind it.
+The block is injected into the prompt as additional context, so Claude knows the likely workflow
+without the user having to name it. Until SW-67 it also re-listed the in-progress specs on every
+prompt; that moved to `session-context`. On a workspace with two in-progress specs the payload
+went from 254 to 154 bytes for a keyword prompt and from 289 to 189 bytes for a ticket prompt,
+and a prompt with neither keywords nor tickets went from 191 bytes to no output at all (PS and
+bash identical).
 
 ### `spec-gate` (`PreToolUse`, Edit / Write / MultiEdit / Bash / PowerShell)
 
@@ -408,7 +427,7 @@ These are rough ballparks. Actual cost depends on file sizes, MCP usage, and con
 Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
 `Edit|Write|MultiEdit|Bash|PowerShell` (a shell command with no write marker exits before any
 disk read), `prompt-router` on every prompt, `subagent-retro` after every subagent,
-and each one is a fresh process: interpreter start-up, script parse, then the hook's own work.
+`session-context` once per session entry point, and each one is a fresh process: interpreter start-up, script parse, then the hook's own work.
 The PowerShell twins pay far more start-up than the bash ones.
 
 **Method.** `tests/hooks/measure-latency.ps1` spawns each PowerShell hook as a fresh child process
@@ -436,6 +455,10 @@ each on commits `0ddb2b4` and `01cb099`; "powershell" is Windows PowerShell 5.1)
 | ubuntu-latest (CI) | pwsh | 360 / 509 | 316 / 425 | 375 / 536 |
 | Linux container, 4 vCPU | pwsh | 548 | 446 | 578 |
 
+`session-context` (SW-67) shipped after these runs, so it has no column. On one Windows
+workstation (2026-09-26, 10 iterations per case) it measured p95 399 ms under powershell and
+556 ms under pwsh, in line with `prompt-router`; its CI budget copies `prompt-router`'s.
+
 For comparison, the bash `spec-gate` on the same Linux container measured p50 104 ms and p95
 119 ms on the `block-protected-path` case (a shell loop timing 30 runs; the bash twins are not
 covered by `measure-latency.ps1`).
@@ -443,7 +466,7 @@ covered by `measure-latency.ps1`).
 **What the numbers say.**
 
 - **No hook comes near its timeout.** The worst p95 anywhere is 650 ms, against 5 s
-  (`spec-gate`, `prompt-router`) and 3 s (`subagent-retro`). An implement phase touching 40 files
+  (`spec-gate`, `prompt-router`, `session-context`) and 3 s (`subagent-retro`). An implement phase touching 40 files
   pays roughly 40 x 0.5 s = 20 s of `spec-gate` overhead, which is real but not a timeout risk.
 - **pwsh is not faster everywhere.** On windows-latest, Windows PowerShell 5.1 beat pwsh by about
   20% on every hook. On a developer workstation measured earlier in SW-50, it was the reverse:

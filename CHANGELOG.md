@@ -355,6 +355,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     approved before this rule existed.
 
 ### Changed
+- **`prompt-router` trimmed to per-prompt routing** (SW-67) - both twins drop the in-progress
+  spec list (and the index read and prefix resolution behind it), which `session-context` now
+  emits once per session. Keyword routing, ticket-ID detection and the matching spec folders stay.
+  On a workspace with two in-progress specs the per-prompt payload went from 254 to 154 bytes
+  (keyword prompt) and from 289 to 189 bytes (ticket prompt), and a prompt with neither went from
+  191 bytes to no output; PS and bash identical. Router fixtures `in-progress-surfaced` and
+  `subdir-cwd-in-progress-surfaced` became `in-progress-not-surfaced` and
+  `subdir-cwd-ticket-folder`. **Upgrading:** a project set up before this change has no
+  `SessionStart` wiring, so it stops seeing in-progress specs until `/sd:setup` is re-run (its new
+  drift rule A.5 adds the entry) or the block from `templates/settings.template.json` is copied in.
 - **e2e suite meets SW-27's "green 3x consecutively" bar** (SW-77) - three consecutive full-suite
   runs on 2026-09-26 (commit `7086d29`, `claude` 2.1.283, Windows, subscription auth): all 10
   scenarios and `-SelfTest` green every time, no flaky assertion. `tests/e2e/README.md` replaces
