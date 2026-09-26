@@ -1,0 +1,1 @@
+Needs file writes in Phase 2 (00-spec.md hypothesis tree, 05-retro.md) with no human to approve them.

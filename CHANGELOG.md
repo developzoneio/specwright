@@ -63,6 +63,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **Model escalation in `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf` and `/sd:port`** (SW-62) -
+  `sd-model-escalation` gains six rows, each `sonnet -> opus`: `ESC-BUG-03` (`severity` P0/P1) and
+  `ESC-BUG-03b` (two exhausted hypothesis trees) for `sd-debugger` at bug Phase 3; `ESC-RCA-02`
+  (`severity` P0, one decision per run); `ESC-REF-04` (Phase 2 impact map > 8 files or > 2
+  `paths.layers`) and `ESC-PORT-06` (port decompose metric > 8 deviation rows) for
+  `sd-spec-architect` before the plan; `ESC-PERF-04` (two reverted attempts on a hotspot) re-runs
+  the 4a deep dive once, escalated, since Gate 4 alone would only re-offer the same list. Each
+  threshold's rationale, and why measured triggers beat self-declared ones, are recorded in the
+  skill. Each command reads the skill in Phase 0 and names only rule IDs and trigger inputs. REF
+  and PORT IDs follow the skill's `ESC-<WF>-<PHASE>` format (plan phases 4 and 6), not the
+  ticket's draft `03`. `/sd:explore` and `/sd:review` carry an explicit `sd-model-escalation: no
+  rule` marker with the reason (SW-63's CL601 will turn these into `contract-lint: allow` comments
+  once that rule exists). `sd-debugger` loads the skill via `skills:`. No gate count and no agent
+  `model:` changed. New e2e scenario `11-escalation-rca-capped` asserts that `ceiling: "sonnet"`
+  still writes the `capped` line (authored and checked offline, not yet run live).
 - **`tests/e2e/run-e2e.ps1 -ResultsFile <path>`** (SW-77) - writes the run as JSON: date, mode,
   `claude` version, auth mode, OS, git commit, and per scenario the result, assertion counts, exit
   code, `total_cost_usd` and duration. Nothing is written without the flag. It records the three

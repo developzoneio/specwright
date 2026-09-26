@@ -31,8 +31,12 @@ Drives an incident analysis from raw signals to a documented root cause, recorde
    it owns the Layer-2 reads and all of their messages (commands cannot load skills via
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
-2. Compute current UTC date for the spec ID stamp.
-3. Detect state. Print resume plan.
+2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 2 step 0; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+3. Compute current UTC date for the spec ID stamp.
+4. Detect state. Print resume plan.
 
 ---
 
@@ -65,7 +69,11 @@ STOP. Display the populated Timeline, Symptoms, Affected scope, Recent changes. 
 
 ## Phase 2 - Hypothesis enumeration
 
-1. Invoke `sd-debugger` with:
+0. **Model escalation check.** Apply rule `ESC-RCA-02` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the `severity` frontmatter field of
+   `.specs/RCA-<slug>-<YYYYMMDD>/00-spec.md`. The decision covers every `sd-debugger` call in
+   Phase 2 and Phase 3.
+1. Invoke `sd-debugger` (model: default, or as resolved by step 0) with:
    - `TASK = enumerate`
    - `SPEC_REF = .specs/RCA-<slug>-<YYYYMMDD>/00-spec.md`
    - `EVIDENCE_DIR = .specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/`
@@ -90,7 +98,7 @@ STOP. Display the ranked hypotheses. Ask:
 
 For each hypothesis in rank order:
 
-1. Invoke `sd-debugger` with:
+1. Invoke `sd-debugger` (model: default, or as resolved by Phase 2 step 0) with:
    - `TASK = verify`
    - `HYPOTHESIS = <H#>`
    - `EVIDENCE_DIR = .specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/`
@@ -162,4 +170,8 @@ No gate here - documentation-only phase.
 - Rejected hypotheses are documented in full. They are as valuable as the confirmed one for future incidents.
 - Database access (via the project's MCP tool or CLI) is SELECT / EXPLAIN only. Any UPDATE attempt is a constitution violation.
 - The Spawned specs section is a CONTRACT. Each reserved ID should be created within the agreed timeline; if not, log to retro.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-RCA-02` is applied at Phase 2
+  step 0; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
+  in the skill and are not restated here. The main thread writes its retro line - `sd-debugger`
+  stays without a write tool, escalated or not.
 - RCAs do not get a `revive` action. New incident -> new RCA.

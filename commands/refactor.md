@@ -52,7 +52,11 @@ frontmatter first and is never resumed from its task markers.
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Compute UTC date for spec ID.
 3. Read coverage threshold from project-config or default to 80%.
-4. Detect state. Print resume plan.
+4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 4 step 0; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+5. Detect state. Print resume plan.
 
 ---
 
@@ -128,7 +132,11 @@ If user picks (2) explicit exception, document the threshold reduction in `05-re
 
 ## Phase 4 - Plan parallel-safe tasks
 
-1. Invoke `sd-spec-architect` with:
+0. **Model escalation check.** Apply rule `ESC-REF-04` of **sd-model-escalation** (read in
+   Phase 0). Trigger inputs: the distinct files named by the Phase 2 impact analysis in
+   `.specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`, and the `paths.layers` entries of project-config
+   those files fall under.
+1. Invoke `sd-spec-architect` (model: default, or as resolved by step 0) with:
    - `TASK = plan`
    - `SPEC = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -252,6 +260,9 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
 - Gate 5 (Tests green per batch) is HARD. A red batch is reverted or fixed - never deferred.
 - Implementer in refactor mode has the tightest scope discipline. Any "improvement" beyond restructuring is rejected.
 - Public API preservation is verified by reviewer (Phase 6), not assumed.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-REF-04` is applied at Phase 4
+  step 0; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
+  in the skill and are not restated here.
 - Max 3 parallel tasks per batch. More -> tests-between granularity is too coarse.
 - Each batch's tests must finish before the next batch starts. No "tests run in background while next batch starts".
 - **Gate Re-plan is a conditional gate, not a seventh always-on gate.** It fires only on a

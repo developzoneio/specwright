@@ -83,7 +83,11 @@ frontmatter first and is never resumed from its task markers.
    policy" section found in .specs/constitution.md
    Scope: <scope>   Topology: <bridged|in-repo>   Snapshot mode: <contract|contract+source>
    ```
-7. Detect state from the table above. Print the resume plan.
+7. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 6 step 2; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+8. Detect state from the table above. Print the resume plan.
 
 ---
 
@@ -300,7 +304,10 @@ the same question; the empty-diff proof is never skipped.
    - Over threshold: present a split at Gate 4, partitioned along disjoint `Host path` rows (each
      child owns a set of path-mapping rows plus the deviation IDs those rows reference), or a
      no-split flag. Under threshold: normal plan, zero added friction.
-2. Invoke `sd-spec-architect` with:
+2. **Model escalation check, then the plan.** Apply rule `ESC-PORT-06` of
+   **sd-model-escalation** (read in Phase 0). Trigger input: the port decompose metric computed in
+   step 1 (deviation rows requiring adaptation). Invoke `sd-spec-architect` (model: default, or as
+   resolved above) with:
    - `TASK = plan`
    - `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT = .specs/PORT-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -464,6 +471,9 @@ a resolution - it makes the diff justify itself.
   `commands.build` / `commands.lint` / `commands.coverage`; paths from `paths.src` / `paths.tests` /
   `paths.layers` / `paths.protected`.
 - Model references are aliases only (`sonnet`, `haiku`, `opus`, `inherit`) - never a full model ID.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PORT-06` is applied at Phase 6
+  step 2; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
+  in the skill and are not restated here.
 - Snapshot visibility: this command warns about host tooling globbing `.specs/` and never edits the
   host's build, lint, or coverage configuration.
 - Implementer touches only files declared in the task's `Files` list. Any scope creep -> stop,

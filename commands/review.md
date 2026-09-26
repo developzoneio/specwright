@@ -128,6 +128,9 @@ This command does NOT auto-fix. It surfaces. If the user wants to act on BLOCKs:
 
 ## Rules (hard constraints)
 
+<!-- sd-model-escalation: no rule -
+     single read-only sd-reviewer call per run, and in modes A/B/D there is no spec frontmatter
+     to read a trigger from. Decided in SW-62, not forgotten. -->
 - Constitution is required. Without it, the command aborts in Phase 0.
 - Read-only. Never modifies code. Reviewer's tool allowlist excludes write tools.
 - Every finding cites file:line. Findings without citations are not displayed (reviewer is re-prompted).

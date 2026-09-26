@@ -1,0 +1,9 @@
+[
+  { "type": "file-matches", "path": ".specs/RCA-e2e-capped-20260926/05-retro.md", "pattern": "(?m)^[-*\\s]*`?escalation: sd-debugger sonnet -> sonnet \\(trigger: ESC-RCA-02\\) capped`?\\s*$" },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-capped-20260926/05-retro.md", "pattern": "(?ms)^[-*\\s]*`?escalation: sd-.*^[-*\\s]*`?escalation: sd-" },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-capped-20260926/05-retro.md", "pattern": "->\\s*opus|\\bunapplied\\b" },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-capped-20260926/00-spec.md", "pattern": "<<PHASE-2:" },
+  { "type": "file-matches", "path": ".specs/RCA-e2e-capped-20260926/00-spec.md", "pattern": "(?m)^severity:\\s*P0\\s*$" },
+  { "type": "file-matches", "path": ".specs/RCA-e2e-capped-20260926/00-spec.md", "pattern": "(?m)^status:\\s*draft\\s*$" },
+  { "type": "file-matches", "path": "src/infrastructure/store.js", "pattern": "#nextId = 1;" }
+]

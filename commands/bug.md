@@ -43,8 +43,12 @@ These rules override any user pressure to "just patch it".
    it owns the Layer-2 reads and all of their messages (commands cannot load skills via
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
-2. If `ticket.system == "jira"` and `<arg>` matches `ticket.pattern`, fetch ticket via Atlassian MCP.
-3. Detect state. Print one-line resume plan.
+2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 3 step 1; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+3. If `ticket.system == "jira"` and `<arg>` matches `ticket.pattern`, fetch ticket via Atlassian MCP.
+4. Detect state. Print one-line resume plan.
 
 ---
 
@@ -100,7 +104,13 @@ If the user insists on proceeding without repro, log a constitution exception to
 
 ## Phase 3 - Investigate
 
-1. Invoke `sd-debugger` with:
+0. **Model escalation check.** At the start of every enumeration round (first entry, and each
+   return from Gate 3a), apply rules `ESC-BUG-03` and `ESC-BUG-03b` of **sd-model-escalation**
+   (read in Phase 0). Trigger inputs: the `severity` frontmatter field of
+   `.specs/BUG-<arg>/00-spec.md`, and the number of exhausted hypothesis trees already recorded in
+   `.specs/BUG-<arg>/03-decisions.md` by Gate 3a. The decision covers this round's step 1 and step 4
+   `sd-debugger` calls.
+1. Invoke `sd-debugger` (model: default, or as resolved by step 0) with:
    - `TASK = enumerate`
    - `SPEC_REF = .specs/BUG-<arg>/00-spec.md`
    - `REPRODUCTION = <reproduction section>`
@@ -108,7 +118,8 @@ If the user insists on proceeding without repro, log a constitution exception to
 2. Debugger enumerates hypotheses per the **sd-hypothesis-tree** skill (5 mental models, `(Likelihood x Impact) / Cost-to-verify` ranking).
 3. Main thread appends the returned hypothesis tree to `.specs/BUG-<arg>/03-decisions.md` (debugger has no write tool).
 4. Loop:
-   - Invoke `sd-debugger` with `TASK = verify`, `HYPOTHESIS = <H#>`, `EVIDENCE_DIR = .specs/BUG-<arg>/04-artifacts/`.
+   - Invoke `sd-debugger` (model as resolved by step 0) with `TASK = verify`, `HYPOTHESIS = <H#>`,
+     `EVIDENCE_DIR = .specs/BUG-<arg>/04-artifacts/`.
    - Result: CONFIRMED / REJECTED / INCONCLUSIVE.
    - Main thread appends the result with evidence pointers (file:line, log lines, query results) to `03-decisions.md`.
    - Document REJECTED hypotheses with FULL reasoning - this is knowledge preservation for future similar bugs.
@@ -130,7 +141,7 @@ Ask:
 > All <N> hypotheses were rejected or inconclusive; no root cause confirmed. How do you want to proceed?
 > (re-enumerate / observe / abort)
 
-- `re-enumerate` -> return to Phase 3 step 1 with the new evidence/telemetry that justifies fresh
+- `re-enumerate` -> return to Phase 3 step 0 with the new evidence/telemetry that justifies fresh
   hypotheses. Do not re-run identical hypotheses.
 - `observe` -> add observability (logging, tracing, metrics), reproduce again to gather evidence, then
   re-enumerate. Log the gap to `05-retro.md`.
@@ -252,4 +263,7 @@ Ask:
 - Failing test FIRST (Gate 4). Never invert this order.
 - Fix is MINIMAL. Opportunistic refactor goes into a separate REF-* spec.
 - Rejected hypotheses are documented with reasoning, not deleted.
+- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-BUG-03` and `ESC-BUG-03b` are
+  applied at Phase 3 step 0; the ladder, precedence, `models.escalation` config and the
+  `05-retro.md` line format live in the skill and are not restated here.
 - If the bug recurs after close-out, the original BUG-<arg> stays `done`; open a new BUG-* with cross-reference.

@@ -1,0 +1,157 @@
+{
+  "version": "1.0.0",
+
+  "project": {
+    "name": "fixture-project",
+    "description": "Tiny in-memory todo-list library - specwright's runnable non-.NET example",
+    "owner": "specwright maintainers",
+    "repo": "https://github.com/Developzone/specwright"
+  },
+
+  "ticket": {
+    "system": "github",
+    "pattern": "^#[0-9]+$",
+    "baseUrl": "https://github.com/Developzone/specwright/issues",
+    "snapshot": {
+      "enabled": true,
+      "maxRelated": 5,
+      "maxConfluencePages": 3,
+      "_use": "Persist fetched ticket + related tickets + linked Confluence pages to .specs/<ID>/04-artifacts/ticket/"
+    }
+  },
+
+  "spec": {
+    "dir": ".specs",
+    "indexFile": ".specs/index.md",
+    "constitutionFile": ".specs/constitution.md",
+    "prefixes": {
+      "feature": "FEAT",
+      "bug": "BUG",
+      "refactor": "REF",
+      "perf": "PERF",
+      "rca": "RCA"
+    },
+    "lifecycle": ["draft", "approved", "in-progress", "done", "archived"],
+    "archiveAfterDays": 90
+  },
+
+  "commands": {
+    "build": "n/a - no compile step (plain JavaScript)",
+    "test": "npm test",
+    "lint": "n/a - no linter configured",
+    "coverage": "npm run coverage",
+    "run": "npm start"
+  },
+
+  "paths": {
+    "src": "src",
+    "tests": "tests",
+    "docs": "n/a - no separate docs folder",
+    "layers": [
+      { "name": "domain", "path": "src/domain" },
+      { "name": "application", "path": "src/application" },
+      { "name": "infrastructure", "path": "src/infrastructure" }
+    ],
+    "_layers_use": "Ordered inside-out [{name, path}] (innermost first); path may be a glob. Backs constitution 1.1 dependency direction. Filled by /sd:setup scan; [] when undetectable.",
+    "protected": [
+      ".specs/constitution.md",
+      ".specs/index.md",
+      "LICENSE"
+    ]
+  },
+
+  "workflow": {
+    "keywords": {
+      "bug": ["bug", "fix", "broken", "error", "crash", "regression", "defect"],
+      "feature": ["feature", "add", "implement", "new", "support"],
+      "refactor": ["refactor", "restructure", "clean up", "extract", "rename"],
+      "perf": ["perf", "performance", "slow", "optimize", "latency", "throughput"],
+      "rca": ["incident", "outage", "rca", "root cause", "post-mortem", "postmortem"]
+    },
+    "gates": {
+      "_comment": "Descriptive only - no hook or command reads this block today; it documents each workflow's hard-gate sequence for humans/tooling that may consume it later.",
+      "feature": ["spec-approved", "plan-approved", "integration-review-pass"],
+      "bug": ["symptom-captured", "reproduction-confirmed", "root-cause-confirmed", "failing-test-written", "regression-pass"],
+      "rca": ["evidence-gathered", "hypotheses-enumerated", "root-cause-confirmed"],
+      "refactor": ["spec-approved", "coverage-threshold-met", "post-test-added", "plan-approved", "batch-tests-green", "holistic-review-pass"],
+      "perf": ["target-defined", "baseline-measured", "hotspot-identified", "hypothesis-selected", "correctness-verified", "keep-or-revert-decided", "regression-pass", "final-review-pass"]
+    }
+  },
+
+  "models": {
+    "main": "sonnet",
+    "subagent_default": "haiku",
+    "subagent_reasoning": "sonnet",
+    "subagent_execution": "haiku",
+    "_comment": "Portable aliases (sonnet/haiku) - resolved to the current recommended version by Claude Code at runtime. Agents also use these aliases in frontmatter.",
+    "escalation": {
+      "enabled": true,
+      "ceiling": "sonnet",
+      "_ceiling_use": "e2e scenario 11: ceiling sonnet caps the sonnet -> opus debugger escalation (ESC-RCA-02) to no movement; the capped line must still be written.",
+      "_comment": "Per-invocation main-thread override. Agent frontmatter is never edited."
+    }
+  },
+
+  "mcp": {
+    "atlassian": {
+      "enabled": false,
+      "_use": "Fetch JIRA tickets (+ related tickets and linked Confluence pages) in /sd:feature and /sd:bug"
+    },
+    "context7": {
+      "enabled": false,
+      "_use": "Up-to-date library docs for sd-spec-architect and sd-implementer"
+    },
+    "sequential-thinking": {
+      "enabled": false,
+      "_use": "Structured hypothesis enumeration in sd-debugger and sd-reviewer"
+    },
+    "gitnexus": {
+      "enabled": false,
+      "_use": "Fast symbol search, callers, call graph for sd-code-explorer"
+    },
+    "database": {
+      "enabled": false,
+      "_use": "Read-only schema and query-plan inspection in sd-debugger (SELECT/EXPLAIN only) - not applicable, this fixture has no database"
+    },
+    "playwright": {
+      "enabled": false,
+      "_use": "E2E reproduction for /sd:bug - not applicable, this fixture has no UI/browser surface"
+    },
+    "tavily": {
+      "enabled": false,
+      "_use": "Web search for error signatures / library issues in sd-debugger"
+    }
+  },
+
+  "hooks": {
+    "userPromptRouter": {
+      "enabled": true,
+      "_use": "Keyword routing + spec-context injection on every user prompt"
+    },
+    "specGate": {
+      "enabled": true,
+      "mode": "warn",
+      "_modes": "block = refuse Edit/Write on code without in-progress spec; warn = log to stderr only; off = skip",
+      "_use": "Guard rail blocking code edits when no spec is in-progress",
+      "verifyGate": true,
+      "_verifyGate_use": "Scoped to FEAT- (feature-spec) rows only - other types (bug, refactor, perf, rca) have no /sd:verify integration yet. true: a FEAT- row may transition to done only when <spec.dir>/<ID>/06-verify.md records 'result: pass' (written by /sd:verify); non-FEAT rows and any false setting keep index.md fully protected as before SW-6."
+    },
+    "subagentRetro": {
+      "enabled": true,
+      "retroStaleMinutes": 30,
+      "debounceMinutes": 10,
+      "_use": "Reminder to update stale retros after subagent runs",
+      "injectLessons": true,
+      "maxLessons": 3,
+      "_injectLessons_use": "Surface lessons from <spec.dir>/_lessons/lessons.md when a subagent finishes work on an in-progress spec. Selection is by workflow type - a FEAT- spec pulls feature-scoped lessons - so there is no ranking. Emitted regardless of retro staleness and of debounceMinutes, which gate only the stale-retro reminder.",
+      "_maxLessons_use": "Cap on NEW lessons surfaced per subagent stop. Already-surfaced lessons are recorded per session, so a session converges to silence rather than repeating itself. Set to 0 to surface none without disabling the reminder."
+    },
+    "metrics": {
+      "enabled": true,
+      "path": ".specs/_metrics/events.jsonl",
+      "maxSizeKb": 1024,
+      "_use": "Append-only, metadata-only event log (no code content, no file paths) consumed by the retro loop. Set enabled=false to opt out entirely.",
+      "_maxSizeKb_use": "Soft byte cap (KB) for events.jsonl. When the live file reaches the cap, the next write rolls it to events.jsonl.1 (single generation, previous roll overwritten) and starts a fresh log. Default 1024 (~1MB, a guess - not tuned against a measured corpus); absent key also means 1024, so pre-existing configs stay bounded. Set to 0 to disable rotation and let the log grow unbounded. Rotation is best-effort: any failure (locked file, read-only dir) is a silent no-op and the hook never stops appending. events.jsonl.1 is a grace buffer, not part of any read contract - a consumer reads the live file only."
+    }
+  }
+}

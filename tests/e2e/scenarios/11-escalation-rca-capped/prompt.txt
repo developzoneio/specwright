@@ -1,0 +1,12 @@
+/sd:rca e2e-capped
+
+RCA-e2e-capped-20260926 is a synthetic fixture spec seeded by this e2e scenario. It was created on
+2026-09-26, so its ID keeps that date stamp: resume `.specs/RCA-e2e-capped-20260926/` rather than
+creating a spec under today's date. Gate 1 has already passed (status `draft`, signals gathered,
+hypothesis tree still empty). Its `severity` frontmatter value was set by the fixture author on
+purpose; use it exactly as written and do not edit it.
+
+This is a headless, scripted test run with no human available to reply mid-workflow. Do not stop
+and wait for a real person. Run Phase 2 following each step as written, including the model
+escalation check. Stop as soon as Gate 2 has been presented. Do not answer Gate 2 and do not start
+Phase 3. Report which model the debugger ran at in your last message.

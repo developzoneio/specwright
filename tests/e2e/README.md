@@ -234,6 +234,7 @@ modes.
 | 8 | `08-resume-checkoff` | `/sd:feature` re-invoked on a seeded 2-task spec whose T01 is already checked off (`Status: done`, code landed, retro line written) and T02 is `open`: the resume executes T02 only - `05-retro.md` gains a `T02:` line and still has exactly one `T01:` line, `countTodos` is not re-added - and both tasks end at the canonical `Status: done` marker (SW-71). |
 | 9 | `09-resume-approved` | `/sd:feature` re-invoked on a seeded `complexity: L` spec that is `approved` with no `02-tasks.md` and no impact map (the approving session ended before Phase 2): the state machine resumes at **Phase 2**, not Phase 3. `03-decisions.md` gains exactly one `## Impact analysis (sd-code-explorer)` section, `05-retro.md` carries the applied `escalation: sd-code-explorer haiku -> sonnet (trigger: ESC-FEAT-02)` line, Phase 3 writes `02-tasks.md`, and the run stops at Gate 2 with status still `approved` and no code changed (SW-74). Under the pre-SW-74 table the first two assertions fail. |
 | 10 | `10-resume-impact-mapped` | Control for 09: the same spec with the impact analysis already in `03-decisions.md`. The resume goes straight to Phase 3 (`impact-mapped`): still exactly one impact section, no `ESC-FEAT-02` line, `02-tasks.md` written, stopped at Gate 2 (SW-74). |
+| 11 | `11-escalation-rca-capped` | `/sd:rca` resumed at Phase 2 on a seeded `severity: P0` incident under `models.escalation.ceiling: "sonnet"`: `ESC-RCA-02` is capped to no movement and `05-retro.md` still carries exactly one `escalation: sd-debugger sonnet -> sonnet (trigger: ESC-RCA-02) capped` line - no `-> opus`, no `unapplied`, no second line. The hypothesis tree is filled, the run stops at Gate 2 with status `draft`, and no code changes (SW-62). A capped decision that left no line would look exactly like the policy not running. |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
@@ -249,7 +250,7 @@ Not per-PR: a `claude -p` suite costs real tokens and minutes of wall clock, and
 in a gate on every push. It runs nightly (or on manual `workflow_dispatch`) on a single OS via
 `.github/workflows/e2e-nightly.yml`.
 
-**The cost trade-off per run.** One full 10-scenario run costs about **$7.55-$7.79** in
+**The cost trade-off per run.** One full 10-scenario run (measured before scenario 11 was added) costs about **$7.55-$7.79** in
 `total_cost_usd` and takes about **26-28 minutes** of wall clock, plus about **$0.26** for
 `-SelfTest` (see the measured table below). With subscription auth, `total_cost_usd` is a notional
 figure, and the run draws on the plan's usage allowance instead of dollars. With API-key auth it is
@@ -305,6 +306,13 @@ In `06` the `ESC-FEAT-04` line was written before the T01 implementer call and n
 suffix appeared, so the Agent tool accepted a `model` parameter on this CLI version. That is
 the model's own account of the invocation, not a per-invocation model attribution read from a
 transcript - it does not settle SW-59. (Settled since by ADR 0013, from transcript evidence.)
+
+### Capped-escalation scenario (SW-62)
+
+`11-escalation-rca-capped` is authored and its assertions were checked offline against a good
+retro and against broken ones (no line, uncapped `-> opus`, two lines, `unapplied`, Phase 2 not
+run, severity edited). It has not been run against a live `claude` session yet. Run it with
+`.\tests\e2e\run-e2e.ps1 -Case 11-escalation-rca-capped` and record the result here.
 
 ### Resume-from-approved scenarios (SW-74)
 
