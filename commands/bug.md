@@ -44,7 +44,7 @@ These rules override any user pressure to "just patch it".
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 3 step 1; this file names only rule IDs and trigger inputs. If that file is
+   applied at Phase 3 step 0; this file names only rule IDs and trigger inputs. If that file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
 3. If `ticket.system == "jira"` and `<arg>` matches `ticket.pattern`, fetch ticket via Atlassian MCP.

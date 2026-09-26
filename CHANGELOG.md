@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`/sd:bug` Phase 0 named the wrong escalation step** (SW-63) - it said the model escalation
+  policy is "applied at Phase 3 step 1"; the check is Phase 3 step 0. Found while wiring CL601.
 - **e2e scenario `11-escalation-rca-capped`** (SW-62) - its seeded incident log was named
   `demo-host-restart.log`, which `.gitignore`'s `*.log` kept out of the commit, so the live run's
   workspace had a timeline citing evidence that did not exist. Renamed to `demo-host-restart.txt`.
@@ -66,6 +68,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **Contract-lint band CL6xx - the escalation policy cannot drift** (SW-63) - new
+  `contractLint.escalationTriggers` is the assertable copy of `sd-model-escalation`'s trigger
+  table (`id`, `command`, `phase`, `agent`, `from`, `to`), and `contractLint.escalationPolicy`
+  declares the ladder, the alias set and a restatement vocabulary. `CL601` fails a command that
+  invokes an agent with no row and no `allow CL601` reason, a command with rows that never
+  references the skill, and a row its command never names. `CL602` fails any disagreement between
+  the rows and the skill table (either direction, or field by field), and any `ESC-` ID cited
+  with no row. `CL603` fails a non-alias tier. `CL604` fails a ladder that differs from the
+  skill's, or a row that is not one rung up. `CL605` fails a command that restates the ladder, a
+  precedence rule or the retro line format. All BLOCK, both linters, identical decisions. The
+  band switches on when the skill exists on disk, so deleting the manifest keys fails instead of
+  disabling it. Nine new fixture cases (seven that fire, two that must stay silent). Allow
+  comments taken: 3 - `/sd:adr` (new; it invoked `sd-docs-writer` with no escalation decision),
+  and `/sd:explore` and `/sd:review`, whose SW-62 `sd-model-escalation: no rule` markers become
+  `allow CL601` comments. New `scripts/validate-escalation-lines.{sh,ps1}` checks each
+  `escalation:` line in a `05-retro.md` against the same rows (known rule, the rule's agent and
+  `from`, alias-only tiers, one rung; `capped` within range), run in CI on a clean and a bad
+  fixture. ADR 0014 records the decision and its limit: green lint proves the policy is stated
+  consistently, not that a subagent ran on the escalated model, and the e2e harness cannot assert
+  a per-invocation model (`--no-session-persistence`, ADR 0013).
 - **Model escalation in `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf` and `/sd:port`** (SW-62) -
   `sd-model-escalation` gains six rows, each `sonnet -> opus`: `ESC-BUG-03` (`severity` P0/P1) and
   `ESC-BUG-03b` (two exhausted hypothesis trees) for `sd-debugger` at bug Phase 3; `ESC-RCA-02`
