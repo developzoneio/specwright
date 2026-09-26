@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **e2e scenario `11-escalation-rca-capped`** (SW-62) - its seeded incident log was named
+  `demo-host-restart.log`, which `.gitignore`'s `*.log` kept out of the commit, so the live run's
+  workspace had a timeline citing evidence that did not exist. Renamed to `demo-host-restart.txt`.
 - **`hooks/powershell/subagent-retro.ps1`** - the pwsh twin swept state files older than 24h
   *before* reading the current session's state; `subagent-retro.sh` reads first and sweeps after.
   When the session's own state file was over 24h old, pwsh deleted it unread, forgot
@@ -77,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rule` marker with the reason (SW-63's CL601 will turn these into `contract-lint: allow` comments
   once that rule exists). `sd-debugger` loads the skill via `skills:`. No gate count and no agent
   `model:` changed. New e2e scenario `11-escalation-rca-capped` asserts that `ceiling: "sonnet"`
-  still writes the `capped` line (authored and checked offline, not yet run live).
+  still writes the `capped` line (passed 7/7 on a live run).
 - **`tests/e2e/run-e2e.ps1 -ResultsFile <path>`** (SW-77) - writes the run as JSON: date, mode,
   `claude` version, auth mode, OS, git commit, and per scenario the result, assertion counts, exit
   code, `total_cost_usd` and duration. Nothing is written without the flag. It records the three

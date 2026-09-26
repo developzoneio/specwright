@@ -309,10 +309,25 @@ transcript - it does not settle SW-59. (Settled since by ADR 0013, from transcri
 
 ### Capped-escalation scenario (SW-62)
 
-`11-escalation-rca-capped` is authored and its assertions were checked offline against a good
-retro and against broken ones (no line, uncapped `-> opus`, two lines, `unapplied`, Phase 2 not
-run, severity edited). It has not been run against a live `claude` session yet. Run it with
-`.\tests\e2e\run-e2e.ps1 -Case 11-escalation-rca-capped` and record the result here.
+Before the live run, the assertions were checked offline against a good retro and against broken
+ones (no line, uncapped `-> opus`, two lines, `unapplied`, Phase 2 not run, severity edited).
+
+First live run, 2026-09-26, Windows, subscription auth, `-Case 11-escalation-rca-capped`:
+
+| Scenario | `total_cost_usd` | Assertions | Result |
+|---|---|---|---|
+| `11-escalation-rca-capped` | $0.5785 | 7/7 | pass |
+
+The run wrote exactly one `escalation: sd-debugger sonnet -> sonnet (trigger: ESC-RCA-02) capped`
+line to `05-retro.md` before the debugger call, filled the hypothesis tree, left `severity: P0`
+and status `draft` untouched, and stopped at Gate 2. So `ceiling: "sonnet"` caps a
+`sonnet -> opus` row to no movement and still leaves the decision visible.
+
+The run also surfaced a fixture defect: the seeded timeline cited
+`04-artifacts/demo-host-restart.log`, which `.gitignore`'s `*.log` had kept out of the commit, so
+the debugger ranked three hypotheses as blocked on missing evidence. No assertion reads that file,
+so the pass stands. The artifact is now `demo-host-restart.txt`. Avoid `.log` names in fixture
+trees.
 
 ### Resume-from-approved scenarios (SW-74)
 

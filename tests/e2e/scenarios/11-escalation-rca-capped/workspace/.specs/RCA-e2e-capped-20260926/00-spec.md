@@ -21,10 +21,10 @@ linked_specs: []
 
 | Time (UTC) | Event | Source |
 |---|---|---|
-| 09:58 | Demo host restarts and restores 3 todos (ids 1-3) from a snapshot via `InMemoryStore.save` | `04-artifacts/demo-host-restart.log` |
-| 10:02 | First new todo after restart is assigned id 1; list still shows 3 items | `04-artifacts/demo-host-restart.log` |
-| 10:05 | Second new todo is assigned id 2; list still shows 3 items | `04-artifacts/demo-host-restart.log` |
-| 10:07 | Pager fires on the todo count regression | `04-artifacts/demo-host-restart.log` |
+| 09:58 | Demo host restarts and restores 3 todos (ids 1-3) from a snapshot via `InMemoryStore.save` | `04-artifacts/demo-host-restart.txt` |
+| 10:02 | First new todo after restart is assigned id 1; list still shows 3 items | `04-artifacts/demo-host-restart.txt` |
+| 10:05 | Second new todo is assigned id 2; list still shows 3 items | `04-artifacts/demo-host-restart.txt` |
+| 10:07 | Pager fires on the todo count regression | `04-artifacts/demo-host-restart.txt` |
 | 10:20 | Mitigation: demo host restarted with an empty store | on-call note |
 
 **Detection latency**: 5 minutes
