@@ -67,6 +67,38 @@ jobs:
           # would fail the step on its own correctly-detecting assertion.
           exit 0
 
+      # --- Retro escalation-line validator (SW-63), both directions. The bad
+      # fixture breaks the contract once per line, so "N violation(s) across N
+      # line(s)" is the assertion: a bare non-zero exit would stay green while
+      # all but one check rotted into a no-op --------------------------------
+      - name: Escalation-line validator (bash)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: |
+          bash scripts/validate-escalation-lines.sh --spec-dir tests/retro-escalation/fixtures/clean
+          if out="$(bash scripts/validate-escalation-lines.sh --spec-dir tests/retro-escalation/fixtures/bad)"; then
+            echo "$out"
+            echo "::error::bad fixture passed the escalation-line validator - checks are not firing"
+            exit 1
+          fi
+          echo "$out"
+          if ! grep -qE '([0-9]+) violation\(s\) across \1 escalation line' <<< "$out"; then
+            echo "::error::not every bad escalation line was rejected"
+            exit 1
+          fi
+
+      - name: Escalation-line validator (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/validate-escalation-lines.ps1 -SpecDir tests/retro-escalation/fixtures/clean
+          if ($LASTEXITCODE -ne 0) { throw "clean fixture failed the escalation-line validator" }
+          $out = ./scripts/validate-escalation-lines.ps1 -SpecDir tests/retro-escalation/fixtures/bad 6>&1 | Out-String
+          if ($LASTEXITCODE -eq 0) { throw "bad fixture passed the escalation-line validator - checks are not firing" }
+          Write-Output $out
+          if ($out -cnotmatch '(\d+) violation\(s\) across \1 escalation line') { throw "not every bad escalation line was rejected" }
+          exit 0
+
       # --- Lesson aggregator: pin the rendered output against a committed
       # expected file, then assert idempotence via --check. Both implementations
       # must land on the SAME bytes; the expected file is what makes a
