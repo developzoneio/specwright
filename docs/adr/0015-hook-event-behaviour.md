@@ -1,6 +1,6 @@
 # ADR 0015: hook event behaviour - what blocks, where prompt hooks run, SessionStart `source`
 
-- Status: accepted (findings); proposed (the SW-69 enforcement mechanism, under Decision)
+- Status: accepted (findings, and the SW-69 enforcement mechanism - signed off 2026-09-26)
 - Date: 2026-09-26
 - Source spec: Jira SW-66 (spike for E11 / SW-65)
 - Relates to: SW-67 (SessionStart context), SW-68 (PreCompact state), SW-69 (Stop close-out
@@ -120,9 +120,9 @@ Go/no-go per child story:
 | SW-69 Stop close-out gate | **GO** | Both exit 2 and JSON `decision: block` block. The hook **must** read `stop_hook_active` and allow the stop when it is true, or a gate the model cannot satisfy loops until the budget runs out. |
 | SW-70 PostToolUse handoff integrity | **GO, as a flag** | PostToolUse cannot undo anything; exit 2 only reaches the model as feedback. That matches the story's "flags" wording. Anything that must *prevent* an out-of-scope edit belongs in PreToolUse (spec-gate's territory). Narrow the matcher to `Edit|Write|MultiEdit`: at about 330 ms per spawn, a `*` matcher taxes every Read and Grep. |
 
-**SW-69 mechanism (proposed).** Prompt hooks do run on Stop, and the ticket asks for that choice
-to be recorded before the story starts. The proposal is to **keep a command hook as the
-enforcement mechanism**, for four reasons:
+**SW-69 mechanism (accepted, signed off 2026-09-26).** Prompt hooks do run on Stop, and the
+ticket asks for that choice to be recorded before the story starts. The decision is to **keep a
+command hook as the enforcement mechanism**, for four reasons:
 
 1. **The gate state is in `.specs/`, not the transcript.** The CLI tells a Stop prompt hook to
    judge "based on transcript evidence only", and it cannot read files. A command hook can read

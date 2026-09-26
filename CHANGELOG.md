@@ -77,8 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **SessionStart `source`:** `startup`, `resume` (also for `--continue`), `fork` (new session
     id) and `compact`.
   - **Latency:** about 330 ms p50 per hook spawn on PS 5.1 and 420 ms on pwsh, whatever the event.
-  - **Go for SW-67..70**, with constraints. The SW-69 proposal keeps a command hook, not a
-    prompt hook. Also found: an untrusted workspace ignores project `permissions.allow` in `-p`
+  - **Go for SW-67..70**, with constraints. SW-69 uses a command hook, not a prompt hook
+    (signed off). Also found: an untrusted workspace ignores project `permissions.allow` in `-p`
     mode (relevant to SW-80).
 - **`tests/e2e/probe-hook-events.ps1`** (SW-66) - manual, paid probe (about USD 0.50 for all
   cases) that re-derives ADR 0015.
