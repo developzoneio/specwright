@@ -586,9 +586,14 @@ $safeId      = ($sessionId -replace '[^A-Za-z0-9_\-]','_')
 $statePath   = Join-Path $stateDir ("subagent-retro-$safeId.json")
 $lessonsPath = Join-Path $specDir (Join-Path '_lessons' 'lessons.md')
 
-Remove-StaleStateFiles -StateDir $stateDir
-
+# Read THIS session's state before the sweep, as subagent-retro.sh does
+# (state read at the top, >24h cleanup later). Sweeping first deleted a session
+# state file older than 24h before it was read, so shownLessons was forgotten
+# and already-shown lessons were surfaced again - a twin divergence the
+# lessons-already-shown fixture caught once its checkout was a day old.
 $state = Read-State -StatePath $statePath
+
+Remove-StaleStateFiles -StateDir $stateDir
 
 $specPrefixes = Get-SpecPrefixAlternation -Config $config
 $specs = Get-IndexSpecs -IndexPath $indexFile -Prefixes $specPrefixes

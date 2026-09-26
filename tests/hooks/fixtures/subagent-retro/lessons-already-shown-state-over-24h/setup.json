@@ -1,0 +1,1 @@
+{ "touch": [ { "path": ".specs/FEAT-TEST-001/05-retro.md", "ageMinutes": 5 }, { "path": ".claude/.hookstate/subagent-retro-conformance-fixture.json", "ageMinutes": 1500 } ] }

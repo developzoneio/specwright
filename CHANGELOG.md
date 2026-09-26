@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`hooks/powershell/subagent-retro.ps1`** - the pwsh twin swept state files older than 24h
+  *before* reading the current session's state; `subagent-retro.sh` reads first and sweeps after.
+  When the session's own state file was over 24h old, pwsh deleted it unread, forgot
+  `shownLessons` and surfaced already-shown lessons again. The pwsh twin now reads first. The
+  `lessons-already-shown` conformance fixture hit this only when its checkout was a day old,
+  because `Copy-Item` keeps the source mtime and bash `cp` does not. Its state file is now touched
+  fresh, and the new `lessons-already-shown-state-over-24h` fixture pins the old-state path; it
+  fails against the previous code.
 - **`hooks/bash/spec-gate.sh`, `hooks/powershell/spec-gate.ps1`, workflow commands** (SW-79) -
   `spec-gate` was wired only for `Edit|Write|MultiEdit`, so a workflow that moved a spec's status
   with `Bash` `sed -i` on `.specs/index.md` sidestepped Rules 0, 0b and 1 and recorded no
