@@ -784,9 +784,35 @@ else
         fi
     done
 
+    # Scan only what git would track: tracked files plus untracked-but-not-ignored
+    # ones (--others --exclude-standard), so a gitignored tree such as
+    # node_modules/ cannot fail the check with a third-party script. Without git
+    # (not installed, or a tarball with no .git) fall back to a filesystem walk
+    # that prunes .git and node_modules. Mirrors Get-StrictModeCandidates in
+    # validate.ps1. Output: repo-relative paths, NUL-separated.
+    if command -v git >/dev/null 2>&1 &&
+       git -C "$repo_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        strict_scope="git ls-files"
+    else
+        strict_scope="filesystem walk, git unavailable"
+    fi
+    list_strict_candidates() {
+        if [[ "$strict_scope" == "git ls-files" ]]; then
+            git -C "$repo_root" ls-files -z --cached --others --exclude-standard -- '*.sh' 2>/dev/null
+        else
+            local p
+            while IFS= read -r -d '' p; do
+                printf '%s\0' "${p#"$repo_root"/}"
+            done < <(find "$repo_root" \( -name .git -o -name node_modules \) -prune -o -type f -name '*.sh' -print0 2>/dev/null)
+        fi
+    }
+
     strict_count=0
-    while IFS= read -r -d '' f; do
-        rel="${f#"$repo_root"/}"
+    while IFS= read -r -d '' rel; do
+        f="$repo_root/$rel"
+        # A tracked file deleted from the working tree is still listed by
+        # --cached; there is nothing on disk to check.
+        [[ -f "$f" ]] || continue
         is_exception=0
         for exc in ${strict_exceptions[@]+"${strict_exceptions[@]}"}; do
             if [[ "$rel" == "$exc" ]]; then is_exception=1; break; fi
@@ -812,10 +838,18 @@ else
             add_failure "strict-mode: $rel"
             strict_bad=$((strict_bad + 1))
         fi
-    done < <(find "$repo_root" -name .git -prune -o -type f -name '*.sh' -print0 2>/dev/null)
+    done < <(list_strict_candidates)
+
+    # The repo always ships .sh files (hooks/bash, install, scripts), so an empty
+    # candidate list means the listing itself failed - never a vacuous pass.
+    if [[ $strict_count -eq 0 && $strict_bad -eq 0 ]]; then
+        fail "no .sh files found to check (scope: $strict_scope) - the candidate listing failed"
+        add_failure "strict-mode: empty candidate list"
+        strict_bad=1
+    fi
 
     if [[ $strict_bad -eq 0 ]]; then
-        ok "$strict_count .sh file(s) use set -euo pipefail (${#strict_exceptions[@]} declared exception(s))"
+        ok "$strict_count .sh file(s) use set -euo pipefail (${#strict_exceptions[@]} declared exception(s); scope: $strict_scope)"
     fi
 fi
 

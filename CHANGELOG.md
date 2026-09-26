@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pinned CRLF, so every runner feeds the hooks the same bytes. The same unguarded jq loop remains
   in `prompt-router.sh` (`spec.prefixes`) and `subagent-retro.sh` (`spec.prefixes`,
   `shownLessons`); they are not changed here.
+- **`scripts/validate.{ps1,sh}` Check 10 scanned gitignored trees** - the bash strict-mode check
+  walked the whole working tree, pruning only `.git`, so any machine with `node_modules/`
+  installed failed on a third-party script
+  (`node_modules/.pnpm/exit-x@0.2.2/.../create-files.sh`). Both implementations now check only
+  what git would track: `git ls-files --cached --others --exclude-standard -- '*.sh'` (tracked
+  plus untracked-but-not-ignored, so a new script is still caught before it is committed). Without
+  git, or outside a work tree, they fall back to a filesystem walk that prunes `.git` and
+  `node_modules`. The OK line names the scope used. An empty candidate list now fails instead of
+  passing vacuously. `validate.ps1` runs git under a local `Continue` preference, so PowerShell 5.1
+  under the script's `Stop` does not turn git's stderr into a terminating error. Verified under
+  bash, pwsh and PowerShell 5.1, in the repo and in an exported copy with no `.git`: a non-strict
+  tracked script and a non-strict untracked one are both flagged, and a script under
+  `node_modules/` is not.
 - **`/sd:bug` Phase 0 named the wrong escalation step** (SW-63) - it said the model escalation
   policy is "applied at Phase 3 step 1"; the check is Phase 3 step 0. Found while wiring CL601.
 - **e2e scenario `11-escalation-rca-capped`** (SW-62) - its seeded incident log was named

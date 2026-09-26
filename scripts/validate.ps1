@@ -775,18 +775,51 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
         }
     }
 
+    # Scan only what git would track: tracked files plus untracked-but-not-ignored
+    # ones (--others --exclude-standard), so a gitignored tree such as
+    # node_modules/ cannot fail the check with a third-party script. Without git
+    # (not installed, or a tarball with no .git) fall back to a filesystem walk
+    # that prunes .git and node_modules. Mirrors list_strict_candidates in
+    # validate.sh. Returns repo-relative paths with forward slashes.
+    # git runs under a local 'Continue': with the script-wide 'Stop', Windows
+    # PowerShell 5.1 turns git's redirected stderr ("not a git repository") into
+    # a terminating error instead of a non-zero exit code.
+    $strictScope = 'filesystem walk, git unavailable'
+    $strictRels = @()
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & git -C $repoRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $strictScope = 'git ls-files'
+                $raw = (& git -C $repoRoot ls-files -z --cached --others --exclude-standard -- '*.sh' 2>$null) -join ''
+                $strictRels = @($raw -split "`0" | Where-Object { $_ })
+            }
+        } catch {
+            $strictScope = 'filesystem walk, git unavailable'
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+    }
+    if ($strictScope -ne 'git ls-files') {
+        $strictRels = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter '*.sh' -ErrorAction SilentlyContinue |
+            ForEach-Object { (Get-RelPath $_.FullName) -replace '\\', '/' } |
+            Where-Object { ('/' + $_) -notmatch '/(\.git|node_modules)/' })
+    }
+
     $strictCount = 0
-    $gitDir = Join-Path $repoRoot '.git'
-    $shFiles = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter '*.sh' -ErrorAction SilentlyContinue |
-        Where-Object { -not $_.FullName.StartsWith($gitDir) }
-    foreach ($sh in $shFiles) {
-        $rel = (Get-RelPath $sh.FullName) -replace '\\', '/'
+    foreach ($rel in $strictRels) {
+        $shPath = Join-Path $repoRoot $rel
+        # A tracked file deleted from the working tree is still listed by
+        # --cached; there is nothing on disk to check.
+        if (-not (Test-Path -LiteralPath $shPath -PathType Leaf)) { continue }
         if ($strictExceptions -contains $rel) { continue }
         $strictCount++
 
         # First statement = first line that is not blank, a comment, or the shebang.
         $firstStmt = ''
-        foreach ($line in (Get-Content -LiteralPath $sh.FullName)) {
+        foreach ($line in (Get-Content -LiteralPath $shPath)) {
             if ($line -match '^\s*(#|$)') { continue }
             $firstStmt = $line.TrimEnd("`r")
             break
@@ -803,8 +836,16 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
         }
     }
 
+    # The repo always ships .sh files (hooks/bash, install, scripts), so an empty
+    # candidate list means the listing itself failed - never a vacuous pass.
+    if ($strictCount -eq 0 -and $strictBad -eq 0) {
+        Write-FailMsg "no .sh files found to check (scope: $strictScope) - the candidate listing failed"
+        Add-Failure 'strict-mode: empty candidate list'
+        $strictBad = 1
+    }
+
     if ($strictBad -eq 0) {
-        Write-Ok "$strictCount .sh file(s) use set -euo pipefail ($($strictExceptions.Count) declared exception(s))"
+        Write-Ok "$strictCount .sh file(s) use set -euo pipefail ($($strictExceptions.Count) declared exception(s); scope: $strictScope)"
     }
 }
 
