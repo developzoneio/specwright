@@ -52,8 +52,9 @@ visible in the retro.
 ## Trigger table
 
 One row per escalation point. `From` is the agent's frontmatter default; `To` is one rung up. A
-row is live only when the command named in it references its rule ID - rows are added here, and
-nowhere else, by the story that wires them.
+row is live only when the command named in it references its rule ID - rows are added here by the
+story that wires them, mirrored row for row in the engine manifest's
+`contractLint.escalationTriggers` (contract-lint CL601-CL604 fail on any drift).
 
 | Rule ID | Workflow | Where | Condition | Agent | From | To |
 |---|---|---|---|---|---|---|

@@ -1,0 +1,11 @@
+{
+  "note": "the skill and the manifest agree on a row that jumps from the bottom rung to the top one, skipping the middle",
+  "findings": [
+    {
+      "rule": "CL604",
+      "severity": "BLOCK",
+      "file": "specwright.manifest.json",
+      "anchor": "file"
+    }
+  ]
+}

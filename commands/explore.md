@@ -67,6 +67,7 @@ contract|contract+source]`.
 
 ---
 
+<!-- contract-lint: allow CL601 - single read-only explorer call per run, and no 00-spec.md exists in either branch to read a trigger from (SW-62) -->
 ## Phase 2 - Invoke `sd-code-explorer`
 
 ### Standard exploration - Invoke `sd-code-explorer`
@@ -206,9 +207,6 @@ whole point of `--port` is a durable, donor-side artifact for a later host-side 
 
 ## Rules (hard constraints)
 
-<!-- sd-model-escalation: no rule -
-     single read-only sd-code-explorer call per run, and no spec frontmatter exists to read a
-     trigger from (no 00-spec.md is created, in either branch). Decided in SW-62, not forgotten. -->
 - Read-only invocation. Code-explorer's tool allowlist does not include `Write`, `Edit`,
   `MultiEdit`, or `Bash` write modes, in either branch. The command MUST NOT escalate the
   AGENT's allowlist - the agent always returns text only.

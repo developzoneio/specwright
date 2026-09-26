@@ -373,6 +373,12 @@
       { "id": "CL401", "severity": "WARN",  "wave": 3, "summary": "hardcoded language/framework name in the same contexts (stays WARN permanently - often legitimate in prose)" },
       { "id": "CL402", "severity": "BLOCK", "wave": 3, "summary": "hardcoded absolute filesystem path (Windows drive letter or POSIX multi-segment) in scan scope" },
 
+      { "id": "CL601", "severity": "BLOCK", "wave": 5, "summary": "command invokes an agent with no escalationTriggers row and no allow comment, has rows but never references sd-model-escalation, or never names one of its rows" },
+      { "id": "CL602", "severity": "BLOCK", "wave": 5, "summary": "escalationTriggers and the sd-model-escalation trigger table disagree (id set or row fields), or a file cites an ESC- id no row declares" },
+      { "id": "CL603", "severity": "BLOCK", "wave": 5, "summary": "escalationTriggers from/to value is not in escalationPolicy.aliases" },
+      { "id": "CL604", "severity": "BLOCK", "wave": 5, "summary": "escalationPolicy.ladder differs from the skill's ladder, or a row is not exactly one rung up it" },
+      { "id": "CL605", "severity": "BLOCK", "wave": 5, "summary": "command restates the ladder, a precedence rule or the retro line format (escalationPolicy.restatePhrases)" },
+
       { "id": "CL900", "severity": "BLOCK", "wave": 1, "summary": "suppression comment carrying no usable reason" },
       { "id": "CL901", "severity": "BLOCK", "wave": 1, "summary": "suppression naming a rule id absent from this registry" },
       { "id": "CL902", "severity": "WARN",  "wave": 1, "summary": "suppression that suppressed no finding" }
@@ -460,6 +466,51 @@
       "inferred: add a command here when it starts writing the index or a status. verify is",
       "absent on purpose - it writes only 06-verify.md. Case-sensitive literal match with a",
       "two-line wrap window; a listed file that does not exist exits 2, like gates."
+    ],
+
+    "escalationTriggers": [
+      { "id": "ESC-FEAT-02",  "command": "feature",  "phase": "2",  "agent": "sd-code-explorer",  "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-FEAT-03",  "command": "feature",  "phase": "3",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
+      { "id": "ESC-FEAT-03b", "command": "feature",  "phase": "3",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
+      { "id": "ESC-FEAT-04",  "command": "feature",  "phase": "4",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-FEAT-04b", "command": "feature",  "phase": "4",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-BUG-03",   "command": "bug",      "phase": "3",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-BUG-03b",  "command": "bug",      "phase": "3",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-RCA-02",   "command": "rca",      "phase": "2",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-REF-04",   "command": "refactor", "phase": "4",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
+      { "id": "ESC-PERF-04",  "command": "perf",     "phase": "4a", "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-PORT-06",  "command": "port",     "phase": "6",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" }
+    ],
+
+    "$escalationTriggersComment": [
+      "The assertable copy of skills/sd-model-escalation/SKILL.md's trigger table (SW-63). The",
+      "skill stays the single owner of the policy; this list exists so a check can fail when the",
+      "two drift. CL602 compares them both ways (id set, and command/agent/from/to per id), CL603",
+      "and CL604 check the tiers, and CL601 checks each row's command names its id - a row is",
+      "live only when its command references it. 'phase' is the phase the escalated invocation",
+      "runs in, so ESC-FEAT-03b (reached at Gate 2, re-running Phase 3) reads 3; its leading",
+      "digits must equal the id's. Declared, not derived: the skill's table is prose a model",
+      "reads, and deriving this from it would compare the table against itself.",
+      "The band is switched on by the skill existing on disk, never by these keys: removing",
+      "them fails CL602 instead of silently disabling the checks."
+    ],
+
+    "escalationPolicy": {
+      "ladder": ["haiku", "sonnet", "opus"],
+      "aliases": ["haiku", "sonnet", "opus", "inherit"],
+      "restatePhrases": ["haiku -> sonnet", "sonnet -> opus", "haiku -> opus", "<from> -> <to>", "escalation: <", "escalation: sd-", "(trigger: ", "enabled == false", "ceiling caps"]
+    },
+
+    "$escalationPolicyComment": [
+      "ladder must equal the skill's '## Ladder' line, joined with ' -> ' (CL604). aliases is",
+      "the model alias set of CLAUDE.md hard rule 3 - the same set validate's Check 4 enforces on",
+      "agent frontmatter; CL603 enforces it on escalation rows, so a full model ID entering",
+      "through the escalation path is caught too. 'inherit' is an alias but not a rung, so a",
+      "row naming it passes CL603 and fails CL604.",
+      "restatePhrases is CL605's vocabulary: distinctive fragments of the ladder, the retro",
+      "line format and the precedence rules. Scanned in commands/*.md only, fenced lines",
+      "included, case-sensitive, with a two-line wrap window. Hand-maintained, same category",
+      "as bootstrapGuardPhrases."
     ],
 
     "stackTokens": {

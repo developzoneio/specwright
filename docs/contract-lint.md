@@ -18,6 +18,7 @@ Each of these shipped, and each was statically detectable the whole time:
 | README claiming one gate count where `docs/architecture.md` claimed another | CL302 |
 | A command step asserting an artifact write in a read-only agent's block, with no writer named | CL205 (SW-51) |
 | A workflow that let the model move a spec's status with `sed -i`, past `spec-gate` | CL206 (SW-79) |
+| `/sd:adr` invoking a subagent with no escalation decision, found when CL601 first ran | CL601 (SW-63) |
 
 It is a **script, not a prompt**: deterministic file operations, no subagent, no model, run per PR
 in CI on all three operating systems like every other check.
@@ -327,6 +328,55 @@ bytes on Windows. A raw count would make the two twins disagree.
     same reflexive-bump pattern that retired `CL500`;
   - the threshold is raised to make a release come out clean.
 
+### CL6xx -- escalation policy
+
+`skills/sd-model-escalation/SKILL.md` owns the model escalation policy in prose: the ladder, the
+trigger table, the precedence rules and the `05-retro.md` line format. `contractLint.escalationTriggers`
+is the table's assertable copy, one row per rule ID (`id`, `command`, `phase`, `agent`, `from`,
+`to`), and `contractLint.escalationPolicy` declares the ladder, the alias set and CL605's phrase
+vocabulary. Added by SW-63; the decision record is [ADR 0014](adr/0014-escalation-policy-lint.md).
+
+| Rule | Severity | Fires when |
+|---|---|---|
+| `CL601` | BLOCK | a command invokes an agent but no `escalationTriggers` row targets it and no `allow CL601` comment covers the first invocation; or it has rows but never references `sd-model-escalation`; or it never names one of its own rows (a row is live only when its command cites it) |
+| `CL602` | BLOCK | the manifest rows and the skill's trigger table disagree: an id in one and not the other, a shared id whose command, agent, from or to differ, a `phase` whose leading digits differ from the id's, a duplicate id; or a scan-scope file outside the skill cites an `ESC-` id no row declares; or the skill exists and `escalationTriggers` is absent or empty |
+| `CL603` | BLOCK | a row's `from` or `to` is not in `escalationPolicy.aliases` -- a full model ID entering through the escalation path |
+| `CL604` | BLOCK | `escalationPolicy.ladder` differs from the skill's `## Ladder` line, or a row's tiers are not exactly one rung apart on it (`inherit` is an alias, not a rung) |
+| `CL605` | BLOCK | a command line contains an `escalationPolicy.restatePhrases` entry: the ladder, the retro line format or a precedence rule restated instead of cited |
+
+**The band switches on when the skill exists on disk,** not when the manifest keys do. Deleting
+`escalationTriggers` or `escalationPolicy` therefore fails CL602-CL605 rather than silently turning
+the checks off -- the defect SW-20 found in the selftest. The skill name is a constant in both
+linters for the same reason. Manifest-side findings land on `specwright.manifest.json` line 1;
+that file is outside `scanScope`, so no suppression can reach them.
+
+**Invocation detection is CL1xx's**, not a second parser: a command line indexed as an `sd-`
+reference whose text contains "nvoke", filtered to agent names. CL601 reports on the first such
+line, so a one-line `allow CL601` comment directly above it is the exemption.
+
+**CL605 does not skip fenced lines.** A fenced retro-line example in a command is exactly the
+restatement the rule exists for. It uses CL009's two-line wrap window, so a ladder fragment split
+across a line break still fires, once.
+
+**Allow comments taken: 3**, each deciding that a workflow has no escalation row rather than
+forgetting one:
+
+| Command | Agent | Reason |
+|---|---|---|
+| `commands/adr.md` | `sd-docs-writer` | one drafting call per ADR, re-run only on a user edit, and no spec frontmatter to read a trigger from |
+| `commands/explore.md` | `sd-code-explorer` | one read-only call per run, and no `00-spec.md` exists in either branch |
+| `commands/review.md` | `sd-reviewer` | one read-only call per run, and modes A/B/D have no spec frontmatter |
+
+A fourth `allow CL601` should arrive with its own reason in the PR that adds it, and this table
+should grow a row.
+
+**What green does NOT prove.** CL6xx checks that the policy is *stated* consistently. It cannot
+check that a subagent *ran* on the escalated model: that is behavioral, and the e2e harness cannot
+assert it today (ADR 0014 records why). `scripts/validate-escalation-lines.{sh,ps1}` closes the
+gap one step further by checking the `escalation:` lines a real run wrote into `05-retro.md`
+against the same manifest rows -- still a statement, the main thread's own, not a served-model
+attribution.
+
 ### CL9xx -- suppression hygiene
 
 | Rule | Severity | Fires when |
@@ -372,6 +422,8 @@ and never touch `areas`, `derived` or `docClaims`.
 | `stackTokens.commands` / `.languages` | the CL400 / CL401 stack vocabulary |
 | `readOnlyAgents` | agent names CL201 checks for a write tool gained since being declared read-only |
 | `knownMcpTools` | the `mcp__*` allowlist CL202 checks scan-scope tokens against |
+| `escalationTriggers` | the assertable copy of `sd-model-escalation`'s trigger table, read by CL601-CL604 and by `scripts/validate-escalation-lines.*` |
+| `escalationPolicy` | `ladder` (CL604), `aliases` (CL603) and `restatePhrases` (CL605) |
 | `warnBudget` | max standing WARN count (excluding CL202) `scripts/validate.{sh,ps1}` Check 8 allows before failing - a ratchet, checked by validate, not by the linter itself |
 
 `scanScope` is load-bearing. `CLAUDE.md` and `CONTRIBUTING.md` use `sd-test` as a sandbox path and
@@ -408,6 +460,7 @@ implementation, one fixture, one row in the tables above.
 | 3a | CL2xx role and tool integrity (CL200-CL206) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02, CL205 2026-09-23 and CL206 2026-09-25, all BLOCK from the start) |
 | 3b | CL4xx stack-agnostic prose, CL306 | shipped 2026-07-30 WARN, now BLOCK (CL400/CL306 promoted 2026-07-31; CL401 stays WARN) |
 | 4 | CL5xx file budgets | shipped 2026-07-30, retired 2026-09-24 (SW-57) - see the prompt size report |
+| 5 | CL6xx escalation policy (CL601-CL605) | shipped 2026-09-26 (SW-63), BLOCK from the start |
 
 Four scope decisions were made deliberately and are recorded here so they read as decisions
 rather than oversights:

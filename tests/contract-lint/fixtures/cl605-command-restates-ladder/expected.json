@@ -1,0 +1,19 @@
+{
+  "note": "a command restates text the escalation skill owns - once as a fenced retro-line example, once as a ladder fragment wrapped across two prose lines",
+  "findings": [
+    {
+      "rule": "CL605",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "fenced-retro-line"
+    },
+    {
+      "rule": "CL605",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "wrapped-ladder"
+    }
+  ]
+}

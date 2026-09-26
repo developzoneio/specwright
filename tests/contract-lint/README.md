@@ -75,6 +75,13 @@ wording can improve in one commit while a divergence still fails.
 | `cl400-hardcoded-npm-test` | CL400 |
 | `cl401-hardcoded-typescript` | CL401 |
 | `cl402-hardcoded-absolute-path` | CL402 |
+| `cl601-invoke-without-escalation-check` | CL601, a command invoking an agent with no escalation row |
+| `cl601-row-id-not-in-command` | CL601, a manifest row its command never names |
+| `cl602-manifest-skill-id-drift` | CL602, one id only in the skill table and one only in the manifest |
+| `cl602-policy-undeclared` | CL602, the escalation skill on disk with no `escalationTriggers` |
+| `cl603-full-model-id-in-row` | CL603 |
+| `cl604-row-skips-rung` | CL604 |
+| `cl605-command-restates-ladder` | CL605, fenced retro line and wrapped ladder |
 | `cl900-suppression-without-reason` | CL900 |
 | `cl901-suppression-unknown-rule` | CL901 |
 | `cl902-suppression-suppresses-nothing` | CL902 |
@@ -98,6 +105,8 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |
 | `fp-cl009-phrase-outside-phase0` | bootstrap guard text inside the skill that owns it, in a fenced example, and outside Phase 0; a Phase 0 that reads the skill at runtime | `skills/sd-bootstrap-guard/SKILL.md`, the Phase 0 of every workflow command |
 | `fp-cl206-phrase-wrapped` | the `editToolOnly` phrase wrapped across two lines of a rules bullet | `## Rules (hard constraints)` of every command in `contractLint.editToolOnly` |
+| `fp-cl601-allow-comment` | a fully wired escalation tree, plus an invoking command exempted by `allow CL601` with a reason | `commands/adr.md`, `commands/explore.md`, `commands/review.md` |
+| `fp-cl605-alias-list` | an alias list, and "escalate" used about a tool allowlist | `commands/port.md`, `commands/explore.md` |
 
 ## The case that must still BITE
 

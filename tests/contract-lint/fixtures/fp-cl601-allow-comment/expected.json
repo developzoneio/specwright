@@ -1,0 +1,4 @@
+{
+  "note": "a fully wired escalation policy - manifest row, skill table, and the command naming its row - plus a second invoking command exempted by an allow CL601 comment with a reason: nothing fires, and the suppression is used (no CL902)",
+  "findings": []
+}

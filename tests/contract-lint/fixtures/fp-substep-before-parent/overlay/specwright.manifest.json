@@ -203,6 +203,36 @@
         "summary": "hardcoded absolute filesystem path (Windows drive letter or POSIX multi-segment) in scan scope"
       },
       {
+        "id": "CL601",
+        "severity": "BLOCK",
+        "wave": 5,
+        "summary": "command invokes an agent with no escalationTriggers row and no allow comment, has rows but never references sd-model-escalation, or never names one of its rows"
+      },
+      {
+        "id": "CL602",
+        "severity": "BLOCK",
+        "wave": 5,
+        "summary": "escalationTriggers and the sd-model-escalation trigger table disagree (id set or row fields), or a file cites an ESC- id no row declares"
+      },
+      {
+        "id": "CL603",
+        "severity": "BLOCK",
+        "wave": 5,
+        "summary": "escalationTriggers from/to value is not in escalationPolicy.aliases"
+      },
+      {
+        "id": "CL604",
+        "severity": "BLOCK",
+        "wave": 5,
+        "summary": "escalationPolicy.ladder differs from the skill's ladder, or a row is not exactly one rung up it"
+      },
+      {
+        "id": "CL605",
+        "severity": "BLOCK",
+        "wave": 5,
+        "summary": "command restates the ladder, a precedence rule or the retro line format (escalationPolicy.restatePhrases)"
+      },
+      {
         "id": "CL900",
         "severity": "BLOCK",
         "wave": 1,

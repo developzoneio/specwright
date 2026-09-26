@@ -43,6 +43,7 @@ decision title for an ad-hoc ADR with no spec.
 
 ## Phase 3 - Draft via sd-docs-writer
 
+<!-- contract-lint: allow CL601 - one drafting call per ADR, re-run only on user edit, and no spec frontmatter to read a trigger from (SW-63) -->
 Invoke the `sd-docs-writer` agent with `ADR_NUMBER`, `ADR_PATH`, `SPEC_REF`, `DECISION_SOURCE`,
 `SUPERSEDES`, and today's date as `DATE`. The agent drafts and writes the file, then returns its content.
 

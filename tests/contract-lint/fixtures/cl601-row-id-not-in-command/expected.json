@@ -1,0 +1,11 @@
+{
+  "note": "the manifest row ESC-ALPHA-01 targets /sd:alpha, and alpha reads the skill, but never names the rule ID - the row is not live",
+  "findings": [
+    {
+      "rule": "CL601",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "file"
+    }
+  ]
+}

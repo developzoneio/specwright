@@ -17,6 +17,8 @@
       CL0xx  reference resolution
       CL3xx  gate integrity
       CL9xx  suppression hygiene
+    Later waves add CL1xx (invocation contract), CL2xx (role and tool
+    integrity), CL4xx (stack-agnostic prose) and CL6xx (escalation policy).
 
     Output is TSV on stdout, one finding per line, and nothing else:
       <RULE><TAB><SEVERITY><TAB><FILE><TAB><LINE><TAB><MESSAGE>
@@ -160,6 +162,14 @@ $RE_PLACEHOLDER    = '<<[^>]*>>'
 # their OWN interior '/', which is not what CL402 means to catch.
 $RE_ABSPATH_POSIX  = '(^|[ \t`"''(])(/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*)'
 $RE_ABSPATH_WIN     = '(^|[ \t`"''(])([A-Za-z]:\\[^ \t`]+)'
+# CL6xx escalation policy. A rule ID is ESC-<WORKFLOW>-<PHASE> with an
+# optional lowercase suffix (the skill's own "Rule IDs" section). The skill's
+# sections are H2 headings; '^##[ \t]' never matches an H3.
+$RE_ESCID      = 'ESC-[A-Z]+-[0-9][0-9][a-z]?'
+$RE_ESCID_FULL = '^ESC-[A-Z]+-([0-9][0-9])[a-z]?$'
+$RE_H2         = '^##[ \t]'
+$RE_LEADDIGITS = '^([0-9]+)'
+$RE_BACKTICKED = '^`([^`]+)`'
 
 function Write-Err([string]$Message) {
     [Console]::Error.WriteLine($Message)
@@ -233,6 +243,7 @@ $dispatchIds = @(
     'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205', 'CL206',
     'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
     'CL400', 'CL401', 'CL402',
+    'CL601', 'CL602', 'CL603', 'CL604', 'CL605',
     'CL900', 'CL901', 'CL902'
 )
 $dispatchSet = New-OrdinalSet
@@ -351,6 +362,59 @@ if ($cl.PSObject.Properties.Name.Contains('editToolOnly') -and $null -ne $cl.edi
             }
             [void]$editToolOnlyFiles.Add($ef)
         }
+    }
+}
+
+# escalationTriggers / escalationPolicy (CL6xx, SW-63). The band switches on
+# when skills/sd-model-escalation/SKILL.md exists on disk, NOT when the
+# manifest keys exist: deleting the keys must fail loudly (CL602-CL605 each
+# report their own missing config) rather than turn the band off in silence -
+# the SW-20 lesson. The skill name is therefore a constant here, never read
+# from the manifest. A row naming a command with no file is a broken contract
+# (exit 2), the same as gates.
+function Get-OptionalString([object]$Obj, [string]$Name) {
+    if ($null -eq $Obj) { return '' }
+    if (-not $Obj.PSObject.Properties.Name.Contains($Name)) { return '' }
+    if ($null -eq $Obj.$Name) { return '' }
+    return [string]$Obj.$Name
+}
+
+$escSkillName = 'sd-model-escalation'
+$escSkillRel = 'skills/' + $escSkillName + '/SKILL.md'
+$escActive = Test-Path -LiteralPath (Join-Path $Root $escSkillRel.Replace('/', [System.IO.Path]::DirectorySeparatorChar)) -PathType Leaf
+$manifestRel = 'specwright.manifest.json'
+
+$escRows = New-Object 'System.Collections.Generic.List[object]'
+if ($cl.PSObject.Properties.Name.Contains('escalationTriggers') -and $null -ne $cl.escalationTriggers) {
+    foreach ($er in @($cl.escalationTriggers)) {
+        $row = [PSCustomObject]@{
+            Id = (Get-OptionalString $er 'id'); Command = (Get-OptionalString $er 'command')
+            Phase = (Get-OptionalString $er 'phase'); Agent = (Get-OptionalString $er 'agent')
+            From = (Get-OptionalString $er 'from'); To = (Get-OptionalString $er 'to')
+        }
+        if ($row.Id.Length -eq 0) { continue }
+        if ($row.Command.Length -gt 0 -and
+            -not (Test-Path -LiteralPath (Join-Path (Join-Path $Root 'commands') ($row.Command + '.md')) -PathType Leaf)) {
+            Write-Err "contract-lint: contractLint.escalationTriggers row $($row.Id) names a command with no file: commands/$($row.Command).md"
+            exit 2
+        }
+        [void]$escRows.Add($row)
+    }
+}
+
+$escLadder = New-Object 'System.Collections.Generic.List[string]'
+$escAliases = New-OrdinalSet
+$escRestatePhrases = New-Object 'System.Collections.Generic.List[string]'
+if ($cl.PSObject.Properties.Name.Contains('escalationPolicy') -and $null -ne $cl.escalationPolicy) {
+    $ep = $cl.escalationPolicy
+    if ($ep.PSObject.Properties.Name.Contains('ladder')) {
+        foreach ($t in @($ep.ladder)) { if ([string]$t -cne '') { [void]$escLadder.Add([string]$t) } }
+    }
+    if ($ep.PSObject.Properties.Name.Contains('aliases')) {
+        foreach ($t in @($ep.aliases)) { if ([string]$t -cne '') { [void]$escAliases.Add([string]$t) } }
+    }
+    if ($ep.PSObject.Properties.Name.Contains('restatePhrases')) {
+        foreach ($t in @($ep.restatePhrases)) { if ([string]$t -cne '') { [void]$escRestatePhrases.Add([string]$t) } }
     }
 }
 
@@ -1339,6 +1403,237 @@ foreach ($rel in $scanFiles) {
         }
     }
 }
+
+# CL601-CL605 - the model escalation policy (SW-63). skills/sd-model-escalation
+# states it in prose; contractLint.escalationTriggers is its assertable copy.
+# These rules check that the policy is STATED consistently - never that a
+# subagent RAN on the escalated model (see docs/adr/0014).
+#   CL601  a command invokes an agent but has no escalation row, has rows but
+#          never reads the skill, or never names one of its own rows
+#   CL602  manifest rows vs the skill's trigger table, both directions, plus
+#          any ESC- id cited outside the skill that no row declares
+#   CL603  a row's from/to is not an alias
+#   CL604  the ladder differs from the skill's, or a row is not one rung up
+#   CL605  a command restates the ladder, a precedence rule or the retro line
+# Manifest-side findings land on specwright.manifest.json line 1: it is outside
+# scanScope, so no suppression can reach them - on purpose.
+function Invoke-EscalationRules {
+    $blank = [char[]]@([char]32, [char]9)
+    $sectionTrim = [char[]]@([char]32, [char]9, [char]35)
+
+    # -- skill side: the ladder line and the trigger table.
+    Read-FileLines $escSkillRel
+    $lines = $fileLines[$escSkillRel]
+    $fence = $fileFence[$escSkillRel]
+    $skillLadder = ''
+    $skillRows = New-Object 'System.Collections.Generic.List[object]'
+    $sec = ''
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        if ($fence[$i]) { continue }
+        $line = $lines[$i]
+        if ([regex]::IsMatch($line, $RE_H2)) {
+            $sec = $line.TrimStart($sectionTrim).TrimEnd($blank)
+            continue
+        }
+        if ($sec -ceq 'Ladder' -and $skillLadder.Length -eq 0) {
+            $m = [regex]::Match($line, $RE_BACKTICKED)
+            if ($m.Success) { $skillLadder = $m.Groups[1].Value }
+            continue
+        }
+        if ($sec -cne 'Trigger table') { continue }
+        $t = $line.Trim($blank)
+        if (-not $t.StartsWith('|', [StringComparison]::Ordinal)) { continue }
+        $row = $t.Substring(1)
+        if ($row.EndsWith('|', [StringComparison]::Ordinal)) { $row = $row.Substring(0, $row.Length - 1) }
+        $cells = $row.Split([char]'|')
+        for ($j = 0; $j -lt $cells.Length; $j++) {
+            $cells[$j] = $cells[$j].Replace('`', '').Trim($blank)
+        }
+        if ($cells[0] -ceq 'Rule ID') { continue }
+        if ($cells[0].StartsWith('-', [StringComparison]::Ordinal)) { continue }
+        if ($cells.Length -ne 7) {
+            Add-Finding 'CL602' $escSkillRel ($i + 1) "trigger-table row has $($cells.Length) cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
+            continue
+        }
+        $scmd = $cells[1]
+        if ($scmd.StartsWith('/sd:', [StringComparison]::Ordinal)) { $scmd = $scmd.Substring(4) }
+        [void]$skillRows.Add([PSCustomObject]@{
+            Id = $cells[0]; Command = $scmd; Agent = $cells[4]; From = $cells[5]; To = $cells[6]; Line = ($i + 1)
+        })
+    }
+
+    if ($escRows.Count -eq 0) {
+        # One error, not a pile-on: with no rows every downstream check would
+        # restate this same fact once per command and per cited id.
+        Add-Finding 'CL602' $manifestRel 1 "skills/$escSkillName exists but contractLint.escalationTriggers declares no rows - the policy has no assertable copy"
+        return
+    }
+    if ($skillRows.Count -eq 0) {
+        Add-Finding 'CL602' $escSkillRel 1 "no trigger table under '## Trigger table' - nothing to compare contractLint.escalationTriggers against"
+    }
+    if ($escAliases.Count -eq 0) {
+        Add-Finding 'CL603' $manifestRel 1 "contractLint.escalationPolicy.aliases is empty - no row tier can be checked"
+    }
+    if ($escRestatePhrases.Count -eq 0) {
+        Add-Finding 'CL605' $manifestRel 1 "contractLint.escalationPolicy.restatePhrases is empty - restatement cannot be detected"
+    }
+
+    # -- the ladder: manifest vs skill.
+    $mLadder = [string]::Join(' -> ', $escLadder.ToArray())
+    if ($mLadder.Length -eq 0) {
+        Add-Finding 'CL604' $manifestRel 1 "contractLint.escalationPolicy.ladder is empty - no row can be checked for one-rung movement"
+    } elseif ($skillLadder.Length -eq 0) {
+        Add-Finding 'CL604' $escSkillRel 1 "no backticked ladder line under '## Ladder' to compare contractLint.escalationPolicy.ladder against"
+    } elseif ($mLadder -cne $skillLadder) {
+        Add-Finding 'CL604' $manifestRel 1 "contractLint.escalationPolicy.ladder '$mLadder' differs from the skill's '$skillLadder'"
+        # Every row measured against a wrong ladder would restate this finding.
+        $mLadder = ''
+    }
+
+    # -- manifest rows: shape, skill parity, tiers.
+    $seenIds = New-OrdinalSet
+    foreach ($r in $escRows) {
+        $eid = $r.Id
+        if ($seenIds.Contains($eid)) {
+            Add-Finding 'CL602' $manifestRel 1 "escalationTriggers declares $eid twice"
+            continue
+        }
+        [void]$seenIds.Add($eid)
+        $mi = [regex]::Match($eid, $RE_ESCID_FULL)
+        if ($mi.Success) {
+            $nn = [int]$mi.Groups[1].Value
+            $pd = ''
+            $mp = [regex]::Match($r.Phase, $RE_LEADDIGITS)
+            if ($mp.Success) { $pd = [string]([int]$mp.Groups[1].Value) }
+            if ($pd -cne [string]$nn) {
+                Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid has phase '$($r.Phase)', but its id names phase $nn"
+            }
+        } else {
+            Add-Finding 'CL602' $manifestRel 1 "escalationTriggers id '$eid' is not ESC-<WORKFLOW>-<NN>[suffix]"
+        }
+        $found = $false
+        foreach ($s in $skillRows) {
+            if ($s.Id -cne $eid) { continue }
+            $found = $true
+            if ($s.Command -cne $r.Command) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid command '$($r.Command)' differs from the skill's '/sd:$($s.Command)'" }
+            if ($s.Agent -cne $r.Agent) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid agent '$($r.Agent)' differs from the skill's '$($s.Agent)'" }
+            if ($s.From -cne $r.From) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid from '$($r.From)' differs from the skill's '$($s.From)'" }
+            if ($s.To -cne $r.To) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid to '$($r.To)' differs from the skill's '$($s.To)'" }
+            break
+        }
+        if (-not $found -and $skillRows.Count -gt 0) {
+            Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid is absent from the skill's trigger table"
+        }
+        $nonAlias = $false
+        foreach ($tier in @($r.From, $r.To)) {
+            if ($escAliases.Count -gt 0 -and -not $escAliases.Contains($tier)) {
+                Add-Finding 'CL603' $manifestRel 1 "escalationTriggers row $eid tier '$tier' is not a model alias"
+                $nonAlias = $true
+            }
+        }
+        # A non-alias tier is CL603's; CL604 on the same value would report one
+        # problem twice.
+        if (-not $nonAlias -and $mLadder.Length -gt 0) {
+            $fi = $escLadder.IndexOf($r.From)
+            $ti = $escLadder.IndexOf($r.To)
+            if ($fi -lt 0) {
+                Add-Finding 'CL604' $manifestRel 1 "escalationTriggers row $eid from '$($r.From)' is not a rung of the ladder"
+            } elseif ($ti -lt 0) {
+                Add-Finding 'CL604' $manifestRel 1 "escalationTriggers row $eid to '$($r.To)' is not a rung of the ladder"
+            } elseif (($ti - $fi) -ne 1) {
+                Add-Finding 'CL604' $manifestRel 1 "escalationTriggers row $eid moves $($r.From) -> $($r.To), which is not exactly one rung up"
+            }
+        }
+    }
+
+    # -- skill rows the manifest does not carry.
+    foreach ($s in $skillRows) {
+        if ($seenIds.Contains($s.Id)) { continue }
+        Add-Finding 'CL602' $escSkillRel $s.Line "trigger-table row $($s.Id) is absent from contractLint.escalationTriggers"
+    }
+
+    # -- every ESC- id cited outside the skill, outside fences. The skill's own
+    # mentions are covered by the table comparison above.
+    $escRefs = New-OrdinalSet
+    foreach ($rel in $scanFiles) {
+        if ($rel -ceq $escSkillRel) { continue }
+        $lines = $fileLines[$rel]
+        $fence = $fileFence[$rel]
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($fence[$i]) { continue }
+            foreach ($m in [regex]::Matches($lines[$i], $RE_ESCID)) {
+                $tok = $m.Value
+                [void]$escRefs.Add($rel + ':' + $tok)
+                if ($seenIds.Contains($tok)) { continue }
+                Add-Finding 'CL602' $rel ($i + 1) "cites escalation rule $tok, which contractLint.escalationTriggers does not declare"
+            }
+        }
+    }
+
+    # -- CL601: every invoking command is covered.
+    foreach ($rel in $scanFiles) {
+        if (-not $rel.StartsWith('commands/', [StringComparison]::Ordinal)) { continue }
+        $name = $rel.Substring(9)
+        $name = $name.Substring(0, $name.Length - 3)
+        $hasRows = $false
+        foreach ($r in $escRows) {
+            if ($r.Command -cne $name) { continue }
+            $hasRows = $true
+            if (-not $escRefs.Contains($rel + ':' + $r.Id)) {
+                Add-Finding 'CL601' $rel 1 "escalationTriggers row $($r.Id) targets /sd:$name, but this command never names it - the row is not live"
+            }
+        }
+        if ($hasRows) {
+            $readsSkill = $false
+            foreach ($ref in $refs) {
+                if ($ref.Kind -ceq 'sdref' -and $ref.Target -ceq $escSkillName -and $ref.File -ceq $rel) { $readsSkill = $true; break }
+            }
+            if (-not $readsSkill) {
+                Add-Finding 'CL601' $rel 1 "command has escalationTriggers rows but never references $escSkillName - it cannot apply a policy it does not read"
+            }
+            continue
+        }
+        $first = 0
+        $agent = ''
+        foreach ($a in $anchors) {
+            if ($a.File -cne $rel) { continue }
+            if (-not $agentNames.Contains($a.Agent)) { continue }
+            if ($first -eq 0 -or $a.Line -lt $first) { $first = $a.Line; $agent = $a.Agent }
+        }
+        if ($first -gt 0) {
+            Add-Finding 'CL601' $rel $first "invokes '$agent' but no escalationTriggers row targets this command - wire an $escSkillName rule, or add an allow CL601 comment with the reason"
+        }
+    }
+
+    # -- CL605: a command restates policy text the skill owns. Fenced lines
+    # are NOT skipped - a fenced retro-line example is exactly the restatement.
+    # Two-line wrap window and one-finding-per-occurrence, as CL009.
+    foreach ($rel in $scanFiles) {
+        if (-not $rel.StartsWith('commands/', [StringComparison]::Ordinal)) { continue }
+        $lines = $fileLines[$rel]
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ([regex]::IsMatch($lines[$i], $RE_SUPPRESS)) { continue }
+            $cur = $lines[$i].Trim($blank)
+            $nxt = ''
+            $j = $i + 1
+            if ($j -lt $lines.Length -and -not [regex]::IsMatch($lines[$j], $RE_SUPPRESS)) {
+                $nxt = $lines[$j].Trim($blank)
+            }
+            foreach ($phrase in $escRestatePhrases) {
+                $hit = $cur.Contains($phrase)
+                if (-not $hit -and $nxt.Length -gt 0 -and -not $nxt.Contains($phrase)) {
+                    $hit = ($cur + ' ' + $nxt).Contains($phrase)
+                }
+                if ($hit) {
+                    Add-Finding 'CL605' $rel ($i + 1) "restates '$phrase', which $escSkillName owns - name the rule ID and its trigger inputs instead"
+                    break
+                }
+            }
+        }
+    }
+}
+
+if ($escActive) { Invoke-EscalationRules }
 
 # ---- Phase C: suppressions, sort, emit -------------------------------------
 #
