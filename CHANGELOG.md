@@ -26,8 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `project-config.json`, a custom `STORY` prefix, a split) fails against the old hook on every OS.
   `.gitattributes` now pins `tests/hooks/fixtures/**` to LF, with only that fixture's workspace
   pinned CRLF, so every runner feeds the hooks the same bytes. The same unguarded jq loop remains
-  in `prompt-router.sh` (`spec.prefixes`) and `subagent-retro.sh` (`spec.prefixes`,
-  `shownLessons`); they are not changed here.
+  in `subagent-retro.sh` (`spec.prefixes`, `shownLessons`); it is not changed here.
+  (`prompt-router.sh` no longer reads `spec.prefixes` since SW-67, and the new
+  `session-context.sh` strips the CR.)
 - **`scripts/validate.{ps1,sh}` Check 10 scanned gitignored trees** - the bash strict-mode check
   walked the whole working tree, pruning only `.git`, so any machine with `node_modules/`
   installed failed on a third-party script
