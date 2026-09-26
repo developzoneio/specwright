@@ -100,6 +100,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`precompact-state` PreCompact hook: spec state survives a compaction** (SW-68) - new pair
+  `hooks/powershell/precompact-state.ps1` and `hooks/bash/precompact-state.sh`, wired on
+  `PreCompact` (matcher `*`, so both `manual` and `auto`; timeout 5 s) in
+  `templates/settings.template.json`, `examples/fixture-project` and the installers' printed
+  snippet. Before a compaction it scans the last 256 KB of the transcript for spec IDs, newest
+  first, and takes the first with a `00-spec.md` that is not `done`/`archived`. If none qualifies,
+  it takes the single in-progress index row, when there is exactly one. It writes only a pointer,
+  `{specId, trigger}`, to `.claude/.hookstate/precompact-<session_id>.json` and prunes pointers
+  older than 24 h.
+  - **Re-injection.** `session-context` stays the one context builder. On `source: compact` (same
+    `session_id`, ADR 0015) it reads a pointer under 30 minutes old and adds an
+    `Active spec before compaction` section: the spec's status, a disk-derived phase hint (open
+    spec/plan gate, `executing - N/M tasks done, next T##`, or the close-out gate) and the
+    `/sd:<type> <slug>` command whose state machine re-derives the exact phase. Every other
+    `source` is unchanged.
+  - **Safety.** The PreCompact hook prints nothing: PreCompact stdout has no documented effect.
+    It exits 0 on every path, since exit 2 would block the compaction. It is a no-op without a
+    `.specs/` tree. Opt out with `hooks.precompactState.enabled: false` (new key in
+    `templates/project-config.template.json`).
+  - **Tests.** 14 new `precompact-state` conformance fixtures and 11 new `session-context` ones,
+    two with the CRLF jq shim. `run-conformance.ps1` now captures `.claude/.hookstate/precompact-*.json`
+    before cleanup. The smoke scripts run PreCompact then SessionStart `compact` end to end. The
+    latency budget is 1300 ms (pwsh) / 1000 ms (PS 5.1) p95; measured at 532 / 397 ms on a
+    workstation.
 - **`session-context` SessionStart hook** (SW-67) - new pair `hooks/powershell/session-context.ps1`
   and `hooks/bash/session-context.sh`, wired on `SessionStart` (matcher `*`, timeout 5 s) in
   `templates/settings.template.json` and `examples/fixture-project`. It emits a

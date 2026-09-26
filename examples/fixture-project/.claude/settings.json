@@ -49,6 +49,18 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/precompact-state.ps1",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
 
@@ -58,6 +70,7 @@
     "UserPromptSubmit_command_example": "bash ${HOME}/.claude/hooks/sd/prompt-router.sh",
     "PreToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/spec-gate.sh",
     "SubagentStop_command_example": "bash ${HOME}/.claude/hooks/sd/subagent-retro.sh",
+    "PreCompact_command_example": "bash ${HOME}/.claude/hooks/sd/precompact-state.sh",
     "_note_powershell_on_unix": "PowerShell 7+ is available on Unix; if installed, the PowerShell command above works as-is. Otherwise switch to the bash variants."
   },
 

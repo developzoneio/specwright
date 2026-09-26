@@ -91,7 +91,7 @@ If `/sd:*` commands work but `<context-router>` blocks never appear, run through
 cat .claude/settings.json
 ```
 
-The file should contain `hooks` entries for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, and `SubagentStop`. If empty or missing, re-run `/sd:setup`.
+The file should contain `hooks` entries for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `SubagentStop`, and `PreCompact`. If empty or missing, re-run `/sd:setup`.
 
 In-progress specs no longer appear on each prompt? Since SW-67 they come from the `SessionStart`
 hook (`session-context`), once per session start, resume, fork, compact or clear - not from

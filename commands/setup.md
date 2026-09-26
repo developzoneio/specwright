@@ -67,7 +67,7 @@ is generic, so future renames and newly-introduced template fields are caught th
    the loaded `settings.template.json` (currently `.../hooks/sd/`). Flag any `/.claude/hooks/<other>/` <!-- contract-lint: allow CL402 - describes a settings.json path PATTERN to detect drift in the TARGET project's config, not a filesystem path on this machine -->
    segment (e.g. `.../hooks/ck/`) and record the old -> new rewrite per hook
    (SessionStart/session-context, UserPromptSubmit/prompt-router, PreToolUse/spec-gate,
-   SubagentStop/subagent-retro).
+   SubagentStop/subagent-retro, PreCompact/precompact-state).
 2. **Missing top-level blocks.** Flag any template top-level key absent from the file - currently
    `_bash_adaptation` and `_schema_notes`. These are `_`-prefixed documentation keys; adding them
    verbatim from the template is non-destructive.
@@ -84,6 +84,8 @@ is generic, so future renames and newly-introduced template fields are caught th
    the form the file already uses: the template's PowerShell command line when the other hooks
    run `powershell ...`, the `bash <path>.sh` form (as in Phase 6 step 3) when they run bash, and
    both when both are present. Add the one event entry only; do not touch other entries.
+   Apply the same rule to a missing `PreCompact` entry running `precompact-state` (SW-68). Without
+   it, a compaction loses which spec the session was driving.
 
 **B. `.claude/project-config.json`**
 
@@ -350,12 +352,12 @@ Setup complete. Generated:
   - .specs/constitution.md (N placeholders to fill)
   - .specs/index.md (empty registry)
   - .claude/project-config.json (M MCP servers disabled)
-  - .claude/settings.json (hooks: session-context, prompt-router, spec-gate, subagent-retro)
+  - .claude/settings.json (hooks: session-context, prompt-router, spec-gate, subagent-retro, precompact-state)
 
 Installed engine paths:
   - ~/.claude/commands/sd/     (14 workflow commands)
   - ~/.claude/agents/sd/       (6 specialist agents)
-  - ~/.claude/hooks/sd/        (4 hooks)
+  - ~/.claude/hooks/sd/        (5 hooks)
   - ~/.claude/templates/sd/    (templates)
   - ~/.claude/skills/sd/       (11 skills: severity-taxonomy, hypothesis-tree, atomic-task-format, evidence-citation, spec-templates, pattern-discipline, retro-lessons, replan-loop, port-fidelity, bootstrap-guard, model-escalation)
 

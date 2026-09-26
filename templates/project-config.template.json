@@ -125,7 +125,11 @@
   "hooks": {
     "sessionContext": {
       "enabled": true,
-      "_use": "Inject in-progress specs (with their 00-spec.md status) and the constitution pointer once per session - on startup, resume, fork, compact and clear"
+      "_use": "Inject in-progress specs (with their 00-spec.md status) and the constitution pointer once per session - on startup, resume, fork, compact and clear. On compact it also re-injects the spec precompactState recorded, with a phase hint and the /sd:<type> command to resume"
+    },
+    "precompactState": {
+      "enabled": true,
+      "_use": "Before a compaction (manual or auto), record which spec the session was working on in .claude/.hookstate/, so sessionContext can re-inject it after the compaction (SW-68). Silent, and never blocks the compaction"
     },
     "userPromptRouter": {
       "enabled": true,

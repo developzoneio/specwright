@@ -47,8 +47,8 @@ specwright/
   commands/         # 14 slash commands (markdown with frontmatter)
   agents/           # 6 subagent definitions (markdown with frontmatter)
   hooks/
-    powershell/     # 4 PowerShell hooks
-    bash/           # 4 bash hooks (parity with PowerShell)
+    powershell/     # 5 PowerShell hooks
+    bash/           # 5 bash hooks (parity with PowerShell)
   templates/        # 4 setup templates
     specs/          # 6 spec templates
   install/          # install.ps1 + install.sh + install/README.md
@@ -561,6 +561,14 @@ echo '{"tool_name":"Edit","tool_input":{"file_path":"src/foo.cs"},"cwd":"/path/t
 ```bash
 echo '{"cwd":"/path/to/repo","session_id":"test-session-001"}' \
   | bash hooks/bash/subagent-retro.sh
+```
+
+**precompact-state (PreCompact):** prints nothing; check for
+`.claude/.hookstate/precompact-test-session-001.json` afterwards, then pipe a `"source":"compact"`
+payload with the same `session_id` into session-context to see it re-injected.
+```bash
+echo '{"session_id":"test-session-001","trigger":"manual","transcript_path":"/path/to/transcript.jsonl","cwd":"/path/to/repo"}' \
+  | bash hooks/bash/precompact-state.sh
 ```
 
 Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a warning to stderr, or stays silent.

@@ -467,6 +467,15 @@ Specs currently in-progress (from .specs/index.md):
 </session-context>
 ```
 
+After a compaction (`source: compact`), the same block also names the spec the session was driving,
+as recorded by **precompact-state** just before the compaction:
+
+```
+Active spec before compaction (trigger: auto): FEAT-INV-2501 [status: in-progress]
+  Phase hint: executing - 3/7 tasks done, next T04
+  Resume: /sd:feature INV-2501 - its state machine re-derives the exact phase from .specs/
+```
+
 **prompt-router** on `"fix bug INV-2501 in stock service"`:
 
 ```
@@ -514,6 +523,12 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
 ```json
 {
   "hooks": {
+    "sessionContext": {
+      "enabled": true
+    },
+    "precompactState": {
+      "enabled": true
+    },
     "userPromptRouter": {
       "enabled": true
     },

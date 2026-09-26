@@ -386,7 +386,9 @@ info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/prompt-router
 info "       \"PreToolUse\": [{\"matcher\":\"Edit|Write|MultiEdit|Bash|PowerShell\",\"hooks\":[{\"type\":\"command\","
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/spec-gate.sh\",\"timeout\":5}]}],"
 info "       \"SubagentStop\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
-info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/subagent-retro.sh\",\"timeout\":3}]}]"
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/subagent-retro.sh\",\"timeout\":3}]}],"
+info "       \"PreCompact\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/precompact-state.sh\",\"timeout\":5}]}]"
 info "     }"
 info "   (Or run /sd:setup in your project - it generates settings.json automatically.)"
 

@@ -57,6 +57,18 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/precompact-state.ps1",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
 
@@ -66,6 +78,7 @@
     "UserPromptSubmit_command_example": "bash ${HOME}/.claude/hooks/sd/prompt-router.sh",
     "PreToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/spec-gate.sh",
     "SubagentStop_command_example": "bash ${HOME}/.claude/hooks/sd/subagent-retro.sh",
+    "PreCompact_command_example": "bash ${HOME}/.claude/hooks/sd/precompact-state.sh",
     "_note_powershell_on_unix": "The PowerShell command lines above invoke the literal 'powershell' executable, which does not exist on Unix even when pwsh 7+ is installed there (Unix invokes it as 'pwsh', with no 'powershell' shim by default) - use the bash variants on macOS/Linux, not the PowerShell command lines as-is."
   },
 
@@ -78,9 +91,10 @@
   },
 
   "_timeout_notes": {
-    "sessionStart": "5s - inject in-progress specs and the constitution pointer once per session (startup, resume, fork, compact, clear - SW-67)",
+    "sessionStart": "5s - inject in-progress specs and the constitution pointer once per session (startup, resume, fork, compact, clear - SW-67); on compact, also the spec that was active before the compaction (SW-68)",
     "userPromptSubmit": "5s - inject per-prompt routing hints (workflow keywords, ticket IDs)",
     "preToolUse": "5s - check spec-gate before code edits and shell writes to protected paths (Bash | PowerShell, SW-79)",
-    "subagentStop": "3s - debounced retro reminder"
+    "subagentStop": "3s - debounced retro reminder",
+    "preCompact": "5s - record which spec the session was working on, for SessionStart compact to re-inject (manual and auto, SW-68). Never exits 2: that would block the compaction"
   }
 }

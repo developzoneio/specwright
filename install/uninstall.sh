@@ -213,7 +213,7 @@ info "1. Projects that wired hooks in .claude/settings.json now point at deleted
 info "   scripts. Remove the \"hooks\" block there, or re-run /sd:setup after a reinstall."
 info ""
 info "2. Per-project artifacts remain until you remove them manually:"
-info "     .claude/.hookstate/          (subagent-retro debounce state)"
+info "     .claude/.hookstate/          (subagent-retro debounce, PreCompact pointers)"
 info "     .claude/project-config.json"
 info "     .specs/"
 info "     CLAUDE.md"

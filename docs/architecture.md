@@ -12,7 +12,7 @@ specwright is a thin layer on top of Claude Code that enforces spec-driven devel
 |                                                                    |
 |    commands/sd/    14 workflow definitions                         |
 |    agents/sd/      6 subagent prompt files                         |
-|    hooks/sd/       4 cross-platform hook scripts                   |
+|    hooks/sd/       5 cross-platform hook scripts                   |
 |    templates/sd/   4 setup + 6 spec templates                      |
 |    skills/sd/      11 reusable rule packs (agents + commands)      |
 |                                                                    |
@@ -188,9 +188,10 @@ A skill is **not** an agent. It cannot be invoked directly, has no tools of its 
 
 ## Hooks as context injection, guardrails, and recording
 
-4 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
+5 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
 `session-context` and `prompt-router` inject context, `spec-gate` guards edits (and records),
-`subagent-retro` reminds about stale retros (and records).
+`subagent-retro` reminds about stale retros (and records), and `precompact-state` records which
+spec a session was driving so `session-context` can re-inject it after a compaction.
 
 ### `session-context` (`SessionStart`)
 
@@ -202,10 +203,26 @@ Runs once per session entry point: `startup`, `resume` (which also covers `--con
 
 This is the part of the spec context that does not change within a session, so it is paid for
 once, not on every prompt. Re-firing on `resume` and `compact` re-primes a session whose earlier
-context is stale or was summarized away (SW-68 builds on the `compact` entry). The hook is silent
-when there is neither a constitution nor an in-progress spec, so a project with no `.specs/` tree
-sees nothing. It never writes and records no metrics. Opt out with
-`hooks.sessionContext.enabled: false`.
+context is stale or was summarized away. The hook is silent when there is neither a constitution,
+an in-progress spec, nor an active-spec pointer, so a project with no `.specs/` tree sees nothing.
+It never writes and records no metrics. Opt out with `hooks.sessionContext.enabled: false`.
+
+On `compact` only, it adds one more section (SW-68): the spec the session was working on before
+the compaction, read from the pointer `precompact-state` left for this `session_id`. The pointer
+is ignored when it is older than 30 minutes or names a spec with no `00-spec.md`. Everything else
+in that section is derived from disk, not stored:
+
+```text
+Active spec before compaction (trigger: manual): FEAT-x [status: in-progress]
+  Phase hint: executing - 3/7 tasks done, next T04
+  Resume: /sd:feature x - its state machine re-derives the exact phase from .specs/
+```
+
+The phase hint is type-agnostic: `draft` is the spec-approval gate; `approved` with a
+`02-tasks.md` is the plan-approval gate; `in-progress` counts the `- **Status**:` check-off
+markers. Workflows with no task list (bug, perf, rca) get `in progress - no task list`. It is a
+hint only: the workflow command's state machine is the authority, which is why the section names
+the command to re-invoke.
 
 ### `prompt-router` (`UserPromptSubmit`)
 
@@ -271,6 +288,26 @@ Runs after every subagent invocation. If any in-progress spec has a `05-retro.md
 `.specs/_metrics/events.jsonl`, carrying the same stale/missing-retro count the reminder is based
 on. Recording happens regardless of debounce - debounce only suppresses the user-facing reminder,
 not the measurement.
+
+### `precompact-state` (`PreCompact`)
+
+Runs before every compaction, `manual` or `auto` (matcher `*`). Specs carry only a coarse
+`status:` on disk, so which spec a session was driving lives only in the conversation, and that is
+what compaction summarizes away. The hook reads the last 256 KB of `transcript_path`, walks the
+spec IDs in it from newest to oldest, and takes the first one that has a `00-spec.md` and is not
+`done` or `archived`. If none qualifies, it falls back to the in-progress index row when there is
+exactly one. It writes the pointer `{specId, trigger}` to
+`.claude/.hookstate/precompact-<session_id>.json` and prunes pointers older than 24 hours.
+
+It records a pointer and nothing else. `session-context` stays the one context builder and
+re-injects the spec on `SessionStart` `source: compact`, which fires after the compaction with the
+same `session_id` (ADR 0015). Context assembled in two places would drift. There is a second
+reason: nothing documents what the CLI does with PreCompact stdout, and the documented re-injection
+point is SessionStart. So the hook prints nothing.
+
+Exit 2 on PreCompact **blocks the compaction** (ADR 0015), so this hook exits 0 on every path,
+failures included. It is a no-op without a `.specs/` tree and index. Opt out with
+`hooks.precompactState.enabled: false`.
 
 ### Event log (`.specs/_metrics/events.jsonl`)
 
@@ -427,7 +464,8 @@ These are rough ballparks. Actual cost depends on file sizes, MCP usage, and con
 Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
 `Edit|Write|MultiEdit|Bash|PowerShell` (a shell command with no write marker exits before any
 disk read), `prompt-router` on every prompt, `subagent-retro` after every subagent,
-`session-context` once per session entry point, and each one is a fresh process: interpreter start-up, script parse, then the hook's own work.
+`session-context` once per session entry point, `precompact-state` once per compaction, and each
+one is a fresh process: interpreter start-up, script parse, then the hook's own work.
 The PowerShell twins pay far more start-up than the bash ones.
 
 **Method.** `tests/hooks/measure-latency.ps1` spawns each PowerShell hook as a fresh child process
@@ -458,6 +496,9 @@ each on commits `0ddb2b4` and `01cb099`; "powershell" is Windows PowerShell 5.1)
 `session-context` (SW-67) shipped after these runs, so it has no column. On one Windows
 workstation (2026-09-26, 10 iterations per case) it measured p95 399 ms under powershell and
 556 ms under pwsh, in line with `prompt-router`; its CI budget copies `prompt-router`'s.
+`precompact-state` (SW-68) came later still. On the same workstation (2026-09-26, 15 iterations
+per case) it measured p95 397 ms under powershell and 532 ms under pwsh, and it reuses
+`session-context`'s budget.
 
 For comparison, the bash `spec-gate` on the same Linux container measured p50 104 ms and p95
 119 ms on the `block-protected-path` case (a shell loop timing 30 runs; the bash twins are not
@@ -466,7 +507,7 @@ covered by `measure-latency.ps1`).
 **What the numbers say.**
 
 - **No hook comes near its timeout.** The worst p95 anywhere is 650 ms, against 5 s
-  (`spec-gate`, `prompt-router`, `session-context`) and 3 s (`subagent-retro`). An implement phase touching 40 files
+  (`spec-gate`, `prompt-router`, `session-context`, `precompact-state`) and 3 s (`subagent-retro`). An implement phase touching 40 files
   pays roughly 40 x 0.5 s = 20 s of `spec-gate` overhead, which is real but not a timeout risk.
 - **pwsh is not faster everywhere.** On windows-latest, Windows PowerShell 5.1 beat pwsh by about
   20% on every hook. On a developer workstation measured earlier in SW-50, it was the reverse:
