@@ -55,7 +55,29 @@ $env:SD_E2E_KEEP = '1'; .\tests\e2e\run-e2e.ps1 -Case 01-setup
 # Keep the session transcript too: drops --no-session-persistence and implies SD_E2E_KEEP. The
 # transcript lands under <fakeHome>\.claude\projects\ (the path is printed) (SW-79)
 $env:SD_E2E_TRANSCRIPT = '1'; .\tests\e2e\run-e2e.ps1 -Case 02-feature-happy
+
+# Also write the run as JSON: date, mode, claude version, auth mode, OS, git commit, and per
+# scenario the result, assertion counts, exit code, total_cost_usd and duration (SW-77). It holds
+# no prompt, transcript or credential, and is written for full, -Case and -SelfTest runs alike
+.\tests\e2e\run-e2e.ps1 -ResultsFile C:\sd-e2e-results\run1-suite.json
 ```
+
+### Reproducibility runs (SW-77)
+
+SW-27's acceptance bar is "green 3 times consecutively". To measure it, use one machine and one
+`claude` version, and run the full suite and then `-SelfTest` three times in a row, each with its
+own `-ResultsFile`:
+
+```powershell
+$out = 'C:\sd-e2e-results'
+foreach ($i in 1..3) {
+    .\tests\e2e\run-e2e.ps1           -ResultsFile "$out\run$i-suite.json"
+    .\tests\e2e\run-e2e.ps1 -SelfTest -ResultsFile "$out\run$i-selftest.json"
+}
+```
+
+A red run restarts the count. An assertion that fails in one run and passes in another is flaky:
+rewrite or delete it (see the rule above), never retry it.
 
 Not wired into the per-PR `ci.yml` job - see "CI placement" below.
 
@@ -326,7 +348,7 @@ showed the `spec_transition` metric missing partial Status-cell edits, so Rule 0
 transitions from its own diff (`metrics-transition-partial-edit` fixture). **Still open:** scenario
 2 still runs with `skip-permissions` for its Bash steps (`npm test`), and that overrides hook
 denies. SW-27's "no skip-permissions" bar therefore needs a Bash grant that does not override hook
-denies. That work is tracked with SW-77, not here.
+denies. That work is tracked with SW-80, not here.
 
 **Update, 2026-08-01 full-suite run:** this time `02-feature-happy` did not merely proceed despite
 repeated Rule 1 denials - it stalled outright and hit the 600s timeout. `events.jsonl` shows the

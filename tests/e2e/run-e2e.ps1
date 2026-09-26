@@ -33,6 +33,12 @@
     --no-session-persistence so the session transcript is written under
     <fakeHome>/.claude/projects/, and implies SD_E2E_KEEP.
 
+    -ResultsFile <path> (SW-77) also writes the run as JSON: date, mode,
+    claude version, auth mode, OS, git commit, and per scenario the result,
+    assertion counts, exit code, total_cost_usd and duration. It holds no
+    prompt, transcript or credential. Nothing is written on the exit-2
+    prerequisite path, since no scenario ran.
+
     Each scenario directory under scenarios/<name>/ may contain:
       source.txt   - optional, one line: a repo-relative path to copy as the
                       base workspace (e.g. examples/fixture-project).
@@ -73,7 +79,8 @@
 param(
     [string]$Case,
     [switch]$SelfTest,
-    [int]$TimeoutSeconds = 600
+    [int]$TimeoutSeconds = 600,
+    [string]$ResultsFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +93,9 @@ $installPs1   = Join-Path $repoRoot 'install' 'install.ps1'
 
 $script:pass = 0
 $script:fail = 0
+$script:claudeVersion = $null
+$script:authMode = $null
+$script:scenarioResults = [System.Collections.Generic.List[object]]::new()
 
 function Write-Ok   { param([string]$m) Write-Host "  [OK]   $m"; $script:pass++ }
 function Write-Bad  { param([string]$m) Write-Host "  [FAIL] $m"; $script:fail++ }
@@ -144,13 +154,14 @@ function Assert-Prerequisites {
     if ($versionText -notmatch '(\d+\.\d+\.\d+)') {
         Exit-MissingPrereq "claude CLI version unreadable ('claude --version' printed '$versionText'); need $($script:minClaudeVersion) or later."
     }
-    $claudeVersion = [version]$Matches[1]
-    if ($claudeVersion -lt $script:minClaudeVersion) {
-        Exit-MissingPrereq "claude CLI $claudeVersion is older than the required $($script:minClaudeVersion); update the claude CLI."
+    $script:claudeVersion = [version]$Matches[1]
+    if ($script:claudeVersion -lt $script:minClaudeVersion) {
+        Exit-MissingPrereq "claude CLI $($script:claudeVersion) is older than the required $($script:minClaudeVersion); update the claude CLI."
     }
-    Write-Host "[INFO] claude CLI: $claudeVersion"
+    Write-Host "[INFO] claude CLI: $($script:claudeVersion)"
 
-    $authMode = Get-AuthMode
+    $script:authMode = Get-AuthMode
+    $authMode = $script:authMode
     if ($null -eq $authMode) {
         Exit-MissingPrereq ('no claude auth found. Provide one of: ' +
             'CLAUDE_CODE_OAUTH_TOKEN (subscription - run `claude setup-token`), ' +
@@ -500,6 +511,21 @@ function Invoke-Scenario {
 
     $fakeHome = $null
     $ws = $null
+    # One -ResultsFile entry per scenario (SW-77). Appended in finally, so a
+    # timeout or a thrown error is recorded too; passed stays false unless a
+    # return below sets it.
+    $record = [ordered]@{
+        name             = $name
+        neuteredGuard    = [bool]$NeuterGuard
+        passed           = $false
+        assertionsPassed = 0
+        assertionsTotal  = 0
+        timedOut         = $false
+        exitCode         = $null
+        isError          = $null
+        totalCostUsd     = $null
+        durationSeconds  = $null
+    }
     try {
         $fakeHome = New-FakeHome
         if ($NeuterGuard) { Set-SpecGateNeutered -FakeHome $fakeHome }
@@ -512,9 +538,18 @@ function Invoke-Scenario {
         $permissionMode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
 
         $timeoutSec = Get-ScenarioTimeout -ScenarioDir $ScenarioDir
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         $run = Invoke-ClaudeHeadless -Workspace $ws -FakeHome $fakeHome -Prompt $prompt `
             -MaxBudgetUsd $budget -TimeoutSec $timeoutSec -PermissionMode $permissionMode `
             -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools
+        $stopwatch.Stop()
+        $record.durationSeconds = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+        $record.timedOut = [bool]$run.TimedOut
+        $record.exitCode = $run.ExitCode
+        if ($run.Result) {
+            $record.isError = $run.Result.is_error
+            $record.totalCostUsd = $run.Result.total_cost_usd
+        }
 
         if ($run.TimedOut) {
             Write-Bad "$name : claude -p timed out after $timeoutSec s"
@@ -530,6 +565,7 @@ function Invoke-Scenario {
 
         $expectPath = Join-Path $ScenarioDir 'expect.json'
         $assertions = @(Get-Content -LiteralPath $expectPath -Raw | ConvertFrom-Json)
+        $record.assertionsTotal = $assertions.Count
 
         $scenarioOk = $true
         foreach ($a in $assertions) {
@@ -544,6 +580,7 @@ function Invoke-Scenario {
             }
             if ($ok) {
                 Write-Ok "$name : $label"
+                $record.assertionsPassed++
             } else {
                 Write-Bad "$name : $label"
                 $scenarioOk = $false
@@ -554,10 +591,13 @@ function Invoke-Scenario {
             # -SelfTest inverted expectation: the guard is neutered, so the
             # scenario's assertions (which describe blocked behavior) must
             # NOT all pass - if they do, the harness failed to notice.
-            return (-not $scenarioOk)
+            $record.passed = (-not $scenarioOk)
+            return $record.passed
         }
+        $record.passed = $scenarioOk
         return $scenarioOk
     } finally {
+        $script:scenarioResults.Add([pscustomobject]$record)
         if ($env:SD_E2E_DEBUG -and $ws) {
             $eventsPath = Join-Path $ws '.specs' '_metrics' 'events.jsonl'
             if (Test-Path -LiteralPath $eventsPath) {
@@ -576,6 +616,48 @@ function Invoke-Scenario {
             }
         }
     }
+}
+
+function Write-ResultsFile {
+    # -ResultsFile (SW-77): the run as JSON, so repeated runs are compared
+    # from files rather than copied from the console. No-op without it.
+    param([string]$Mode, [bool]$Passed)
+    if ([string]::IsNullOrWhiteSpace($ResultsFile)) { return }
+
+    $gitCommit = $null
+    try {
+        $gitCommit = (& git -C $repoRoot rev-parse --short HEAD 2>$null | Out-String).Trim()
+        if (-not $gitCommit) { $gitCommit = $null }
+    } catch { $gitCommit = $null }
+
+    $costs = @($script:scenarioResults |
+        Where-Object { $null -ne $_.totalCostUsd } |
+        ForEach-Object { [double]$_.totalCostUsd })
+    $totalCost = $null
+    if ($costs.Count -gt 0) { $totalCost = [Math]::Round(($costs | Measure-Object -Sum).Sum, 4) }
+
+    $doc = [ordered]@{
+        date          = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+        mode          = $Mode
+        claudeVersion = "$($script:claudeVersion)"
+        authMode      = $script:authMode
+        os            = [System.Runtime.InteropServices.RuntimeInformation]::OSDescription
+        pwshVersion   = "$($PSVersionTable.PSVersion)"
+        gitCommit     = $gitCommit
+        passed        = $Passed
+        totalCostUsd  = $totalCost
+        scenarios     = @($script:scenarioResults)
+    }
+
+    # Resolve against $PWD, not the process cwd GetFullPath would use.
+    $path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ResultsFile)
+    $parent = Split-Path -Parent $path
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    # pwsh 7's utf8 encoding writes no BOM.
+    $doc | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $path -Encoding utf8
+    Write-Host "[INFO] results written: $path"
 }
 
 # ---- scenario selection and preconditions -------------------------------------
@@ -620,6 +702,7 @@ if ($SelfTest) {
             $allDetected = $false
         }
     }
+    Write-ResultsFile -Mode 'selftest' -Passed $allDetected
     if ($allDetected) { exit 0 } else { exit 1 }
 }
 
@@ -631,5 +714,6 @@ foreach ($dir in $selectedDirs) {
 
 Write-Host ''
 Write-Host "=== Summary: $($script:pass) passed, $($script:fail) failed ==="
+Write-ResultsFile -Mode $(if ($Case) { 'case' } else { 'full' }) -Passed ($script:fail -eq 0)
 if ($script:fail -gt 0) { exit 1 }
 exit 0

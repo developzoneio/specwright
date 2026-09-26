@@ -63,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`tests/e2e/run-e2e.ps1 -ResultsFile <path>`** (SW-77) - writes the run as JSON: date, mode,
+  `claude` version, auth mode, OS, git commit, and per scenario the result, assertion counts, exit
+  code, `total_cost_usd` and duration. Nothing is written without the flag. It records the three
+  consecutive runs behind SW-27's "green 3x" bar (method in `tests/e2e/README.md`,
+  "Reproducibility runs"). The leftover `skip-permissions` on scenario `02` moved to SW-80.
 - **Contract-lint rule `CL206` (BLOCK)** (SW-79) - a command listed in the new
   `contractLint.editToolOnly.files` must state `contractLint.editToolOnly.phrase` ("with the Edit
   tool only - never a shell command") outside a fence, wrapping across two lines allowed. The
