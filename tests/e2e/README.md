@@ -179,6 +179,19 @@ Two isolation facts it relies on also apply to this harness:
 - `--no-session-persistence` means `SD_E2E_KEEP=1` keeps no transcript. Use
   `SD_E2E_TRANSCRIPT=1` instead when you need one (SW-79).
 
+### Hook event probe (manual)
+
+`probe-hook-events.ps1` is also manual and paid, and is not part of `run-e2e.ps1` or CI. It is the
+reproducible method behind ADR 0015. It answers four things for each hook event: whether it blocks
+on exit 2, whether a prompt-type hook runs on it, what `source` SessionStart reports, and what a
+spawn costs on PS 5.1 and pwsh. Every sandbox wires a recorder hook on eight events and runs under
+`dontAsk` with no skip-permissions. Re-run it before building on a hook event it does not cover.
+
+One fact it found applies to this harness too. An untrusted workspace has its project
+`permissions.allow` **ignored** in `-p` mode (stderr: "this workspace has not been trusted"). To
+make a grant take effect, set `projects["<ws>"].hasTrustDialogAccepted: true` in the fake home's
+`.claude.json`. This matters for SW-80.
+
 ## Permission mode - do not default to `acceptEdits`
 
 This was the single biggest surprise building this harness, worth stating plainly: **verified by a
