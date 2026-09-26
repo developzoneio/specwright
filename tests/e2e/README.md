@@ -249,41 +249,49 @@ Not per-PR: a `claude -p` suite costs real tokens and minutes of wall clock, and
 in a gate on every push. It runs nightly (or on manual `workflow_dispatch`) on a single OS via
 `.github/workflows/e2e-nightly.yml`.
 
-**The cost trade-off per run.** With API-key auth, one full run costs **more than ~$2.50** (see the
-measured table below), plus about **$0.35** for `-SelfTest`. With subscription auth,
-`total_cost_usd` is a notional figure, and the run draws on the plan's usage allowance instead of
-dollars. The measured run below used subscription auth. That makes the suite practical to run
-locally before a PR, one `-Case` at a time for the cheap scenarios (`03`, `04`: about $0.15 each).
-It is no longer only a nightly report to read afterwards.
+**The cost trade-off per run.** One full 10-scenario run costs about **$7.55-$7.79** in
+`total_cost_usd` and takes about **26-28 minutes** of wall clock, plus about **$0.26** for
+`-SelfTest` (see the measured table below). With subscription auth, `total_cost_usd` is a notional
+figure, and the run draws on the plan's usage allowance instead of dollars. With API-key auth it is
+billed. The runs below used subscription auth. That makes the suite practical to run locally
+before a PR, one `-Case` at a time for the cheap scenarios (`03`, `04`: about $0.15 each). It is no
+longer only a nightly report to read afterwards. A full run plus `-SelfTest` fits inside the
+nightly job's `timeout-minutes: 45`.
 
-Measured cost of one full 5-scenario run on this machine (`SD_E2E_DEBUG=1`, per-scenario
-`total_cost_usd` from the `claude -p --output-format json` result), 2026-08-01, `claude` 2.1.220,
-auth via `~/.claude/.credentials.json` (claude.ai login - `ANTHROPIC_API_KEY` must be unset, see
-"Isolation and auth"):
+### Reproducibility runs, 2026-09-26 (SW-77)
 
-| Scenario | `total_cost_usd` | Result |
-|---|---|---|
-| `01-setup` | $0.7355 | pass |
-| `02-feature-happy` | not recorded - process killed at the 600s timeout before `claude -p` returned a result | **fail (timeout)** - see gap #1 below |
-| `03-spec-gate-negative` | $0.1350 | pass |
-| `04-closeout-negative` | $0.1696 | pass |
-| `05-spec-lint-validate` | $1.4645 | pass |
+Three consecutive full-suite runs, each followed by `-SelfTest`, on one machine: commit `7086d29`,
+`claude` 2.1.283, Windows 10.0.26200, pwsh 7.6.6, subscription auth
+(`~/.claude/.credentials.json`). The runs finished at 04:31, 04:58 and 05:26 UTC. Figures come from
+`-ResultsFile` (per-scenario `total_cost_usd` from the `claude -p --output-format json` result):
 
-Sum of the four completed scenarios: **~$2.50**. `02-feature-happy` additionally consumed real,
-uncaptured spend across its full 10-minute run before being killed - the true full-suite cost is
-higher than the $2.50 figure above. `-SelfTest` (re-runs only `03`/`04` against a neutered guard)
-cost an additional $0.1156 + $0.2361 = ~$0.35 and correctly flagged both scenarios as
-guard-detected (the `events.jsonl` block-event assertion fails as expected when the hook is
-stubbed out, even though the model independently declined to make the edit in one case - see
-`Test-OneAssertion` / `-SelfTest` semantics in `run-e2e.ps1`).
+| Scenario | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| `01-setup` | $0.42 | $0.47 | $0.49 |
+| `02-feature-happy` | $2.57 (699 s) | $2.36 (613 s) | $2.34 (672 s) |
+| `03-spec-gate-negative` | $0.13 | $0.13 | $0.13 |
+| `04-closeout-negative` | $0.13 | $0.13 | $0.14 |
+| `05-spec-lint-validate` | $1.01 | $0.99 | $0.90 |
+| `06-escalation-implementer` | $0.74 | $0.75 | $0.72 |
+| `07-escalation-disabled` | $0.63 | $0.65 | $0.62 |
+| `08-resume-checkoff` | $0.59 | $0.55 | $0.62 |
+| `09-resume-approved` | $0.92 | $0.92 | $1.07 |
+| `10-resume-impact-mapped` | $0.65 | $0.61 | $0.69 |
+| **Suite total** | **$7.79** | **$7.55** | **$7.71** |
+| `-SelfTest` (`03` + `04`, neutered guard) | $0.25 | $0.26 | $0.26 |
 
-**Acceptance bar "green 3 times consecutively" is not yet met.** Only one full-suite run has been
-completed against these figures, and it was not clean (see gap #1). Two more consecutive clean
-runs are still required before this harness can be considered to satisfy SW-27's reproducibility
-criterion - tracked as follow-up, not attempted further here to avoid spending real budget
-re-confirming a known, non-flaky failure.
+Every scenario passed every assertion in all three runs, and `-SelfTest` detected the neutered
+guard for both `03` and `04` each time.
+
+**Acceptance bar "green 3 times consecutively" is met.** No assertion failed in one run and passed
+in another, so none was rewritten or deleted. `02-feature-happy` ran for 613-699 s every time,
+above the 600 s cap that killed it in the 2026-08-01 run. SW-79's `timeout.txt` (1500 s) keeps it
+clear of the timeout now. The earlier 5-scenario measurement (2026-08-01, `claude` 2.1.220), whose
+`02` timed out, is superseded by this table.
 
 ### Escalation scenarios (SW-61)
+
+History: the SW-77 table above supersedes these first-run figures for cost.
 
 First run of `06` and `07`, 2026-09-25, `claude` 2.1.282, Windows, subscription auth
 (`~/.claude/.credentials.json`), one `-Case` at a time:
@@ -299,6 +307,8 @@ the model's own account of the invocation, not a per-invocation model attributio
 transcript - it does not settle SW-59. (Settled since by ADR 0013, from transcript evidence.)
 
 ### Resume-from-approved scenarios (SW-74)
+
+History: the SW-77 table above supersedes these first-run results.
 
 First run of `09` and `10`, 2026-09-25, `claude` 2.1.282, Windows, subscription auth
 (`~/.claude/.credentials.json`), one `-Case` at a time. `SD_E2E_DEBUG` was unset, so cost was not
@@ -353,11 +363,13 @@ denies. That work is tracked with SW-80, not here.
 **Update, 2026-08-01 full-suite run:** this time `02-feature-happy` did not merely proceed despite
 repeated Rule 1 denials - it stalled outright and hit the 600s timeout. `events.jsonl` shows the
 same three blocked transitions, one allowed code-edit, then a `subagent_stop` with `"stale":1` at
-06:24:03, and nothing further before the kill at 06:27:28. Whether this is the same underlying
-collision now additionally tripping some retry/backoff path, or a second, separate stall condition,
-is not diagnosed here - worth investigating alongside the Rule 1 fix rather than assuming the two
-are identical. This also means the suite has not yet achieved a clean run, so the "reproducible
-green 3x" acceptance bar (see "Cost and CI placement" above) remains open.
+06:24:03, and nothing further before the kill at 06:27:28.
+
+**Resolved (SW-77).** `02` did not stall in any of the three consecutive 2026-09-26 runs after
+SW-75 and SW-79. It passed every time, taking 613-699 s, which is longer than the old 600 s cap.
+So the 2026-08-01 kill is at least partly explained by that cap alone. SW-79's `timeout.txt`
+raised it to 1500 s. The `"stale":1` event was not reproduced, and whether it played a part then
+is not established.
 
 **2. `spec-gate`'s `PreToolUse` matcher only covered the `Edit`, `Write`, and `MultiEdit` tools -
 addressed by SW-79.** A model could write the same file change through `Bash` (`sed`,

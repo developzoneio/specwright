@@ -281,6 +281,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     approved before this rule existed.
 
 ### Changed
+- **e2e suite meets SW-27's "green 3x consecutively" bar** (SW-77) - three consecutive full-suite
+  runs on 2026-09-26 (commit `7086d29`, `claude` 2.1.283, Windows, subscription auth): all 10
+  scenarios and `-SelfTest` green every time, no flaky assertion. `tests/e2e/README.md` replaces
+  the 2026-08-01 5-scenario cost table (whose `02` timed out) with the 3-run table: about
+  $7.55-$7.79 per run in notional `total_cost_usd`, about $0.26 per `-SelfTest`, 26-28 minutes.
 - **`/sd:feature` escalation prose extracted into `sd-model-escalation`** (SW-60) - Phase 2
   step 0, Phase 3 step 0, the Gate 2 `no-split` branch and the Key Rules line now name rules
   `ESC-FEAT-02`, `ESC-FEAT-03` and `ESC-FEAT-03b` plus their trigger inputs; the tiers, rationale
