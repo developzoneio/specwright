@@ -63,7 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tests/e2e`** (SW-79) - `SD_E2E_TRANSCRIPT=1` makes `run-e2e.ps1` drop
   `--no-session-persistence` and keep the fake home, so a run's session transcript can be read.
   Scenario `02-feature-happy` now asserts all four allowed `spec_transition` events in
-  `events.jsonl` and no `shell-write` gate.
+  `events.jsonl` and no `shell-write` gate. A new optional per-scenario `timeout.txt` sets the
+  kill timeout; an explicit `-TimeoutSeconds` still wins. Scenario 02 carries `1500` because it
+  runs about 11 minutes. Verified live on 2026-09-26 (CLI 2.1.283): 11/11 pass.
 - **ADR 0013: model override mechanism** (SW-72) - `docs/adr/0013-model-override-mechanism.md`
   records Verdict A on Claude Code 2.1.282, from transcript evidence with a control for every
   pair. The Agent tool's `model` parameter overrides agent frontmatter (mechanism level), and

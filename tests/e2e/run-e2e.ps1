@@ -42,6 +42,8 @@
       prompt.txt   - the literal prompt fed to `claude -p`.
       expect.json  - declarative assertions evaluated after the run.
       budget.txt   - optional, one line: --max-budget-usd override (default 3).
+      timeout.txt  - optional, one line: seconds before claude -p is killed
+                      (default 600). An explicit -TimeoutSeconds wins over it.
       requires.txt - optional, one command name per line that must be on
                       PATH (e.g. node, npm); checked by the preflight.
 
@@ -75,6 +77,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:timeoutExplicit = $PSBoundParameters.ContainsKey('TimeoutSeconds')
 
 $scriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot     = (Resolve-Path (Join-Path $scriptDir '..' '..')).Path
@@ -402,6 +405,20 @@ function Get-ScenarioDisallowedTools {
 
 # ---- assertions ---------------------------------------------------------------
 
+# Precedence: an explicitly passed -TimeoutSeconds, then timeout.txt, then the
+# parameter default (600). A slow end-to-end scenario (02-feature-happy runs
+# about 11 minutes, SW-79) carries its own ceiling instead of raising the
+# default for every fast scenario.
+function Get-ScenarioTimeout {
+    param([string]$ScenarioDir)
+    if ($script:timeoutExplicit) { return $TimeoutSeconds }
+    $timeoutTxt = Join-Path $ScenarioDir 'timeout.txt'
+    if (Test-Path -LiteralPath $timeoutTxt) {
+        return [int](Get-Content -LiteralPath $timeoutTxt -Raw).Trim()
+    }
+    return $TimeoutSeconds
+}
+
 function Get-ScenarioBudget {
     param([string]$ScenarioDir)
     $budgetTxt = Join-Path $ScenarioDir 'budget.txt'
@@ -494,12 +511,13 @@ function Invoke-Scenario {
         $disallowedTools = Get-ScenarioDisallowedTools -ScenarioDir $ScenarioDir
         $permissionMode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
 
+        $timeoutSec = Get-ScenarioTimeout -ScenarioDir $ScenarioDir
         $run = Invoke-ClaudeHeadless -Workspace $ws -FakeHome $fakeHome -Prompt $prompt `
-            -MaxBudgetUsd $budget -TimeoutSec $TimeoutSeconds -PermissionMode $permissionMode `
+            -MaxBudgetUsd $budget -TimeoutSec $timeoutSec -PermissionMode $permissionMode `
             -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools
 
         if ($run.TimedOut) {
-            Write-Bad "$name : claude -p timed out after $TimeoutSeconds s"
+            Write-Bad "$name : claude -p timed out after $timeoutSec s"
             return $false
         }
 

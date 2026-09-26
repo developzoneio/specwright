@@ -216,7 +216,7 @@ modes.
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
 `tests/contract-lint` `_base` + overlay fixture pattern), `prompt.txt` (the literal headless
-prompt), `expect.json` (declarative assertions), and optional `budget.txt` / `permission-mode.txt`
+prompt), `expect.json` (declarative assertions), and optional `budget.txt` / `timeout.txt` / `permission-mode.txt`
 / `skip-permissions.txt` / `disallowed-tools.txt` overrides. An optional `requires.txt` lists
 commands the scenario needs on `PATH` (one per line, `#` comments allowed). The preflight checks it
 for the selected scenarios only, so `-Case 03-spec-gate-negative` does not demand Node.
