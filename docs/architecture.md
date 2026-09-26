@@ -12,7 +12,7 @@ specwright is a thin layer on top of Claude Code that enforces spec-driven devel
 |                                                                    |
 |    commands/sd/    14 workflow definitions                         |
 |    agents/sd/      6 subagent prompt files                         |
-|    hooks/sd/       3 cross-platform hook scripts                   |
+|    hooks/sd/       4 cross-platform hook scripts                   |
 |    templates/sd/   4 setup + 6 spec templates                      |
 |    skills/sd/      11 reusable rule packs (agents + commands)      |
 |                                                                    |
@@ -188,9 +188,9 @@ A skill is **not** an agent. It cannot be invoked directly, has no tools of its 
 
 ## Hooks as context injection, guardrails, and recording
 
-3 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
-`prompt-router` injects context, `spec-gate` guards edits (and records), `subagent-retro`
-reminds about stale retros (and records).
+4 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
+`session-context` and `prompt-router` inject context, `spec-gate` guards edits (and records),
+`subagent-retro` reminds about stale retros (and records).
 
 ### `prompt-router` (`UserPromptSubmit`)
 

@@ -66,7 +66,8 @@ is generic, so future renames and newly-introduced template fields are caught th
 1. **Hook command paths (HIGH).** Each hook command's script path must use the namespace dir of
    the loaded `settings.template.json` (currently `.../hooks/sd/`). Flag any `/.claude/hooks/<other>/` <!-- contract-lint: allow CL402 - describes a settings.json path PATTERN to detect drift in the TARGET project's config, not a filesystem path on this machine -->
    segment (e.g. `.../hooks/ck/`) and record the old -> new rewrite per hook
-   (UserPromptSubmit/prompt-router, PreToolUse/spec-gate, SubagentStop/subagent-retro).
+   (SessionStart/session-context, UserPromptSubmit/prompt-router, PreToolUse/spec-gate,
+   SubagentStop/subagent-retro).
 2. **Missing top-level blocks.** Flag any template top-level key absent from the file - currently
    `_bash_adaptation` and `_schema_notes`. These are `_`-prefixed documentation keys; adding them
    verbatim from the template is non-destructive.
@@ -343,12 +344,12 @@ Setup complete. Generated:
   - .specs/constitution.md (N placeholders to fill)
   - .specs/index.md (empty registry)
   - .claude/project-config.json (M MCP servers disabled)
-  - .claude/settings.json (hooks: prompt-router, spec-gate, subagent-retro)
+  - .claude/settings.json (hooks: session-context, prompt-router, spec-gate, subagent-retro)
 
 Installed engine paths:
   - ~/.claude/commands/sd/     (14 workflow commands)
   - ~/.claude/agents/sd/       (6 specialist agents)
-  - ~/.claude/hooks/sd/        (3 hooks)
+  - ~/.claude/hooks/sd/        (4 hooks)
   - ~/.claude/templates/sd/    (templates)
   - ~/.claude/skills/sd/       (11 skills: severity-taxonomy, hypothesis-tree, atomic-task-format, evidence-citation, spec-templates, pattern-discipline, retro-lessons, replan-loop, port-fidelity, bootstrap-guard, model-escalation)
 

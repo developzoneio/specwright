@@ -1,10 +1,10 @@
 #requires -Version 7.0
 <#
 .SYNOPSIS
-    specwright: per-invocation latency measurement for the three shipped hooks (SW-50).
+    specwright: per-invocation latency measurement for the shipped hooks (SW-50).
 
 .DESCRIPTION
-    Spawns each hook (spec-gate, prompt-router, subagent-retro) as a fresh child
+    Spawns each hook (spec-gate, prompt-router, subagent-retro, session-context) as a fresh child
     process, once per curated fixture case, under every available PowerShell
     flavor (Windows PowerShell 5.1 "powershell" and PowerShell 7+ "pwsh"), and
     reports p50/p95 wall-clock latency per (hook, flavor).
@@ -186,6 +186,13 @@ function Test-HookRunMatchesGolden {
             if (-not $Expected.emitted -and $out.Trim().Length -gt 0) { return 'expected silence, got stdout' }
             foreach ($w in @($Expected.workflows)) {
                 if ($w -and -not $out.Contains($w)) { return "expected workflow '$w' on stdout" }
+            }
+        }
+        'session-context' {
+            if ($Expected.emitted -and $out.Trim().Length -eq 0) { return 'expected session context on stdout, got none' }
+            if (-not $Expected.emitted -and $out.Trim().Length -gt 0) { return 'expected silence, got stdout' }
+            foreach ($s in @($Expected.inProgress)) {
+                if ($s -and -not $out.Contains($s.id)) { return "expected in-progress spec '$($s.id)' on stdout" }
             }
         }
         'subagent-retro' {

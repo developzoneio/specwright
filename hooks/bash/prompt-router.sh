@@ -44,7 +44,7 @@ fi
 #   4. cwd itself - the pre-SW-78 behaviour.
 # Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
 # left behind by an older hook cannot shadow a configured root. Pure string
-# walk, no `cd`/`realpath`. Identical in all three hooks; mirrors
+# walk, no `cd`/`realpath`. Identical in all four hooks; mirrors
 # Resolve-ProjectRoot in the .ps1 twins.
 resolve_project_root() {
     local start="${1//\\//}"

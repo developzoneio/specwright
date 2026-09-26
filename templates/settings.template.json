@@ -10,6 +10,18 @@
   },
 
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/session-context.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",
@@ -50,6 +62,7 @@
 
   "_bash_adaptation": {
     "_comment": "On macOS/Linux replace PowerShell command lines with bash invocations. Make hooks executable (chmod +x) and adjust file extension.",
+    "SessionStart_command_example": "bash ${HOME}/.claude/hooks/sd/session-context.sh",
     "UserPromptSubmit_command_example": "bash ${HOME}/.claude/hooks/sd/prompt-router.sh",
     "PreToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/spec-gate.sh",
     "SubagentStop_command_example": "bash ${HOME}/.claude/hooks/sd/subagent-retro.sh",
@@ -65,7 +78,8 @@
   },
 
   "_timeout_notes": {
-    "userPromptSubmit": "5s - inject routing hints and spec context",
+    "sessionStart": "5s - inject in-progress specs and the constitution pointer once per session (startup, resume, fork, compact, clear - SW-67)",
+    "userPromptSubmit": "5s - inject per-prompt routing hints (workflow keywords, ticket IDs)",
     "preToolUse": "5s - check spec-gate before code edits and shell writes to protected paths (Bash | PowerShell, SW-79)",
     "subagentStop": "3s - debounced retro reminder"
   }

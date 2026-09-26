@@ -14,5 +14,9 @@
   "subagent-retro": [
     "silent-disabled",
     "lessons-surfaced"
+  ],
+  "session-context": [
+    "silent-no-specs-tree",
+    "startup-emits"
   ]
 }

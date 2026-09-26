@@ -123,6 +123,10 @@
   },
 
   "hooks": {
+    "sessionContext": {
+      "enabled": true,
+      "_use": "Inject in-progress specs (with their 00-spec.md status) and the constitution pointer once per session - on startup, resume, fork, compact and clear"
+    },
     "userPromptRouter": {
       "enabled": true,
       "_use": "Keyword routing + spec-context injection on every user prompt"

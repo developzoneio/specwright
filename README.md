@@ -1,7 +1,7 @@
 # specwright
 
 > **Claude Code cannot touch your code until a spec is approved.**
-> 14 slash commands, 6 specialized subagents, 3 guard-rail hooks, 10 templates, 11 reusable skills - all under the `sd:` namespace, stack-agnostic, cross-platform, and ready to drop into any project.
+> 14 slash commands, 6 specialized subagents, 4 guard-rail hooks, 10 templates, 11 reusable skills - all under the `sd:` namespace, stack-agnostic, cross-platform, and ready to drop into any project.
 
 [![Release](https://img.shields.io/github/v/release/developzoneio/specwright)](https://github.com/developzoneio/specwright/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -122,7 +122,7 @@ stopping at Gate 1 for your sign-off. No project handy? The bundled
 |---|---|
 | **14 slash commands** | 6 spec-producing workflows + 8 utilities - see the Commands table below |
 | **6 specialized subagents** | architect, explorer, debugger, implementer, reviewer, docs-writer |
-| **3 cross-platform hooks** | `prompt-router`, `spec-gate`, `subagent-retro` (PowerShell + bash) |
+| **4 cross-platform hooks** | `session-context`, `prompt-router`, `spec-gate`, `subagent-retro` (PowerShell + bash) |
 | **10 templates** | 4 setup templates + 6 spec templates (feature / bug / refactor / perf / rca / port) |
 | **11 reusable skills** | Shared rule packs loaded from agent frontmatter or read at runtime by commands, never copy-pasted |
 | **Cross-platform installer** | Content-hash dedup, timestamped backups, dry-run mode |
@@ -217,7 +217,7 @@ None are required - agents fall back gracefully. Configure per project in `.clau
 
 | Component | Tested on | Notes |
 |---|---|---|
-| Claude Code CLI | Latest as of Aug 2026 | Hook contract: `UserPromptSubmit`, `PreToolUse`, `SubagentStop` |
+| Claude Code CLI | Latest as of Aug 2026 | Hook contract: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `SubagentStop` |
 | OS | Windows 11 (PS 5.1 + 7.x), macOS 13+, Ubuntu 22.04+ | PS 5.1 reads UTF-8 as CP1252, so hooks are pure ASCII; bash hooks branch `stat -f %m` vs `stat -c %Y` |
 | jq | 1.6+ | Optional. Bash hooks exit 0 if missing. |
 | Node stack | Node 20+ (plain JS) | Demonstrated end-to-end in [`examples/fixture-project/`](examples/fixture-project/) - a real `/sd:feature` run, committed, not just asserted. TS not yet exercised. |

@@ -1,0 +1,4 @@
+{
+  "spec": { "dir": ".specs", "indexFile": ".specs/index.md", "prefixes": { "feature": "STORY", "bug": "not-valid" } },
+  "hooks": { "sessionContext": { "enabled": true } }
+}

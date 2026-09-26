@@ -6,7 +6,7 @@ The installer copies the engine (commands, agents, hooks, templates) into a Clau
 <base>/
 ├── commands/sd/        14 slash commands
 ├── agents/sd/          6 subagent definitions
-├── hooks/sd/           3 hook scripts (.ps1 on Windows, .sh on Unix)
+├── hooks/sd/           4 hook scripts (.ps1 on Windows, .sh on Unix)
 ├── templates/sd/       10 templates (4 setup + 6 spec)
 └── skills/sd/          11 skills (one folder per skill with SKILL.md)
 ```
@@ -48,13 +48,13 @@ Default base is `$HOME/.claude` (Unix) or `$env:USERPROFILE\.claude` (Windows).
 |---|---|---|---|
 | `commands/` | `commands/sd/` | 14 | `feature`, `bug`, `rca`, `refactor`, `perf`, `port`, `spec`, `explore`, `review`, `setup`, `release`, `adr`, `verify`, `status` |
 | `agents/` | `agents/sd/` | 6 | `sd-spec-architect`, `sd-code-explorer`, `sd-debugger`, `sd-implementer`, `sd-reviewer`, `sd-docs-writer` |
-| `hooks/powershell/` (Windows installer) | `hooks/sd/` | 3 | `prompt-router.ps1`, `spec-gate.ps1`, `subagent-retro.ps1` |
-| `hooks/bash/` (Unix installer) | `hooks/sd/` | 3 | `prompt-router.sh`, `spec-gate.sh`, `subagent-retro.sh` (chmod +x applied) |
+| `hooks/powershell/` (Windows installer) | `hooks/sd/` | 4 | `session-context.ps1`, `prompt-router.ps1`, `spec-gate.ps1`, `subagent-retro.ps1` |
+| `hooks/bash/` (Unix installer) | `hooks/sd/` | 4 | `session-context.sh`, `prompt-router.sh`, `spec-gate.sh`, `subagent-retro.sh` (chmod +x applied) |
 | `templates/` | `templates/sd/` | 4 + 6 | Setup templates + `specs/` subfolder with 6 spec templates |
 | `skills/` | `skills/sd/` | 11 | One folder per skill, each with a `SKILL.md` |
 | _(generated at install)_ | `<area>/sd/specwright-version.txt` | 5 | One version stamp per installed area, derived from `CHANGELOG.md`'s newest release, removed by uninstall |
 
-**Total**: 49 files per OS.
+**Total**: 50 files per OS.
 
 ---
 

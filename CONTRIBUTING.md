@@ -47,8 +47,8 @@ specwright/
   commands/         # 14 slash commands (markdown with frontmatter)
   agents/           # 6 subagent definitions (markdown with frontmatter)
   hooks/
-    powershell/     # 3 PowerShell hooks
-    bash/           # 3 bash hooks (parity with PowerShell)
+    powershell/     # 4 PowerShell hooks
+    bash/           # 4 bash hooks (parity with PowerShell)
   templates/        # 4 setup templates
     specs/          # 6 spec templates
   install/          # install.ps1 + install.sh + install/README.md

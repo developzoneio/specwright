@@ -68,6 +68,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`session-context` SessionStart hook** (SW-67) - new pair `hooks/powershell/session-context.ps1`
+  and `hooks/bash/session-context.sh`, wired on `SessionStart` (matcher `*`, timeout 5 s) in
+  `templates/settings.template.json` and `examples/fixture-project`. It emits a
+  `<session-context>` block once per session entry point with the constitution pointer
+  (`spec.constitutionFile`, when the file exists) and every in-progress spec in the index, each
+  with its title and the `status:` from its `00-spec.md` frontmatter. Every `source` (`startup`,
+  `resume`, `fork`, `compact`, `clear`) gets the same block, so a resumed or compacted session is
+  re-primed; a non-word `source` is reported as `unknown`. Silent when there is neither a
+  constitution nor an in-progress spec, so a project with no `.specs/` tree sees no change.
+  Read-only, records no metrics. Opt out with `hooks.sessionContext.enabled: false` (new key in
+  `templates/project-config.template.json`; only a literal `false` disables it). 17 conformance
+  fixtures under `tests/hooks/fixtures/session-context/` (new normalizer in `run-conformance.ps1`),
+  two latency cases, and a latency budget of 1300 ms (pwsh) / 1000 ms (PS 5.1) p95, matching
+  `prompt-router`'s; measured at 556 / 399 ms p95 on a workstation.
 - **ADR 0015: hook event behaviour** (SW-66) - `docs/adr/0015-hook-event-behaviour.md` records,
   on Claude Code 2.1.283, what E11 had only read in the docs:
   - **Blocking:** Stop, SubagentStop and PreCompact block on exit 2 (Stop also on JSON

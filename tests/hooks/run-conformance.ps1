@@ -471,10 +471,47 @@ function ConvertTo-SubagentRetroDecision {
     }
 }
 
+function ConvertTo-SessionContextDecision {
+    param($Run)
+    $source = $null
+    $constitution = $null
+    # In-progress specs are kept in EMISSION ORDER, not sorted: both
+    # implementations list index rows in file order, and a divergence in that
+    # order is a real parity failure (same reasoning as subagent-retro lessons).
+    $inProgress = [System.Collections.Generic.List[object]]::new()
+    $section = ''
+    foreach ($line in ($Run.Stdout -split "`n")) {
+        $l = $line.TrimEnd("`r")
+        if ($l -cmatch '^Spec context from specwright \(SessionStart hook, source: ([^)]*)\):$') {
+            $source = $Matches[1]; continue
+        }
+        if ($l -cmatch '^Constitution: (.+)$') { $constitution = $Matches[1]; $section = ''; continue }
+        if ($l -cmatch '^Specs currently in-progress') { $section = 'inprogress'; continue }
+        if ($section -eq 'inprogress' -and
+            $l -cmatch '^  - (\S+)( \[status: ([^\]]+)\])?( (.+))?$') {
+            $inProgress.Add([pscustomobject][ordered]@{
+                id     = $Matches[1]
+                status = if ($Matches[3]) { $Matches[3] } else { $null }
+                title  = if ($Matches[5]) { $Matches[5] } else { $null }
+            })
+        }
+    }
+    return [pscustomobject][ordered]@{
+        exitCode     = $Run.ExitCode
+        emitted      = $Run.Stdout.Contains('<session-context>')
+        source       = $source
+        constitution = $constitution
+        inProgress   = @($inProgress)
+        stderr       = $Run.Stderr.Trim()
+        events       = @($Run.Events)
+    }
+}
+
 $hookNormalizers = @{
-    'spec-gate'      = ${function:ConvertTo-SpecGateDecision}
-    'prompt-router'  = ${function:ConvertTo-PromptRouterDecision}
-    'subagent-retro' = ${function:ConvertTo-SubagentRetroDecision}
+    'spec-gate'       = ${function:ConvertTo-SpecGateDecision}
+    'prompt-router'   = ${function:ConvertTo-PromptRouterDecision}
+    'subagent-retro'  = ${function:ConvertTo-SubagentRetroDecision}
+    'session-context' = ${function:ConvertTo-SessionContextDecision}
 }
 
 function Get-CanonicalJson {
