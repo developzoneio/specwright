@@ -610,6 +610,7 @@
       { "path": "hooks/bash/prompt-router.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
       { "path": "hooks/bash/session-context.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
       { "path": "hooks/bash/spec-gate.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
+      { "path": "hooks/bash/stop-gate.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits. A non-zero exit here is worse still: exit 2 on Stop keeps the turn running (ADR 0015); the hook blocks only through its JSON decision (ADR 0016)." },
       { "path": "hooks/bash/subagent-retro.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." }
     ]
   },
@@ -665,6 +666,10 @@
         "powershell": { "p95": 1000 }
       },
       "precompact-state": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
+      },
+      "stop-gate": {
         "pwsh": { "p95": 1300 },
         "powershell": { "p95": 1000 }
       }

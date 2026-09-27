@@ -261,6 +261,51 @@ assert_exit0 "session-context compact" "$CODE"
 assert_contains "session-context compact" "$STDOUT" "Active spec before compaction (trigger: manual): FEAT-TEST-001"
 assert_contains "session-context compact" "$STDOUT" "/sd:feature TEST-001"
 
+# ---- stop-gate: a skipped HARD gate blocks the stop, once (SW-69) -----------
+
+# Its own workspace: the hook is opt-in. The project root must come from cwd,
+# not from a CLAUDE_PROJECT_DIR the runner inherited.
+saved_project_dir="${CLAUDE_PROJECT_DIR-}"
+unset CLAUDE_PROJECT_DIR
+sg="$fixture/stop-gate-ws"
+mkdir -p "$sg/.claude" "$sg/.specs/BUG-SMOKE-1"
+printf -- '---
+id: BUG-SMOKE-1
+type: bug
+status: approved
+---
+
+## Reproduction
+
+1. <<step 1>>
+'     > "$sg/.specs/BUG-SMOKE-1/00-spec.md"
+printf '# Decisions
+' > "$sg/.specs/BUG-SMOKE-1/03-decisions.md"
+printf '%s
+' '{"type":"user","message":{"content":"continue BUG-SMOKE-1"}}' > "$sg/transcript.jsonl"
+payload="$(printf '{"session_id":"smoke-stop","cwd":"%s","transcript_path":"%s/transcript.jsonl","stop_hook_active":false}' "$sg" "$sg")"
+
+section "stop-gate (bash): off by default - silent"
+printf '%s
+' '{"spec":{"dir":".specs"}}' > "$sg/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "$payload"
+assert_exit0 "stop-gate default off" "$CODE"
+assert_empty "stop-gate default off" "$STDOUT"
+
+section "stop-gate (bash): enabled, skipped Gate 2 - blocks"
+printf '%s
+' '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}' > "$sg/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "$payload"
+assert_exit0 "stop-gate skipped gate" "$CODE"
+assert_contains "stop-gate skipped gate" "$STDOUT" '"decision":"block"'
+assert_contains "stop-gate skipped gate" "$STDOUT" "Gate 2 (Reproduction confirmed)"
+
+section "stop-gate (bash): re-fire with stop_hook_active - silent"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "${payload/\"stop_hook_active\":false/\"stop_hook_active\":true}"
+assert_exit0 "stop-gate re-fire" "$CODE"
+assert_empty "stop-gate re-fire" "$STDOUT"
+[[ -n "$saved_project_dir" ]] && export CLAUDE_PROJECT_DIR="$saved_project_dir"
+
 # ---- summary -----------------------------------------------------------------
 
 section "Summary"

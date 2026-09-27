@@ -23,5 +23,10 @@
   "precompact-state": [
     "silent-no-specs-tree",
     "records-last-mentioned-spec"
+  ],
+  "stop-gate": [
+    "silent-default-off",
+    "block-bug-repro-skipped",
+    "block-port-multiple-gates"
   ]
 }

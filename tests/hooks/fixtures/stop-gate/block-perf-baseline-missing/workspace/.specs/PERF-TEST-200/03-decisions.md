@@ -1,0 +1,3 @@
+# Decisions
+
+Hotspot ranking.

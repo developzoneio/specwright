@@ -599,12 +599,40 @@ function ConvertTo-PrecompactStateDecision {
     }
 }
 
+# stop-gate (SW-69) blocks a Stop with stdout {"decision":"block","reason"}
+# and exit 0 (ADR 0016), or prints nothing. The full reason is part of the
+# decision: both implementations build it from the same fixed phrases, so any
+# drift in a rule's wording or ordering fails the case.
+function ConvertTo-StopGateDecision {
+    param($Run)
+    $decision = 'allow'
+    $reason = $null
+    $stdoutTrim = $Run.Stdout.Trim()
+    if ($stdoutTrim.Length -gt 0) {
+        try {
+            $obj = $stdoutTrim | ConvertFrom-Json -ErrorAction Stop
+            $decision = if ($obj.decision) { [string]$obj.decision } else { 'no-decision' }
+            if ($obj.reason) { $reason = [string]$obj.reason }
+        } catch {
+            $decision = 'unparseable-stdout'
+        }
+    }
+    return [pscustomobject][ordered]@{
+        exitCode = $Run.ExitCode
+        decision = $decision
+        reason   = $reason
+        stderr   = $Run.Stderr.Trim()
+        events   = @($Run.Events)
+    }
+}
+
 $hookNormalizers = @{
     'spec-gate'       = ${function:ConvertTo-SpecGateDecision}
     'prompt-router'   = ${function:ConvertTo-PromptRouterDecision}
     'subagent-retro'  = ${function:ConvertTo-SubagentRetroDecision}
     'session-context' = ${function:ConvertTo-SessionContextDecision}
     'precompact-state' = ${function:ConvertTo-PrecompactStateDecision}
+    'stop-gate'       = ${function:ConvertTo-StopGateDecision}
 }
 
 function Get-CanonicalJson {

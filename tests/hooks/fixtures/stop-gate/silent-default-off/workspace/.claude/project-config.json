@@ -1,0 +1,8 @@
+{
+  "spec": {
+    "dir": ".specs",
+    "indexFile": ".specs/index.md",
+    "constitutionFile": ".specs/constitution.md"
+  },
+  "hooks": {}
+}

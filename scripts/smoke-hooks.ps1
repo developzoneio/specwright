@@ -279,6 +279,43 @@ Assert-Exit0 'session-context compact' $script:Code
 Assert-Contains 'session-context compact' $script:Stdout 'Active spec before compaction (trigger: manual): FEAT-TEST-001'
 Assert-Contains 'session-context compact' $script:Stdout '/sd:feature TEST-001'
 
+# ---- stop-gate: a skipped HARD gate blocks the stop, once (SW-69) -----------
+
+# Its own workspace: the hook is opt-in, and enabling it in the shared fixture
+# would change nothing above but is not this section's business. The project
+# root must come from cwd, not from a CLAUDE_PROJECT_DIR the runner inherited.
+$savedProjectDir = $env:CLAUDE_PROJECT_DIR
+Remove-Item Env:\CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+$sg = Join-Path $fixture 'stop-gate-ws'
+New-Item -ItemType Directory -Force -Path (Join-Path $sg '.claude'), (Join-Path $sg '.specs\BUG-SMOKE-1') | Out-Null
+Set-Content -LiteralPath (Join-Path $sg '.specs\BUG-SMOKE-1\00-spec.md') -Encoding UTF8 -NoNewline `
+    -Value "---`nid: BUG-SMOKE-1`ntype: bug`nstatus: approved`n---`n`n## Reproduction`n`n1. <<step 1>>`n"
+Set-Content -LiteralPath (Join-Path $sg '.specs\BUG-SMOKE-1\03-decisions.md') -Encoding UTF8 -Value '# Decisions'
+Set-Content -LiteralPath (Join-Path $sg 'transcript.jsonl') -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"continue BUG-SMOKE-1"}}'
+$sgCfg = Join-Path $sg '.claude\project-config.json'
+$sgEsc = $sg -replace '\\', '\\\\'
+$sgPayload = "{`"session_id`":`"smoke-stop`",`"cwd`":`"$sgEsc`",`"transcript_path`":`"$sgEsc\\transcript.jsonl`",`"stop_hook_active`":false}"
+
+Write-Section 'stop-gate (PowerShell): off by default - silent'
+Set-Content -LiteralPath $sgCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') $sgPayload
+Assert-Exit0 'stop-gate default off' $script:Code
+Assert-Empty 'stop-gate default off' $script:Stdout
+
+Write-Section 'stop-gate (PowerShell): enabled, skipped Gate 2 - blocks'
+Set-Content -LiteralPath $sgCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') $sgPayload
+Assert-Exit0 'stop-gate skipped gate' $script:Code
+Assert-Contains 'stop-gate skipped gate' $script:Stdout '"decision":"block"'
+Assert-Contains 'stop-gate skipped gate' $script:Stdout 'Gate 2 (Reproduction confirmed)'
+
+Write-Section 'stop-gate (PowerShell): re-fire with stop_hook_active - silent'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($sgPayload -replace '"stop_hook_active":false', '"stop_hook_active":true')
+Assert-Exit0 'stop-gate re-fire' $script:Code
+Assert-Empty 'stop-gate re-fire' $script:Stdout
+if ($null -ne $savedProjectDir) { $env:CLAUDE_PROJECT_DIR = $savedProjectDir }
+
 # ---- cleanup + summary --------------------------------------------------------
 
 Remove-Item -Recurse -Force $fixture -ErrorAction SilentlyContinue
