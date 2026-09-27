@@ -126,7 +126,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       a drifted `[x]` heading, the no-op paths, and malformed input.
 
     Smoke sections are in both `smoke-hooks` scripts. There is a latency budget, and a new
-    `posttooluse-json` case in `tests/e2e/probe-hook-events.ps1` confirms the JSON channel live.
+    `posttooluse-json` case in `tests/e2e/probe-hook-events.ps1`. Its live run confirmed the JSON
+    reason reaches the model and the write stays (ADR 0017, Evidence).
     Latency on one workstation: p95 575 ms (5.1) and 635 ms (pwsh). The budgets are 1200 and
     1300 ms, inside the 2500 ms ceiling, so the SW-50 gate holds.
 - **`stop-gate` Stop hook: a turn cannot close past a skipped HARD gate** (SW-69, ADR 0016) - new

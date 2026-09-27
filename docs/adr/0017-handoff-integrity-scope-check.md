@@ -99,14 +99,23 @@ the matcher stays narrow and the wiring is documented as opt-in.
   subagent tool call, so it is not established that PostToolUse carries `agent_type` inside a
   subagent. The hook does not depend on it. A main-thread code edit during execution is out of
   plan too, so flagging it is correct.
-- **Exit 2 with stderr.** ADR 0015 observed this channel on PostToolUse. JSON `decision: block`
-  was observed on Stop only. The JSON form was chosen to keep "every hook exits 0" literally
-  true, as ADR 0016 did. `tests/e2e/probe-hook-events.ps1 -Case posttooluse-json` confirms the
-  channel for about USD 0.03 (see Known gaps).
+- **Exit 2 with stderr.** ADR 0015 observed this channel on PostToolUse. The JSON form was
+  chosen to keep "every hook exits 0" literally true, as ADR 0016 did, and it is observed too
+  (see Evidence below).
 - **Do the check in PreToolUse.** That would prevent the edit instead of reporting it, but
   spec-gate already pays one process start there. A second hook doubles that cost, and a
   model-authored `Files` list mistake would then block legitimate work. It is out of scope; the
   story reports drift.
+
+## Evidence: the JSON channel on PostToolUse
+
+`tests/e2e/probe-hook-events.ps1 -Case posttooluse-json` ran on 2026-09-27 against commit
+`3c55d0b` (Claude Code 2.1.283, Windows 10.0.26200, haiku, `dontAsk`, USD 0.02). PostToolUse fired
+once, on `Write`. The written `probe.txt` stayed on disk with its content, so nothing was undone.
+The hook's token reached the transcript, so the reason reached the model. The token is built
+inside the recorder script, not on the hook command line, so ADR 0015's "hook text leaks into the
+transcript" caveat does not apply. The output channel this hook uses is therefore observed, not
+assumed.
 
 ## Consequences
 
@@ -114,10 +123,6 @@ the matcher stays narrow and the wiring is documented as opt-in.
   `tests/hooks/fixtures/handoff-integrity/` assert the flag, the silent in-scope cases and the
   no-op cases identically for PowerShell and bash.
 - **Known gaps:**
-  - The JSON `decision: block` output was not observed live on PostToolUse; ADR 0015 probed exit 2
-    there. The `posttooluse-json` probe case exists for that and was not run in this story (no
-    probe credentials on the authoring machine). If it shows the reason does not reach the model,
-    switch both twins to stderr plus exit 2, which ADR 0015 observed.
   - The ready set over-approximates. With two tasks ready, an edit into the *other* ready task's
     file is not flagged.
   - Out of reach: `/sd:bug` and `/sd:perf` have no `02-tasks.md`, so their implementer edits
