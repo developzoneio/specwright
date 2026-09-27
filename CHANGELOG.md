@@ -411,6 +411,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     approved before this rule existed.
 
 ### Changed
+- **`probe-hook-events.ps1` no longer copies your CLI credentials** - like
+  `probe-model-override.ps1`, it now authenticates from `CLAUDE_CODE_OAUTH_TOKEN`
+  (`claude setup-token`) or `ANTHROPIC_API_KEY`, and copies `~/.claude/.credentials.json` into the
+  fake home only with the new `-CopyCredentials` switch. A copied file forks a single-use OAuth
+  refresh token: when the access token has expired, the sandbox run refreshes it and the real CLI
+  is logged out, which happened during SW-68. `tests/e2e/README.md` also records that sandbox hook
+  commands need forward-slash paths on Windows, because the CLI runs them through bash.
 - **`prompt-router` trimmed to per-prompt routing** (SW-67) - both twins drop the in-progress
   spec list (and the index read and prefix resolution behind it), which `session-context` now
   emits once per session. Keyword routing, ticket-ID detection and the matching spec folders stay.

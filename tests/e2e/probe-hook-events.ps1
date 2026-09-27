@@ -36,7 +36,10 @@
 
     Isolation is the same as tests/e2e/probe-model-override.ps1 (SW-72/SW-73):
     fresh fake home with HOME/USERPROFILE pointed at it, --setting-sources
-    project, --add-dir <fakehome>, no .claude in any parent of -OutDir. Unlike
+    project, --add-dir <fakehome>, no .claude in any parent of -OutDir. Auth
+    comes from CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) or
+    ANTHROPIC_API_KEY in the environment; your real ~/.claude is not read
+    unless you pass -CopyCredentials. Unlike
     that probe there is no engine install - the only hooks are the recorder -
     and no --dangerously-skip-permissions: it overrides hook denies, which is
     the behaviour under test. Runs use --permission-mode dontAsk with no
@@ -56,6 +59,13 @@
 .PARAMETER OutDir
     Where sandboxes, results and the report go. Kept after the run. Credentials
     copied into it are deleted at the end unless -KeepCredentials.
+
+.PARAMETER CopyCredentials
+    Copy ~/.claude/.credentials.json into each fake home instead of using an
+    auth env var. Risky: if the access token has expired, a sandbox run
+    refreshes it, the server rotates the single-use refresh token, and your
+    real CLI is logged out (it happened during SW-68). Prefer
+    CLAUDE_CODE_OAUTH_TOKEN.
 
 .PARAMETER EvaluateOnly
     Do not call claude. Re-read the evidence already in -OutDir and rebuild the
@@ -85,6 +95,7 @@ param(
     # would be loaded as a project dir and shadow the sandbox (SW-73).
     [string]$OutDir = (Join-Path ([System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath())) ('sw66-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
     [switch]$KeepCredentials,
+    [switch]$CopyCredentials,
     [switch]$EvaluateOnly
 )
 
@@ -120,7 +131,7 @@ function Write-Utf8 {
 # ---- preflight ---------------------------------------------------------------
 
 $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
-$hasCreds = Test-Path -LiteralPath (Get-RealCredentialsPath)
+$hasCreds = $CopyCredentials -and (Test-Path -LiteralPath (Get-RealCredentialsPath))
 $claudeVersion = 'n/a (EvaluateOnly)'
 if ($EvaluateOnly -eq $false) {
     if ($null -eq (Get-Command claude -ErrorAction SilentlyContinue)) {
@@ -132,7 +143,7 @@ if ($EvaluateOnly -eq $false) {
     $claudeVersion = (& claude --version 2>$null | Out-String).Trim()
     Write-Info "claude CLI: $claudeVersion"
     if (((Test-EnvSet 'CLAUDE_CODE_OAUTH_TOKEN') -eq $false) -and ($hasCreds -eq $false) -and ((Test-EnvSet 'ANTHROPIC_API_KEY') -eq $false)) {
-        Exit-CannotRun 'no claude auth: set CLAUDE_CODE_OAUTH_TOKEN (claude setup-token), log in so ~/.claude/.credentials.json exists, or set ANTHROPIC_API_KEY.'
+        Exit-CannotRun 'no claude auth: set CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) or ANTHROPIC_API_KEY. -CopyCredentials also works but can log out your real CLI (see its help).'
     }
     if (Test-EnvSet 'ANTHROPIC_API_KEY') {
         Write-Warn 'ANTHROPIC_API_KEY is set; claude -p prefers it, so these runs bill the API.'

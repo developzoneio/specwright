@@ -186,11 +186,18 @@ reproducible method behind ADR 0015. It answers four things for each hook event:
 on exit 2, whether a prompt-type hook runs on it, what `source` SessionStart reports, and what a
 spawn costs on PS 5.1 and pwsh. Every sandbox wires a recorder hook on eight events and runs under
 `dontAsk` with no skip-permissions. Re-run it before building on a hook event it does not cover.
+Like `probe-model-override.ps1`, it authenticates from `CLAUDE_CODE_OAUTH_TOKEN` or
+`ANTHROPIC_API_KEY`. `-CopyCredentials` copies `~/.claude/.credentials.json` instead, which can
+rotate the refresh token and log out your real CLI (it did during SW-68).
 
 One fact it found applies to this harness too. An untrusted workspace has its project
 `permissions.allow` **ignored** in `-p` mode (stderr: "this workspace has not been trusted"). To
 make a grant take effect, set `projects["<ws>"].hasTrustDialogAccepted: true` in the fake home's
 `.claude.json`. This matters for SW-80.
+
+A second fact, from SW-68: hook commands in a sandbox's `settings.json` run through bash on
+Windows, so a Windows path must use forward slashes. `C:\x\hook.ps1` reaches PowerShell as
+`C:xhook.ps1`, and the hook never runs.
 
 ## Permission mode - do not default to `acceptEdits`
 
