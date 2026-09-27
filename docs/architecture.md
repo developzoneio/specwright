@@ -12,7 +12,7 @@ specwright is a thin layer on top of Claude Code that enforces spec-driven devel
 |                                                                    |
 |    commands/sd/    14 workflow definitions                         |
 |    agents/sd/      6 subagent prompt files                         |
-|    hooks/sd/       6 cross-platform hook scripts                   |
+|    hooks/sd/       7 cross-platform hook scripts                   |
 |    templates/sd/   4 setup + 6 spec templates                      |
 |    skills/sd/      11 reusable rule packs (agents + commands)      |
 |                                                                    |
@@ -188,8 +188,9 @@ A skill is **not** an agent. It cannot be invoked directly, has no tools of its 
 
 ## Hooks as context injection, guardrails, and recording
 
-6 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
+7 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
 `session-context` and `prompt-router` inject context, `spec-gate` guards edits (and records),
+`handoff-integrity` (opt-in) flags an edit outside the executing task's declared files,
 `subagent-retro` reminds about stale retros (and records), `precompact-state` records which
 spec a session was driving so `session-context` can re-inject it after a compaction, and
 `stop-gate` (opt-in) guards turn close-out against a skipped HARD gate.
@@ -280,6 +281,26 @@ log section below for the schema.
 - New schema (`hookSpecificOutput.permissionDecision = "deny"`) is read by recent CLI builds.
 - Legacy schema (`decision = "block"`) is read by older CLI builds.
 - Both are harmless to the other reader. No version probing required.
+
+### `handoff-integrity` (`PostToolUse`, Edit / Write / MultiEdit)
+
+Opt-in: it does nothing unless `hooks.handoffIntegrity.enabled` is the literal JSON `true`
+(ADR 0017). After a write tool succeeds, it checks the file against the task being executed:
+
+1. **Spec.** The newest spec ID in the last 256 KB of `transcript_path` whose folder has a
+   `00-spec.md` with status `in-progress` and a `02-tasks.md`. There is no fallback.
+2. **Active task = the ready set.** Every unchecked task whose `Depends on` tasks are all checked,
+   read with `sd-atomic-task-format`'s check-off rules and field label grammar. Nothing on disk
+   names the one task being executed, and a refactor batch runs several at once. The declared
+   files are the union of the ready tasks' `Files`.
+3. **Match.** An exact path, a directory entry ending in `/`, or a `*`/`?` wildcard,
+   case-insensitive. Files under the spec directory (check-offs, retro lines) and files outside
+   the project root are never flagged.
+
+A miss prints `{"decision":"block","reason":"..."}` and exits 0. PostToolUse runs after the write,
+so the edit stays (ADR 0015). The reason tells the model in the same turn which file, spec and
+ready tasks are involved. It then says to revert the edit or to surface a scope mismatch for a
+re-plan. `/sd:bug` and `/sd:perf` have no `02-tasks.md`, so their edits are out of its reach.
 
 ### `subagent-retro` (`SubagentStop`)
 
@@ -488,7 +509,7 @@ These are rough ballparks. Actual cost depends on file sizes, MCP usage, and con
 
 Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
 `Edit|Write|MultiEdit|Bash|PowerShell` (a shell command with no write marker exits before any
-disk read), `prompt-router` on every prompt, `subagent-retro` after every subagent,
+disk read), `handoff-integrity` after every `Edit|Write|MultiEdit` (even when disabled), `prompt-router` on every prompt, `subagent-retro` after every subagent,
 `session-context` once per session entry point, `precompact-state` once per compaction,
 `stop-gate` once per turn end (even when disabled - the process starts before it reads the
 flag), and each
@@ -527,6 +548,9 @@ workstation (2026-09-26, 10 iterations per case) it measured p95 399 ms under po
 per case) it measured p95 397 ms under powershell and 532 ms under pwsh, and it reuses
 `session-context`'s budget. `stop-gate` (SW-69) measured p95 546 ms under powershell and 660 ms under pwsh
 (2026-09-27, 15 iterations per case, same workstation) and reuses the same budget.
+`handoff-integrity` (SW-70) measured p95 575 ms under powershell and 635 ms under pwsh (2026-09-27,
+30 iterations per case, same workstation; `spec-gate` in the same run: 689 / 744 ms). Its 5.1
+budget is 1200 ms. Enabled, it runs after every write-tool call, in addition to `spec-gate`.
 
 For comparison, the bash `spec-gate` on the same Linux container measured p50 104 ms and p95
 119 ms on the `block-protected-path` case (a shell loop timing 30 runs; the bash twins are not
@@ -535,7 +559,7 @@ covered by `measure-latency.ps1`).
 **What the numbers say.**
 
 - **No hook comes near its timeout.** The worst p95 anywhere is 650 ms, against 5 s
-  (`spec-gate`, `prompt-router`, `session-context`, `precompact-state`, `stop-gate`) and 3 s (`subagent-retro`). An implement phase touching 40 files
+  (`spec-gate`, `handoff-integrity`, `prompt-router`, `session-context`, `precompact-state`, `stop-gate`) and 3 s (`subagent-retro`). An implement phase touching 40 files
   pays roughly 40 x 0.5 s = 20 s of `spec-gate` overhead, which is real but not a timeout risk.
 - **pwsh is not faster everywhere.** On windows-latest, Windows PowerShell 5.1 beat pwsh by about
   20% on every hook. On a developer workstation measured earlier in SW-50, it was the reverse:

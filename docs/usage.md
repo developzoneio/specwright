@@ -532,6 +532,9 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
     "stopGate": {
       "enabled": false
     },
+    "handoffIntegrity": {
+      "enabled": false
+    },
     "userPromptRouter": {
       "enabled": true
     },
@@ -556,6 +559,12 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
   evidence on disk (bug reproduction, perf baseline, rca hypothesis tree, port freeze / tables /
   pinning / parity), and says which gate and what is missing. It blocks once; the next stop goes
   through. Off by default - see `docs/adr/0016-stop-gate-detection-rules.md`.
+- Catching scope drift during execution: set `handoffIntegrity.enabled` to `true`. After every
+  Edit / Write / MultiEdit, the PostToolUse hook checks the file against the `Files` of the ready
+  tasks in the in-progress spec's `02-tasks.md` (open, with every `Depends on` task done) and, if
+  it is outside all of them, tells the model in the same turn. It reports, it does not undo:
+  PostToolUse runs after the write. Edits under the spec folder and outside the project are never
+  flagged. Off by default - see `docs/adr/0017-handoff-integrity-scope-check.md`.
 - Loosening: set `enabled: false` on any hook during noisy debug sessions. Don't forget to flip back.
 - Pace tuning: `retroStaleMinutes` and `debounceMinutes` control how often the retro reminder fires. Set both higher for long-form work; lower for tight iteration cycles.
 

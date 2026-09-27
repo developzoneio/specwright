@@ -385,6 +385,8 @@ info "       \"UserPromptSubmit\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"co
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/prompt-router.sh\",\"timeout\":5}]}],"
 info "       \"PreToolUse\": [{\"matcher\":\"Edit|Write|MultiEdit|Bash|PowerShell\",\"hooks\":[{\"type\":\"command\","
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/spec-gate.sh\",\"timeout\":5}]}],"
+info "       \"PostToolUse\": [{\"matcher\":\"Edit|Write|MultiEdit\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/handoff-integrity.sh\",\"timeout\":5}]}],"
 info "       \"SubagentStop\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/subagent-retro.sh\",\"timeout\":3}]}],"
 info "       \"PreCompact\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","

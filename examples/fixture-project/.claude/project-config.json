@@ -118,6 +118,10 @@
   },
 
   "hooks": {
+    "handoffIntegrity": {
+      "enabled": true,
+      "_use": "Enabled here on purpose (SW-70): the nightly e2e runs /sd:feature through this project, so an implementer edit outside its task's Files is flagged where the run can see it"
+    },
     "stopGate": {
       "enabled": true,
       "_use": "Enabled here on purpose (SW-69): the nightly e2e runs clean workflows through this project, which is the evidence ADR 0016 asks for before the default could ever flip to on"

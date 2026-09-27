@@ -47,8 +47,8 @@ specwright/
   commands/         # 14 slash commands (markdown with frontmatter)
   agents/           # 6 subagent definitions (markdown with frontmatter)
   hooks/
-    powershell/     # 6 PowerShell hooks
-    bash/           # 6 bash hooks (parity with PowerShell)
+    powershell/     # 7 PowerShell hooks
+    bash/           # 7 bash hooks (parity with PowerShell)
   templates/        # 4 setup templates
     specs/          # 6 spec templates
   install/          # install.ps1 + install.sh + install/README.md
@@ -579,7 +579,14 @@ echo '{"session_id":"test-session-001","transcript_path":"/path/to/transcript.js
   | bash hooks/bash/stop-gate.sh
 ```
 
-Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a `{"decision":"block",...}` object to stdout (spec-gate, stop-gate), prints a warning to stderr, or stays silent.
+**handoff-integrity (PostToolUse):** silent unless `hooks.handoffIntegrity.enabled` is `true`, the
+newest spec named in the transcript is `in-progress` with a `02-tasks.md`, and the edited file is
+outside the `Files` of every ready task (open, with its `Depends on` tasks done).
+```bash
+echo '{"tool_name":"Edit","tool_input":{"file_path":"/path/to/repo/src/foo.cs"},"transcript_path":"/path/to/transcript.jsonl","cwd":"/path/to/repo"}' \n  | bash hooks/bash/handoff-integrity.sh
+```
+
+Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a `{"decision":"block",...}` object to stdout (spec-gate, stop-gate, handoff-integrity), prints a warning to stderr, or stays silent.
 
 ---
 

@@ -46,6 +46,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/handoff-integrity.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "matcher": "*",
@@ -89,6 +101,7 @@
     "SessionStart_command_example": "bash ${HOME}/.claude/hooks/sd/session-context.sh",
     "UserPromptSubmit_command_example": "bash ${HOME}/.claude/hooks/sd/prompt-router.sh",
     "PreToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/spec-gate.sh",
+    "PostToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/handoff-integrity.sh",
     "SubagentStop_command_example": "bash ${HOME}/.claude/hooks/sd/subagent-retro.sh",
     "PreCompact_command_example": "bash ${HOME}/.claude/hooks/sd/precompact-state.sh",
     "Stop_command_example": "bash ${HOME}/.claude/hooks/sd/stop-gate.sh",
@@ -101,13 +114,15 @@
     "_legacy_schema": "decision = 'block'  (Claude Code CLI < schema v2)",
     "_both_emitted": "Both fields are present in the same JSON object. The CLI reads whichever it understands; the other field is ignored harmlessly.",
     "_example_block_output": "{\"decision\":\"block\",\"reason\":\"...\",\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"reason\":\"...\"}}",
-    "_stop_gate_output": "stop-gate (Stop) blocks with {\"decision\":\"block\",\"reason\":\"...\"} on stdout and exit 0 - Stop's own schema, no hookSpecificOutput. It never blocks a re-fire (stop_hook_active: true), see docs/adr/0016-stop-gate-detection-rules.md"
+    "_stop_gate_output": "stop-gate (Stop) blocks with {\"decision\":\"block\",\"reason\":\"...\"} on stdout and exit 0 - Stop's own schema, no hookSpecificOutput. It never blocks a re-fire (stop_hook_active: true), see docs/adr/0016-stop-gate-detection-rules.md",
+    "_handoff_integrity_output": "handoff-integrity (PostToolUse) flags an out-of-scope edit with {\"decision\":\"block\",\"reason\":\"...\"} on stdout and exit 0. PostToolUse runs after the tool, so nothing is undone: the reason only reaches the model as feedback, see docs/adr/0017-handoff-integrity-scope-check.md"
   },
 
   "_timeout_notes": {
     "sessionStart": "5s - inject in-progress specs and the constitution pointer once per session (startup, resume, fork, compact, clear - SW-67); on compact, also the spec that was active before the compaction (SW-68)",
     "userPromptSubmit": "5s - inject per-prompt routing hints (workflow keywords, ticket IDs)",
     "preToolUse": "5s - check spec-gate before code edits and shell writes to protected paths (Bash | PowerShell, SW-79)",
+    "postToolUse": "5s - after Edit | Write | MultiEdit, flag a file outside the declared Files of the task being executed (SW-70). Opt-in: does nothing unless hooks.handoffIntegrity.enabled is true in project-config.json. Matcher stays narrow: every spawn costs about 330 ms on PS 5.1 (ADR 0015)",
     "subagentStop": "3s - debounced retro reminder",
     "preCompact": "5s - record which spec the session was working on, for SessionStart compact to re-inject (manual and auto, SW-68). Never exits 2: that would block the compaction",
     "stop": "5s - refuse to end the turn when the spec the session was driving is past a HARD gate without that gate's evidence (SW-69). Opt-in: does nothing unless hooks.stopGate.enabled is true in project-config.json"

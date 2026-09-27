@@ -100,6 +100,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`handoff-integrity` PostToolUse hook: an edit outside the task's declared Files is flagged in
+  the same turn** (SW-70, ADR 0017) - new pair `hooks/powershell/handoff-integrity.ps1` and
+  `hooks/bash/handoff-integrity.sh`, wired on `PostToolUse` with matcher `Edit|Write|MultiEdit`
+  (timeout 5 s) in `templates/settings.template.json`, `examples/fixture-project` and the
+  installers' printed snippet. `/sd:setup` adds the entry to an existing project. **Opt-in:** it
+  acts only when `hooks.handoffIntegrity.enabled` is the literal JSON `true`. The new key in
+  `templates/project-config.template.json` ships `false`, and an absent key also means off.
+  - **What it checks.** The spec is the newest one named in the transcript tail that is
+    `in-progress` and has a `02-tasks.md`. Its *ready set* is every unchecked task whose
+    `Depends on` tasks are all checked. Check-off is read per `sd-atomic-task-format`. The edited
+    file must match a `Files` entry of one of those tasks: an exact path, a directory entry ending
+    in `/`, or a wildcard. Labels are parsed with the skill's tolerant grammar, including
+    multi-line values. Spec-folder edits and files outside the project root are never flagged.
+    No in-progress spec, no task file or no ready task means no-op.
+  - **How it flags.** stdout `{"decision":"block","reason":"..."}` and exit 0. PostToolUse runs
+    after the write, so nothing is undone (ADR 0015). The reason names the file, the spec and the
+    ready tasks, and tells the model to revert or to surface a scope mismatch for a re-plan.
+  - **Evidence.** 40 conformance cases in `tests/hooks/fixtures/handoff-integrity/`, with
+    bash == pwsh == golden:
+    - 13 flag cases: Edit, Write and MultiEdit; not-ready and done tasks; subdir cwd; relative
+      path; CRLF jq; custom prefixes; newest spec; parallel batch; Status over a heading prefix;
+      a commented-out example task.
+    - 27 silent cases: in-scope matches, label-grammar variants, directory and wildcard entries,
+      a drifted `[x]` heading, the no-op paths, and malformed input.
+
+    Smoke sections are in both `smoke-hooks` scripts. There is a latency budget, and a new
+    `posttooluse-json` case in `tests/e2e/probe-hook-events.ps1` confirms the JSON channel live.
+    Latency on one workstation: p95 575 ms (5.1) and 635 ms (pwsh). The budgets are 1200 and
+    1300 ms, inside the 2500 ms ceiling, so the SW-50 gate holds.
 - **`stop-gate` Stop hook: a turn cannot close past a skipped HARD gate** (SW-69, ADR 0016) - new
   pair `hooks/powershell/stop-gate.ps1` and `hooks/bash/stop-gate.sh`, wired on `Stop` (timeout
   5 s) in `templates/settings.template.json`, `examples/fixture-project` and the installers'

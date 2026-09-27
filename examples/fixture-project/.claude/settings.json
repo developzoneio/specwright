@@ -38,6 +38,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/handoff-integrity.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "matcher": "*",
@@ -81,6 +93,7 @@
     "SessionStart_command_example": "bash ${HOME}/.claude/hooks/sd/session-context.sh",
     "UserPromptSubmit_command_example": "bash ${HOME}/.claude/hooks/sd/prompt-router.sh",
     "PreToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/spec-gate.sh",
+    "PostToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/handoff-integrity.sh",
     "SubagentStop_command_example": "bash ${HOME}/.claude/hooks/sd/subagent-retro.sh",
     "PreCompact_command_example": "bash ${HOME}/.claude/hooks/sd/precompact-state.sh",
     "Stop_command_example": "bash ${HOME}/.claude/hooks/sd/stop-gate.sh",

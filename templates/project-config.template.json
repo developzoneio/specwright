@@ -131,6 +131,10 @@
       "enabled": true,
       "_use": "Before a compaction (manual or auto), record which spec the session was working on in .claude/.hookstate/, so sessionContext can re-inject it after the compaction (SW-68). Silent, and never blocks the compaction"
     },
+    "handoffIntegrity": {
+      "enabled": false,
+      "_use": "Opt-in (SW-70, ADR 0017). true: after an Edit/Write/MultiEdit, flag the file in the same turn when it is outside the declared Files of the ready tasks in 02-tasks.md of the in-progress spec the session is driving. Observe-only: the edit stays, the model is told. Spec-folder edits and files outside the project are never flagged. An absent key means off"
+    },
     "stopGate": {
       "enabled": false,
       "_use": "Opt-in (SW-69, ADR 0016). true: refuse to end a turn when the spec the session was driving is past a HARD gate without that gate's evidence on disk - bug reproduction, perf baseline, rca hypothesis tree, port freeze/tables/pinning/parity. Blocks once per stop with a reason naming the gate; never blocks the re-fire. An absent key means off"
