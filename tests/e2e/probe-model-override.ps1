@@ -31,14 +31,30 @@
                Expect: L run has sd-code-explorer model=sonnet and
                sd-spec-architect model=opus, each served on that tier;
                control has neither.
+      feat04b - Phase 4, ESC-FEAT-04b (SW-76). Scenario 06 with T01 at
+               `Estimated complexity: S` and `Reversibility: hard` vs. T01 at
+               S with the default `trivial`.
+               Expect: run has an sd-implementer call with model=sonnet
+               served on claude-sonnet-*; control has no model on any call.
+      feat03b - Gate 2 Face B `no-split`, ESC-FEAT-03b (SW-76). A `draft`
+               spec at complexity M (so ESC-FEAT-03 does not fire) whose
+               scope spans all three production layers, which puts the plan
+               over Gate 2's layer threshold. Two turns: turn 1 stops at
+               Gate 2; if it showed Face B, turn 2 resumes the session
+               (--resume) with `no-split` (run) or `approve split` (control).
+               Expect: run has an sd-spec-architect call at the default and a
+               re-invoked one with model=opus served on claude-opus-*;
+               control has no model on any sd-spec-architect call.
+               If turn 1 shows Face A the case is inconclusive, not Verdict B.
 
     Isolation is the same as tests/e2e/run-e2e.ps1, plus a guard that -OutDir
     has no .claude folder in any parent directory (see the guard for why): install.ps1 -BasePath into
     a fresh fake home, HOME/USERPROFILE pointed at it, --setting-sources
-    project, --add-dir <fakehome>. Your real ~/.claude is only READ, to copy
-    .credentials.json into the fake home. One difference from the harness, on
-    purpose: NO --no-session-persistence, because the transcript is the
-    evidence.
+    project, --add-dir <fakehome>. Auth comes from CLAUDE_CODE_OAUTH_TOKEN
+    (claude setup-token) or ANTHROPIC_API_KEY in the environment. Your real
+    ~/.claude is not read unless you pass -CopyCredentials. One difference
+    from the harness, on purpose: NO --no-session-persistence, because the
+    transcript is the evidence.
 
     The runs use --permission-mode acceptEdits --dangerously-skip-permissions,
     like scenario 06 (npm test and file writes, no human to approve). The
@@ -48,14 +64,21 @@
     specwright checkout. Default: the checkout this script lives in.
 
 .PARAMETER Case
-    feat04, feat03 or all (default).
+    feat04, feat03, feat04b, feat03b or all (default).
 
 .PARAMETER BudgetUsd
-    --max-budget-usd per run (default 4, same as scenario 06). "all" makes 4 runs.
+    --max-budget-usd per claude -p session (default 4, same as scenario 06).
+    "all" makes 10 sessions: 2 per single-turn case, 4 for feat03b.
 
 .PARAMETER OutDir
     Where sandboxes, results and the evidence report go. Kept after the run.
     Credentials copied into it are deleted at the end unless -KeepCredentials.
+
+.PARAMETER CopyCredentials
+    Copy ~/.claude/.credentials.json into each fake home instead of using an
+    auth env var. Risky: if the access token has expired, a sandbox run
+    refreshes it, the server rotates the single-use refresh token, and your
+    real CLI is logged out. Prefer CLAUDE_CODE_OAUTH_TOKEN.
 
 .PARAMETER EvaluateOnly
     Do not build sandboxes or call claude. Re-read the transcripts already in
@@ -76,7 +99,7 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot = (Join-Path $PSScriptRoot '..' '..'),
-    [ValidateSet('feat04', 'feat03', 'all')]
+    [ValidateSet('feat04', 'feat03', 'feat04b', 'feat03b', 'all')]
     [string]$Case = 'all',
     [double]$BudgetUsd = 4,
     [int]$TimeoutSec = 1800,
@@ -85,6 +108,7 @@ param(
     # real ~/.claude would be read as a PROJECT dir and shadow the sandbox.
     [string]$OutDir = (Join-Path ([System.IO.Path]::GetPathRoot([System.IO.Path]::GetTempPath())) ('sw72-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
     [switch]$KeepCredentials,
+    [switch]$CopyCredentials,
     [switch]$EvaluateOnly
 )
 
@@ -125,7 +149,7 @@ foreach ($p in @($installPs1, $scenario06, $fixture)) {
         Exit-CannotRun "not a specwright checkout (missing $p). Pass -RepoRoot."
     }
 }
-$hasCreds = Test-Path -LiteralPath (Get-RealCredentialsPath)
+$hasCreds = $CopyCredentials -and (Test-Path -LiteralPath (Get-RealCredentialsPath))
 $claudeVersion = 'n/a (EvaluateOnly)'
 if ($EvaluateOnly -eq $false) {
     foreach ($cmd in @('claude', 'node', 'npm')) {
@@ -138,7 +162,7 @@ if ($EvaluateOnly -eq $false) {
     Write-Info "claude CLI: $claudeVersion"
 
     if (((Test-EnvSet 'CLAUDE_CODE_OAUTH_TOKEN') -eq $false) -and ($hasCreds -eq $false) -and ((Test-EnvSet 'ANTHROPIC_API_KEY') -eq $false)) {
-        Exit-CannotRun 'no claude auth: set CLAUDE_CODE_OAUTH_TOKEN (claude setup-token), log in so ~/.claude/.credentials.json exists, or set ANTHROPIC_API_KEY.'
+        Exit-CannotRun 'no claude auth: set CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) or ANTHROPIC_API_KEY. -CopyCredentials also works but can log out your real CLI (see its help).'
     }
     if (Test-EnvSet 'ANTHROPIC_API_KEY') {
         Write-Host '[WARN] ANTHROPIC_API_KEY is set; claude -p prefers it, so these runs bill the API.' -ForegroundColor Yellow
@@ -210,8 +234,25 @@ function Set-FileText {
 
 # ---- claude invocation -------------------------------------------------------
 
+function Get-StepFileName {
+    param([string]$StepName, [string]$Kind)
+    if ($StepName -eq 'result') {
+        if ($Kind -eq 'json') { return 'result.json' } else { return 'stderr.txt' }
+    }
+    if ($Kind -eq 'json') { return "$StepName.result.json" } else { return "$StepName.stderr.txt" }
+}
+
+function Read-StepResult {
+    param([string]$RunDir, [string]$StepName)
+    $p = Join-Path $RunDir (Get-StepFileName $StepName 'json')
+    if ((Test-Path -LiteralPath $p) -eq $false) { return $null }
+    try { return (Get-Content -LiteralPath $p -Raw | ConvertFrom-Json -ErrorAction Stop) } catch { return $null }
+}
+
 function Invoke-ClaudeRun {
-    param([string]$RunDir, [string]$FakeHome, [string]$Workspace, [string]$Prompt)
+    # StepName 'result' keeps the single-turn file names (result.json, stderr.txt).
+    param([string]$RunDir, [string]$FakeHome, [string]$Workspace, [string]$Prompt,
+        [string]$StepName = 'result', [string]$Resume)
 
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     # Same resolution as tests/e2e/run-e2e.ps1 (a known-working invocation).
@@ -225,6 +266,7 @@ function Invoke-ClaudeRun {
         '--permission-mode', 'acceptEdits',
         '--dangerously-skip-permissions'
     )
+    if ([string]::IsNullOrEmpty($Resume) -eq $false) { $cliArgs += @('--resume', $Resume) }
     foreach ($a in $cliArgs) { $psi.ArgumentList.Add($a) }
     $psi.WorkingDirectory = $Workspace
     $psi.RedirectStandardOutput = $true
@@ -247,8 +289,8 @@ function Invoke-ClaudeRun {
     }
     $stdout = $stdoutTask.GetAwaiter().GetResult()
     $stderr = $stderrTask.GetAwaiter().GetResult()
-    [System.IO.File]::WriteAllText((Join-Path $RunDir 'result.json'), $stdout)
-    [System.IO.File]::WriteAllText((Join-Path $RunDir 'stderr.txt'), $stderr)
+    [System.IO.File]::WriteAllText((Join-Path $RunDir (Get-StepFileName $StepName 'json')), $stdout)
+    [System.IO.File]::WriteAllText((Join-Path $RunDir (Get-StepFileName $StepName 'stderr')), $stderr)
 
     $result = $null
     try { $result = $stdout | ConvertFrom-Json -ErrorAction Stop } catch { }
@@ -360,15 +402,122 @@ $feat03Mutate = {
         -Pattern '"ceiling":\s*"sonnet"' -Replacement '"ceiling": "opus"'
 }
 
+$t01ToS = {
+    param($ws)
+    Set-FileText -Path (Join-Path $ws $specRel '02-tasks.md') `
+        -Pattern '(?m)^- \*\*Estimated complexity\*\*: L\s*$' -Replacement '- **Estimated complexity**: S'
+}
+
+# T01 at S and Reversibility hard; T02 keeps its trivial. The pattern is
+# scoped to the T01 block by the lazy match up to the first Reversibility line.
+$t01Hard = {
+    param($ws)
+    & $t01ToS $ws
+    Set-FileText -Path (Join-Path $ws $specRel '02-tasks.md') `
+        -Pattern '(?s)(### T01 .*?- \*\*Reversibility\*\*: )trivial' -Replacement '${1}hard'
+}
+
+# feat03b: one cohesive feature that must touch all three production layers of
+# the fixture (domain, infrastructure, application), so the plan crosses Gate 2's
+# "spans > 2 production layers" threshold whatever the architect's discretion.
+$feat03bSpec = @'
+---
+id: FEAT-e2e-escalation-demo
+type: feature
+status: in-progress
+jira: none
+created: 2026-09-27
+complexity: S # replaced by the probe
+linked_specs: []
+---
+
+# E2E no-split escalation demo spec
+
+## Why
+
+Seeded fixture spec for tests/e2e/probe-model-override.ps1 case feat03b (SW-76). Users need to
+see which todos are overdue. The change is one cohesive feature, but it has to cross every
+production layer of the fixture.
+
+## What
+
+### SC-1: a todo carries an optional due date
+
+- **Given** a caller creating a todo with `dueDate` set to an ISO date string
+- **When** the domain factory `createTodo` in `src/domain/todo.js` validates it
+- **Then** the todo keeps `dueDate`, and an unparseable value throws `InvalidDueDateError`
+
+### SC-2: the store answers a due-before query
+
+- **Given** an `InMemoryStore` (`src/infrastructure/store.js`) holding todos with and without
+  due dates
+- **When** a caller calls `listDueBefore(date)`
+- **Then** it returns only the todos whose `dueDate` is before `date`, oldest first
+
+### SC-3: the service sets due dates and lists overdue todos
+
+- **Given** a `TodoService` (`src/application/todo-service.js`)
+- **When** a caller calls `setDueDate(id, date)` and then `listOverdue(now)`
+- **Then** `listOverdue` returns the open (not done) todos due before `now`, through the store query
+
+## Success criteria
+
+- [ ] AC-1: `createTodo` accepts and validates `dueDate` (domain layer).
+- [ ] AC-2: `InMemoryStore.listDueBefore(date)` exists and is tested (infrastructure layer).
+- [ ] AC-3: `TodoService.setDueDate` and `TodoService.listOverdue` exist and are tested
+  (application layer).
+
+## Out of scope
+
+- Time zones, recurring due dates, reminders.
+
+## Constitution check
+
+- Section 1.1 (dependency direction): domain knows nothing of the store; the service reads only
+  through the injected store.
+'@
+
+$feat03bMutate = {
+    param($ws)
+    $spec = Join-Path $ws $specRel '00-spec.md'
+    [System.IO.File]::WriteAllText($spec, $feat03bSpec, [System.Text.UTF8Encoding]::new($false))
+    & $feat03Mutate $ws 'M'
+}
+
+$feat03bFraming = @'
+
+
+This is a headless, scripted test run with no human available to reply mid-workflow. The line
+above is the reply to Gate 2. Apply that branch of Gate 2 exactly as written in /sd:feature,
+including any model escalation rule it names. Do not stop and wait for a real person.
+'@
+
+$feat03bRunTurn2 = 'no-split this is one cohesive due-date feature; the three layers change together' + $feat03bFraming + @'
+
+If that branch re-invokes Phase 3 and the new plan shows Gate 2 again, stop there. Stop before
+Phase 4: do not implement any task. Report which subagents ran and at which model in your last
+message.
+'@
+
+$feat03bCtlTurn2 = 'approve split' + $feat03bFraming + @'
+
+Stop once the child specs are created, registered and linked. Do not run /sd:feature on any
+child. Report which subagents ran and at which model in your last message.
+'@
+
+# Face B's option set (commands/feature.md Gate 2) is the only place 'no-split'
+# is offered, so seeing it in turn 1's last message means Face B was presented.
+$faceBShown = {
+    param($result)
+    return (($null -ne $result) -and ([string]$result.result -match 'no-split'))
+}
+
 $cases = @(
     [pscustomobject]@{
         Name = 'feat04'; Rules = 'ESC-FEAT-04'; Prompt = $feat04Prompt
         RunMutate = $null; RunArg = $null; CtlArg = $null
-        CtlMutate = {
-            param($ws)
-            Set-FileText -Path (Join-Path $ws $specRel '02-tasks.md') `
-                -Pattern '(?m)^- \*\*Estimated complexity\*\*: L\s*$' -Replacement '- **Estimated complexity**: S'
-        }
+        CtlMutate = $t01ToS
+        Turn2 = $null; CtlTurn2 = $null; Precondition = $null
         RunCheck = {
             param($rows)
             @(
@@ -387,6 +536,7 @@ $cases = @(
         Name = 'feat03'; Rules = 'ESC-FEAT-02, ESC-FEAT-03'; Prompt = $feat03Prompt
         RunMutate = $feat03Mutate; RunArg = 'L'
         CtlMutate = $feat03Mutate; CtlArg = 'M'
+        Turn2 = $null; CtlTurn2 = $null; Precondition = $null
         RunCheck = {
             param($rows)
             @(
@@ -398,6 +548,44 @@ $cases = @(
             param($rows)
             @(
                 @{ Name = 'every sd-code-explorer: model none or haiku, served haiku';    Pass = (Test-NoEscalation $rows 'sd-code-explorer' @('', 'haiku') 'claude-haiku*') },
+                @{ Name = 'every sd-spec-architect: model none or sonnet, served sonnet'; Pass = (Test-NoEscalation $rows 'sd-spec-architect' @('', 'sonnet') 'claude-sonnet*') }
+            )
+        }
+    },
+    [pscustomobject]@{
+        Name = 'feat04b'; Rules = 'ESC-FEAT-04b'; Prompt = $feat04Prompt
+        RunMutate = $t01Hard; RunArg = $null
+        CtlMutate = $t01ToS; CtlArg = $null
+        Turn2 = $null; CtlTurn2 = $null; Precondition = $null
+        RunCheck = {
+            param($rows)
+            @(
+                @{ Name = 'sd-implementer model=sonnet served sonnet (T01, hard)'; Pass = (Test-Row $rows 'sd-implementer' @('sonnet') 'claude-sonnet*') },
+                @{ Name = 'sd-implementer (model none or haiku) served haiku (T02)'; Pass = (Test-Row $rows 'sd-implementer' @('', 'haiku') 'claude-haiku*') }
+            )
+        }
+        CtlCheck = {
+            param($rows)
+            @(
+                @{ Name = 'every sd-implementer: model none or haiku, served haiku'; Pass = (Test-NoEscalation $rows 'sd-implementer' @('', 'haiku') 'claude-haiku*') }
+            )
+        }
+    },
+    [pscustomobject]@{
+        Name = 'feat03b'; Rules = 'ESC-FEAT-03b'; Prompt = $feat03Prompt
+        RunMutate = $feat03bMutate; RunArg = $null
+        CtlMutate = $feat03bMutate; CtlArg = $null
+        Turn2 = $feat03bRunTurn2; CtlTurn2 = $feat03bCtlTurn2; Precondition = $faceBShown
+        RunCheck = {
+            param($rows)
+            @(
+                @{ Name = 'sd-spec-architect (model none or sonnet) served sonnet (turn-1 plan)'; Pass = (Test-Row $rows 'sd-spec-architect' @('', 'sonnet') 'claude-sonnet*') },
+                @{ Name = 'sd-spec-architect model=opus served opus (no-split re-plan)'; Pass = (Test-Row $rows 'sd-spec-architect' @('opus') 'claude-opus*') }
+            )
+        }
+        CtlCheck = {
+            param($rows)
+            @(
                 @{ Name = 'every sd-spec-architect: model none or sonnet, served sonnet'; Pass = (Test-NoEscalation $rows 'sd-spec-architect' @('', 'sonnet') 'claude-sonnet*') }
             )
         }
@@ -429,12 +617,12 @@ foreach ($c in $cases) {
                 Exit-CannotRun "-EvaluateOnly: no earlier run at $runDir"
             }
             Write-Info "$runName : re-evaluating existing transcripts"
-            $prior = $null
-            $resultPath = Join-Path $runDir 'result.json'
-            if (Test-Path -LiteralPath $resultPath) {
-                try { $prior = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json -ErrorAction Stop } catch { }
+            $r = [pscustomobject]@{ ExitCode = 'n/a (EvaluateOnly)'; Result = (Read-StepResult -RunDir $runDir -StepName 'result') }
+            $r2 = $null
+            if ($null -ne $c.Turn2) {
+                $prior2 = Read-StepResult -RunDir $runDir -StepName 'turn2'
+                if ($null -ne $prior2) { $r2 = [pscustomobject]@{ ExitCode = 'n/a (EvaluateOnly)'; Result = $prior2 } }
             }
-            $r = [pscustomobject]@{ ExitCode = 'n/a (EvaluateOnly)'; Result = $prior }
         }
         else {
             Write-Info "$runName : building sandbox"
@@ -445,10 +633,23 @@ foreach ($c in $cases) {
 
             Write-Info "$runName : running claude -p (budget $BudgetUsd USD, timeout $TimeoutSec s)"
             $r = Invoke-ClaudeRun -RunDir $runDir -FakeHome $fakeHome -Workspace $ws -Prompt $c.Prompt
+            $r2 = $null
+            $turn2 = if ($variant -eq 'run') { $c.Turn2 } else { $c.CtlTurn2 }
+            if (($null -ne $turn2) -and (& $c.Precondition $r.Result)) {
+                $sid = [string]$r.Result.session_id
+                Write-Info "$runName : resuming session $sid for turn 2"
+                $r2 = Invoke-ClaudeRun -RunDir $runDir -FakeHome $fakeHome -Workspace $ws -Prompt $turn2 -StepName 'turn2' -Resume $sid
+            }
         }
         $rows = @(Get-SubagentEvidence -FakeHome $fakeHome)
 
         $checks = if ($variant -eq 'run') { & $c.RunCheck $rows } else { & $c.CtlCheck $rows }
+        if ($null -ne $c.Precondition) {
+            # A failed precondition means the rule's trigger was never reached:
+            # inconclusive, not evidence against the rule (Verdict B).
+            $pre = @{ Name = 'precondition: Gate 2 showed Face B and turn 2 ran (else inconclusive, not Verdict B)'; Pass = ((& $c.Precondition $r.Result) -and ($null -ne $r2)) }
+            $checks = @($pre) + @($checks)
+        }
 
         [void]$report.AppendLine("## $runName ($($c.Rules))")
         [void]$report.AppendLine('')
@@ -458,6 +659,9 @@ foreach ($c in $cases) {
         if (($null -ne $r.Result) -and ($null -ne $r.Result.modelUsage)) {
             $usage = ($r.Result.modelUsage.PSObject.Properties | ForEach-Object { "$($_.Name)=$($_.Value.outputTokens)" }) -join ', '
             [void]$report.AppendLine("- modelUsage output tokens (second-best evidence): $usage")
+        }
+        if (($null -ne $r2) -and ($null -ne $r2.Result)) {
+            [void]$report.AppendLine("- turn 2 (--resume): claude exit: $($r2.ExitCode); is_error: $($r2.Result.is_error); cost USD: $($r2.Result.total_cost_usd)")
         }
         $retro = Join-Path $ws $specRel '05-retro.md'
         if (Test-Path -LiteralPath $retro) {
@@ -509,7 +713,10 @@ else {
 [void]$report.AppendLine('')
 [void]$report.AppendLine($verdict)
 
-$reportPath = Join-Path $OutDir 'sw72-report.md'
+# -EvaluateOnly writes beside the live report, never over it: the live one holds
+# the claude version and exit codes that a re-evaluation cannot recover.
+$reportName = if ($EvaluateOnly) { 'sw72-report.evaluate.md' } else { 'sw72-report.md' }
+$reportPath = Join-Path $OutDir $reportName
 [System.IO.File]::WriteAllText($reportPath, $report.ToString(), [System.Text.UTF8Encoding]::new($false))
 Write-Host ''
 Write-Info "report: $reportPath"

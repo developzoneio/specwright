@@ -169,7 +169,10 @@ in this order, and prints the mode it picked:
 CI. It is the reproducible method behind ADR 0013. It checks that `/sd:feature` passes the Agent
 tool's `model` parameter when an escalation rule fires, and that the call is served on that tier.
 The evidence is subagent `meta.json` and transcript `message.model`, never the model's own
-account. Re-run it when the minimum `claude` version above is raised.
+account. Re-run it when the minimum `claude` version above is raised. It authenticates from
+`CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) or `ANTHROPIC_API_KEY`. `-CopyCredentials`
+copies `~/.claude/.credentials.json` into each fake home instead, which can rotate the refresh
+token and log out your real CLI.
 
 Two isolation facts it relies on also apply to this harness:
 

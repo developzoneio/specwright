@@ -100,6 +100,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`probe-model-override.ps1` cases `feat04b` and `feat03b`** (SW-76) - served-model evidence
+  for `ESC-FEAT-04b` (T01 at `S` with `Reversibility: hard`, vs. `trivial`) and `ESC-FEAT-03b`
+  (an `M` spec spanning three production layers, so Gate 2 shows Face B; the probe answers it in
+  a second `--resume` turn with `no-split`, vs. `approve split`). A turn 1 that shows Face A
+  reports the case as inconclusive, not Verdict B. The probe no longer copies
+  `~/.claude/.credentials.json` unless `-CopyCredentials` is passed; it wants
+  `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`. ADR 0013 records the results.
 - **`precompact-state` PreCompact hook: spec state survives a compaction** (SW-68) - new pair
   `hooks/powershell/precompact-state.ps1` and `hooks/bash/precompact-state.sh`, wired on
   `PreCompact` (matcher `*`, so both `manual` and `auto`; timeout 5 s) in

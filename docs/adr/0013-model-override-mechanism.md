@@ -85,8 +85,9 @@ ticket is reserved.
 
 Re-check this ADR when the pinned minimum Claude Code version in `tests/e2e/README.md` is raised,
 or when a release note changes subagent model resolution. The mechanism probe is the method above.
-The workflow probe is `tests/e2e/probe-model-override.ps1` (`-Case feat04|feat03|all`, about
-USD 4 per run, 2 runs per case). It is manual and paid, and is not part of `run-e2e.ps1` or CI.
+The workflow probe is `tests/e2e/probe-model-override.ps1`
+(`-Case feat04|feat03|feat04b|feat03b|all`, up to USD 4 per `claude -p` session, 2 sessions per
+case and 4 for `feat03b`). It is manual and paid, and is not part of `run-e2e.ps1` or CI.
 
 ## Workflow-level evidence
 
@@ -116,9 +117,54 @@ workflow and applies the same `meta.json` / `message.model` extraction as above.
 | `feat03` | control | every `sd-spec-architect` | none or `sonnet` | `claude-sonnet-*` |
 
 All seven checks passed. `ESC-FEAT-02`, `ESC-FEAT-03` and `ESC-FEAT-04` are applied by the
-workflow, and each call is served on the escalated tier. `ESC-FEAT-03b` and `ESC-FEAT-04b` were
-not exercised. They use the same Agent-call step, so they rest on the same evidence, but no run
-triggered them.
+workflow, and each call is served on the escalated tier.
+
+### `ESC-FEAT-03b` and `ESC-FEAT-04b` (SW-76)
+
+These two rules share the Agent-call step with the three above, but their trigger conditions are
+separate prose, and prose is what can fail silently (finding 1). So each got its own run and
+control.
+
+- Claude Code `2.1.283` (read from the transcripts), Windows, 2026-09-27, at commit `40732c6`
+  plus the SW-76 probe changes. Output dirs: `C:\sw76-feat04b` and `C:\sw76-feat03b`, on the
+  developer's machine, not committed. Auth came from `CLAUDE_CODE_OAUTH_TOKEN`; no credentials
+  file was copied.
+- `feat04b`: scenario 06 with T01 at `Estimated complexity: S` and `Reversibility: hard`, vs. the
+  same workspace with T01 at `S` and the default `trivial`. T02 is `S` / `trivial` in both.
+- `feat03b`: a `draft` spec at `complexity: M`, so `ESC-FEAT-02` and `03` do not fire, with the
+  `ceiling` at `opus`. Its scope (due dates) must touch all three production layers of the
+  fixture, which puts the plan over Gate 2's "spans > 2 production layers" threshold. Turn 1 ran
+  Phase 2 and 3 and stopped at Gate 2. The probe checked that turn 1's last message offered
+  `no-split`, which only Face B does. Turn 2 resumed the same session (`claude -p --resume`) with
+  the answer: `no-split` in the run, `approve split` in the control. A single-turn "standing
+  reply" was not used, so the HARD gate really halted and the answer arrived as a user turn.
+
+Transcripts are relative to each run's fake home, under
+`.claude\projects\<ws>\<session>\subagents\`:
+
+| Case | Run | `sd-*` subagent | `model` param | Served | Transcript |
+|---|---|---|---|---|---|
+| `feat04b` | hard | `sd-implementer` (T01) | `sonnet` | `claude-sonnet-5` | `e7fb8d4a-effd-4a85-886b-1680a3dbb2a2\subagents\agent-aea4ec4118a6d32c6.jsonl` |
+| `feat04b` | hard | `sd-implementer` (T02) | none | `claude-haiku-4-5-20251001` | `e7fb8d4a-...\agent-a2a676eb3b820399a.jsonl` |
+| `feat04b` | control | `sd-implementer` (T01) | none | `claude-haiku-4-5-20251001` | `30ba7981-a79c-444f-87d7-ee0b613beb9f\subagents\agent-ac66f9c2089699290.jsonl` |
+| `feat04b` | control | `sd-implementer` (T02) | none | `claude-haiku-4-5-20251001` | `30ba7981-...\agent-a942a030dd4909e6b.jsonl` |
+| `feat03b` | no-split | `sd-code-explorer` (Phase 2) | `haiku` | `claude-haiku-4-5-20251001` | `d6fb9a0a-d559-424d-aa84-db59f7aebeab\subagents\agent-a738af82e039a7964.jsonl` |
+| `feat03b` | no-split | `sd-spec-architect` (Phase 3 plan) | `sonnet` | `claude-sonnet-5` | `d6fb9a0a-...\agent-a728153e347576df2.jsonl` |
+| `feat03b` | no-split | `sd-spec-architect` (re-plan) | `opus` | `claude-opus-5-5` | `d6fb9a0a-...\agent-aef8642a534990449.jsonl` |
+| `feat03b` | control | `sd-code-explorer` (Phase 2) | none | `claude-haiku-4-5-20251001` | `0a4e2080-d55a-405b-a561-d1ea0d3f169c\subagents\agent-a418b74308945dfbd.jsonl` |
+| `feat03b` | control | `sd-spec-architect` (Phase 3 plan) | none | `claude-sonnet-5` | `0a4e2080-...\agent-a540c9bfcd4b5f18d.jsonl` |
+| `feat03b` | control | `sd-spec-architect` (3 child `create` calls) | none | `claude-sonnet-5` | `0a4e2080-...\agent-a6c83bcc7abfef0bb.jsonl`, `agent-a784605f80684bd42.jsonl`, `agent-a306a3428193e77d1.jsonl` |
+
+Every check passed, including both `feat03b` Face B preconditions. `ESC-FEAT-04b` and
+`ESC-FEAT-03b` are applied by the workflow, and each escalated call is served on the escalated
+tier. With these rows, all five `/sd:feature` rules have transcript evidence at the workflow
+level. The retro lines agreed (`sd-implementer haiku -> sonnet (trigger: ESC-FEAT-04b)`,
+`sd-spec-architect sonnet -> opus (trigger: ESC-FEAT-03b)`), but they are context, not evidence.
+
+In the `feat03b` run, turn 1 passed the frontmatter default explicitly (`haiku` to the explorer,
+`sonnet` to the architect) where no rule fired, while the control passed no `model` at all.
+Both resolve to the same tier and were served on it, so the checks accept an explicit default as
+"no escalation". A re-run can see either form.
 
 ### Findings from getting there
 
