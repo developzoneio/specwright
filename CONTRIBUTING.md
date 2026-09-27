@@ -47,8 +47,8 @@ specwright/
   commands/         # 14 slash commands (markdown with frontmatter)
   agents/           # 6 subagent definitions (markdown with frontmatter)
   hooks/
-    powershell/     # 5 PowerShell hooks
-    bash/           # 5 bash hooks (parity with PowerShell)
+    powershell/     # 6 PowerShell hooks
+    bash/           # 6 bash hooks (parity with PowerShell)
   templates/        # 4 setup templates
     specs/          # 6 spec templates
   install/          # install.ps1 + install.sh + install/README.md
@@ -571,7 +571,15 @@ echo '{"session_id":"test-session-001","trigger":"manual","transcript_path":"/pa
   | bash hooks/bash/precompact-state.sh
 ```
 
-Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a warning to stderr, or stays silent.
+**stop-gate (Stop):** silent unless `hooks.stopGate.enabled` is `true` in the repo's
+`.claude/project-config.json` and the newest spec named in the transcript is past a HARD gate
+without its evidence. Re-run with `"stop_hook_active":true` to see the re-fire allowed.
+```bash
+echo '{"session_id":"test-session-001","transcript_path":"/path/to/transcript.jsonl","cwd":"/path/to/repo","stop_hook_active":false}' \
+  | bash hooks/bash/stop-gate.sh
+```
+
+Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a `{"decision":"block",...}` object to stdout (spec-gate, stop-gate), prints a warning to stderr, or stays silent.
 
 ---
 

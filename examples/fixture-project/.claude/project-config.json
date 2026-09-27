@@ -118,6 +118,10 @@
   },
 
   "hooks": {
+    "stopGate": {
+      "enabled": true,
+      "_use": "Enabled here on purpose (SW-69): the nightly e2e runs clean workflows through this project, which is the evidence ADR 0016 asks for before the default could ever flip to on"
+    },
     "userPromptRouter": {
       "enabled": true,
       "_use": "Keyword routing + spec-context injection on every user prompt"

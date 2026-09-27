@@ -364,7 +364,9 @@ Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Byp
 Write-Info '       "SubagentStop": [{"matcher":"*","hooks":[{"type":"command",'
 Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/subagent-retro.ps1" + '","timeout":3}]}],')
 Write-Info '       "PreCompact": [{"matcher":"*","hooks":[{"type":"command",'
-Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/precompact-state.ps1" + '","timeout":5}]}]')
+Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/precompact-state.ps1" + '","timeout":5}]}],')
+Write-Info '       "Stop": [{"matcher":"*","hooks":[{"type":"command",'
+Write-Info ("         " + '"command":"powershell -NoProfile -ExecutionPolicy Bypass -File ' + '${HOME}/.claude/hooks/' + "$Prefix/stop-gate.ps1" + '","timeout":5}]}]')
 Write-Info '     }'
 Write-Info '   (Or run /sd:setup in your project - it generates settings.json automatically.)'
 Write-Info '   (Have PowerShell 7+ (pwsh) installed? See templates/settings.template.json ->'

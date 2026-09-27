@@ -529,6 +529,9 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
     "precompactState": {
       "enabled": true
     },
+    "stopGate": {
+      "enabled": false
+    },
     "userPromptRouter": {
       "enabled": true
     },
@@ -548,6 +551,11 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
 **Common adjustments:**
 
 - Tightening: change `specGate.mode` from `"warn"` to `"block"` once your team is used to the workflow.
+- Enforcing HARD gates at turn close-out: set `stopGate.enabled` to `true`. The Stop hook then
+  refuses to end a turn when the spec being driven is past a HARD gate without that gate's
+  evidence on disk (bug reproduction, perf baseline, rca hypothesis tree, port freeze / tables /
+  pinning / parity), and says which gate and what is missing. It blocks once; the next stop goes
+  through. Off by default - see `docs/adr/0016-stop-gate-detection-rules.md`.
 - Loosening: set `enabled: false` on any hook during noisy debug sessions. Don't forget to flip back.
 - Pace tuning: `retroStaleMinutes` and `debounceMinutes` control how often the retro reminder fires. Set both higher for long-form work; lower for tight iteration cycles.
 

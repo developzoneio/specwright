@@ -100,6 +100,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`stop-gate` Stop hook: a turn cannot close past a skipped HARD gate** (SW-69, ADR 0016) - new
+  pair `hooks/powershell/stop-gate.ps1` and `hooks/bash/stop-gate.sh`, wired on `Stop` (timeout
+  5 s) in `templates/settings.template.json`, `examples/fixture-project` and the installers'
+  printed snippet. **Opt-in and off by default:** it acts only when `hooks.stopGate.enabled` is the
+  literal JSON `true` (new key in `templates/project-config.template.json`, shipped `false`; an
+  absent key also means off). This changes the workflow contract, so it is a minor-version change.
+  - **What it checks.** The spec the session was driving: the newest spec ID in the last 256 KB of
+    the transcript with a `00-spec.md` that is not `done`/`archived`. There is no index fallback,
+    so a turn that never touched a spec is never blocked. By the spec's `type:` it evaluates seven
+    invariants, each "later-phase evidence on disk AND this HARD gate's evidence missing": bug
+    Gate 2 (reproduction), perf Gate 2 (baseline artifact, Results log row 0, measured current
+    value), rca Gate 2 (hypothesis tree - the SW-51 case), and port Gates 1, 2, 3 and 6 (freeze,
+    tables, behavior pinning, parity). A spec sitting *at* a gate never fires.
+  - **How it blocks.** stdout `{"decision":"block","reason":"..."}` and exit 0, which ADR 0015
+    showed blocks Stop like exit 2. The reason names the spec, each skipped gate, what is missing
+    and the later-phase evidence. The re-fire (`stop_hook_active: true`) is always allowed, so an
+    unsatisfiable gate cannot loop. Every failure path, and missing or malformed state, exits 0
+    silently.
+  - **Evidence.** 28 conformance cases in `tests/hooks/fixtures/stop-gate/` (one block case per
+    rule plus a multi-gate case, 9 clean turns that must not block, 8 malformed or missing-state
+    cases, subdir cwd, custom prefixes, a CRLF jq), bash == pwsh == golden. It is enabled in
+    `examples/fixture-project`, so the nightly e2e shows clean runs are not blocked before any
+    default-on. Latency p95 546 ms (5.1) / 660 ms (pwsh) on one workstation, budget 1000 / 1300 ms.
 - **`probe-model-override.ps1` cases `feat04b` and `feat03b`** (SW-76) - served-model evidence
   for `ESC-FEAT-04b` (T01 at `S` with `Reversibility: hard`, vs. `trivial`) and `ESC-FEAT-03b`
   (an `M` spec spanning three production layers, so Gate 2 shows Face B; the probe answers it in

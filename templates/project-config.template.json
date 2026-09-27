@@ -131,6 +131,10 @@
       "enabled": true,
       "_use": "Before a compaction (manual or auto), record which spec the session was working on in .claude/.hookstate/, so sessionContext can re-inject it after the compaction (SW-68). Silent, and never blocks the compaction"
     },
+    "stopGate": {
+      "enabled": false,
+      "_use": "Opt-in (SW-69, ADR 0016). true: refuse to end a turn when the spec the session was driving is past a HARD gate without that gate's evidence on disk - bug reproduction, perf baseline, rca hypothesis tree, port freeze/tables/pinning/parity. Blocks once per stop with a reason naming the gate; never blocks the re-fire. An absent key means off"
+    },
     "userPromptRouter": {
       "enabled": true,
       "_use": "Per-prompt routing hints on every user prompt: workflow keywords and ticket IDs (with matching spec folders). In-progress specs moved to sessionContext (SW-67)"

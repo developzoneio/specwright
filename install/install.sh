@@ -388,7 +388,9 @@ info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/spec-gate.sh\
 info "       \"SubagentStop\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/subagent-retro.sh\",\"timeout\":3}]}],"
 info "       \"PreCompact\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
-info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/precompact-state.sh\",\"timeout\":5}]}]"
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/precompact-state.sh\",\"timeout\":5}]}],"
+info "       \"Stop\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/stop-gate.sh\",\"timeout\":5}]}]"
 info "     }"
 info "   (Or run /sd:setup in your project - it generates settings.json automatically.)"
 

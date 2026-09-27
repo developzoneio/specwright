@@ -12,7 +12,7 @@ specwright is a thin layer on top of Claude Code that enforces spec-driven devel
 |                                                                    |
 |    commands/sd/    14 workflow definitions                         |
 |    agents/sd/      6 subagent prompt files                         |
-|    hooks/sd/       5 cross-platform hook scripts                   |
+|    hooks/sd/       6 cross-platform hook scripts                   |
 |    templates/sd/   4 setup + 6 spec templates                      |
 |    skills/sd/      11 reusable rule packs (agents + commands)      |
 |                                                                    |
@@ -188,10 +188,11 @@ A skill is **not** an agent. It cannot be invoked directly, has no tools of its 
 
 ## Hooks as context injection, guardrails, and recording
 
-5 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
+6 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
 `session-context` and `prompt-router` inject context, `spec-gate` guards edits (and records),
-`subagent-retro` reminds about stale retros (and records), and `precompact-state` records which
-spec a session was driving so `session-context` can re-inject it after a compaction.
+`subagent-retro` reminds about stale retros (and records), `precompact-state` records which
+spec a session was driving so `session-context` can re-inject it after a compaction, and
+`stop-gate` (opt-in) guards turn close-out against a skipped HARD gate.
 
 ### `session-context` (`SessionStart`)
 
@@ -308,6 +309,30 @@ point is SessionStart. So the hook prints nothing.
 Exit 2 on PreCompact **blocks the compaction** (ADR 0015), so this hook exits 0 on every path,
 failures included. It is a no-op without a `.specs/` tree and index. Opt out with
 `hooks.precompactState.enabled: false`.
+
+### `stop-gate` (`Stop`)
+
+Opt-in: it does nothing unless `hooks.stopGate.enabled` is the literal JSON `true` (ADR 0016).
+When the main thread tries to end its turn, it picks the spec the session was driving the same
+way `precompact-state` does - the newest spec ID in the last 256 KB of `transcript_path` with a
+`00-spec.md`, not `done` or `archived` - but with no index fallback, so a turn that never touched
+a spec is never blocked. It then checks that spec against a fixed table of invariants keyed on its
+`type:`. Each rule pairs one HARD gate with *later-phase evidence on disk* and *the gate's own
+evidence missing*, and fires only when both hold:
+
+| Rule | Fires when |
+|---|---|
+| bug Gate 2 | status `approved`/`in-progress` or `03-decisions.md` exists, while `## Reproduction` still has `<<...>>` fields (unless the retro logs a constitution exception) |
+| perf Gate 2 | Phase 3+ evidence exists while the baseline artifact, Results log row 0 or the measured `Current observed` is missing |
+| rca Gate 2 (SW-51) | the root cause is written or the status moved on, while `## Hypothesis tree` still holds its `<<PHASE-2:` field |
+| port Gates 1, 2, 3, 6 | later-phase artifacts exist while `MANIFEST.md`/`Frozen: yes`, filled tables, `## Behavior pinning` or `parity/INDEX.md` is missing |
+
+A hit prints `{"decision":"block","reason":"..."}` and exits 0 - Stop's own schema, which blocks
+exactly like exit 2 (ADR 0015). The reason names the spec, the gate, what is missing and the
+later-phase evidence, and tells the model to return to the gate and STOP for the user. The re-fire
+carries `stop_hook_active: true` and is always allowed, so a gate the model cannot satisfy never
+loops. The table restates what the command files require at each gate: changing a HARD gate's
+evidence in `commands/` means changing both hook twins and their fixtures.
 
 ### Event log (`.specs/_metrics/events.jsonl`)
 
@@ -464,7 +489,9 @@ These are rough ballparks. Actual cost depends on file sizes, MCP usage, and con
 Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
 `Edit|Write|MultiEdit|Bash|PowerShell` (a shell command with no write marker exits before any
 disk read), `prompt-router` on every prompt, `subagent-retro` after every subagent,
-`session-context` once per session entry point, `precompact-state` once per compaction, and each
+`session-context` once per session entry point, `precompact-state` once per compaction,
+`stop-gate` once per turn end (even when disabled - the process starts before it reads the
+flag), and each
 one is a fresh process: interpreter start-up, script parse, then the hook's own work.
 The PowerShell twins pay far more start-up than the bash ones.
 
@@ -498,7 +525,8 @@ workstation (2026-09-26, 10 iterations per case) it measured p95 399 ms under po
 556 ms under pwsh, in line with `prompt-router`; its CI budget copies `prompt-router`'s.
 `precompact-state` (SW-68) came later still. On the same workstation (2026-09-26, 15 iterations
 per case) it measured p95 397 ms under powershell and 532 ms under pwsh, and it reuses
-`session-context`'s budget.
+`session-context`'s budget. `stop-gate` (SW-69) measured p95 546 ms under powershell and 660 ms under pwsh
+(2026-09-27, 15 iterations per case, same workstation) and reuses the same budget.
 
 For comparison, the bash `spec-gate` on the same Linux container measured p50 104 ms and p95
 119 ms on the `block-protected-path` case (a shell loop timing 30 runs; the bash twins are not
@@ -507,7 +535,7 @@ covered by `measure-latency.ps1`).
 **What the numbers say.**
 
 - **No hook comes near its timeout.** The worst p95 anywhere is 650 ms, against 5 s
-  (`spec-gate`, `prompt-router`, `session-context`, `precompact-state`) and 3 s (`subagent-retro`). An implement phase touching 40 files
+  (`spec-gate`, `prompt-router`, `session-context`, `precompact-state`, `stop-gate`) and 3 s (`subagent-retro`). An implement phase touching 40 files
   pays roughly 40 x 0.5 s = 20 s of `spec-gate` overhead, which is real but not a timeout risk.
 - **pwsh is not faster everywhere.** On windows-latest, Windows PowerShell 5.1 beat pwsh by about
   20% on every hook. On a developer workstation measured earlier in SW-50, it was the reverse:
