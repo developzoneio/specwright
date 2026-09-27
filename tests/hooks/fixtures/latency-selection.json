@@ -28,5 +28,10 @@
     "silent-default-off",
     "block-bug-repro-skipped",
     "block-port-multiple-gates"
+  ],
+  "handoff-integrity": [
+    "silent-default-off",
+    "silent-in-scope-edit",
+    "flag-out-of-scope-edit"
   ]
 }

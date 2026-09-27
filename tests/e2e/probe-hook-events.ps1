@@ -26,7 +26,8 @@
 
     Question map (SW-66):
       Q1 blocking   stop-exit2, stop-json, subagentstop-exit2,
-                    precompact-exit2 (+ precompact-control), posttooluse-exit2
+                    precompact-exit2 (+ precompact-control), posttooluse-exit2,
+                    posttooluse-json (SW-70)
       Q2 prompt     prompt-<Event> for Stop, SubagentStop, UserPromptSubmit,
                     PreToolUse, PostToolUse, SessionStart, PreCompact
       Q3 source     sessionstart-source (fresh, --continue, --resume,
@@ -410,6 +411,9 @@ $cases.Add([pscustomobject]@{ Name = 'subagentstop-exit2'; Q = 'Q1'; Event = 'Su
 $cases.Add([pscustomobject]@{ Name = 'precompact-exit2'; Q = 'Q1'; Event = 'PreCompact'; Modes = @{ PreCompact = 'exit2' }; Allow = @(); Steps = $compactSteps })
 $cases.Add([pscustomobject]@{ Name = 'precompact-control'; Q = 'Q1'; Event = 'PreCompact'; Modes = @{}; Allow = @(); Steps = $compactSteps })
 $cases.Add([pscustomobject]@{ Name = 'posttooluse-exit2'; Q = 'Q1'; Event = 'PostToolUse'; Modes = @{ PostToolUse = 'exit2' }; Allow = @('Write'); Steps = @(New-Step 's1' $writePrompt) })
+# SW-70: handoff-integrity flags through a JSON decision with exit 0, the channel
+# ADR 0015 observed on Stop but not on PostToolUse.
+$cases.Add([pscustomobject]@{ Name = 'posttooluse-json'; Q = 'Q1'; Event = 'PostToolUse'; Modes = @{ PostToolUse = 'json' }; Allow = @('Write'); Steps = @(New-Step 's1' $writePrompt) })
 
 # Q2 - is a prompt-type hook accepted and effective on the event?
 foreach ($ev in @('Stop', 'SubagentStop', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'PreCompact')) {
@@ -527,7 +531,7 @@ function Get-CaseObservation {
             $toModel = Test-TextInFiles $transcripts 'SW66-TOKEN-PostToolUse'
             $lines.Add("PostToolUse fired $($mine.Count)x (tools: $(($mine | ForEach-Object { if ($null -ne $_.Payload) { $_.Payload.tool_name } }) -join ',')); probe.txt exists: $exists (content '$content'); token in transcript: $toModel")
             if ($mine.Count -eq 0) { $conclusive = $false; $lines.Add('INCONCLUSIVE: PostToolUse never fired (was Write allowed?)') }
-            else { $lines.Add("OBSERVED: PostToolUse exit2 $(if ($exists) { 'does NOT undo the write' } else { 'the file is absent (undone or never written)' }); stderr $(if ($toModel) { 'DOES' } else { 'does NOT' }) reach the model") }
+            else { $lines.Add("OBSERVED: PostToolUse $($C.Modes['PostToolUse']) $(if ($exists) { 'does NOT undo the write' } else { 'the file is absent (undone or never written)' }); the hook message $(if ($toModel) { 'DOES' } else { 'does NOT' }) reach the model") }
         }
         'prompt-*' {
             # Verdict comes from the debug log only. The token is NOT evidence

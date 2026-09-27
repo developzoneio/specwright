@@ -77,7 +77,7 @@ fi
 #   4. cwd itself - the pre-SW-78 behaviour.
 # Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
 # left behind by an older hook cannot shadow a configured root. Pure string
-# walk, no `cd`/`realpath`. Identical in all six hooks; mirrors
+# walk, no `cd`/`realpath`. Identical in all seven hooks; mirrors
 # Resolve-ProjectRoot in the .ps1 twins.
 resolve_project_root() {
     local start="${1//\\//}"
@@ -106,7 +106,7 @@ resolve_project_root() {
 project_root="$(resolve_project_root "${cwd}")"
 
 # --- load config --------------------------------------------------------------
-# Unlike the other five hooks this one is opt-in (ADR 0016): a missing or
+# Like handoff-integrity, and unlike the other hooks, this one is opt-in (ADR 0016): a missing or
 # malformed config leaves `{}`, which reads as disabled below.
 config_path="${project_root}/.claude/project-config.json"
 config_json="{}"

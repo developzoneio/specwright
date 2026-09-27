@@ -314,6 +314,39 @@ Write-Section 'stop-gate (PowerShell): re-fire with stop_hook_active - silent'
 Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($sgPayload -replace '"stop_hook_active":false', '"stop_hook_active":true')
 Assert-Exit0 'stop-gate re-fire' $script:Code
 Assert-Empty 'stop-gate re-fire' $script:Stdout
+
+# ---- handoff-integrity: an edit outside the ready task's Files is flagged (SW-70)
+
+# Its own workspace, for the same reason as stop-gate: the hook is opt-in.
+$hi = Join-Path $fixture 'handoff-ws'
+New-Item -ItemType Directory -Force -Path (Join-Path $hi '.claude'), (Join-Path $hi '.specs\FEAT-SMOKE-1') | Out-Null
+Set-Content -LiteralPath (Join-Path $hi '.specs\FEAT-SMOKE-1\00-spec.md') -Encoding UTF8 -NoNewline `
+    -Value "---`nid: FEAT-SMOKE-1`ntype: feature`nstatus: in-progress`n---`n"
+Set-Content -LiteralPath (Join-Path $hi '.specs\FEAT-SMOKE-1\02-tasks.md') -Encoding UTF8 -NoNewline `
+    -Value "### T01 - Add service`n`n- **Files**: src/service.ts`n- **Depends on**: none`n- **Status**: open`n"
+Set-Content -LiteralPath (Join-Path $hi 'transcript.jsonl') -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"/sd:feature SMOKE-1 (FEAT-SMOKE-1)"}}'
+$hiCfg = Join-Path $hi '.claude\project-config.json'
+$hiEsc = $hi -replace '\\', '\\\\'
+$hiPayload = "{`"session_id`":`"smoke-ptu`",`"cwd`":`"$hiEsc`",`"transcript_path`":`"$hiEsc\\transcript.jsonl`",`"tool_name`":`"Edit`",`"tool_input`":{`"file_path`":`"$hiEsc\\src\\other.ts`"}}"
+
+Write-Section 'handoff-integrity (PowerShell): off by default - silent'
+Set-Content -LiteralPath $hiCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\handoff-integrity.ps1') $hiPayload
+Assert-Exit0 'handoff-integrity default off' $script:Code
+Assert-Empty 'handoff-integrity default off' $script:Stdout
+
+Write-Section 'handoff-integrity (PowerShell): enabled, out-of-scope edit - flagged'
+Set-Content -LiteralPath $hiCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"},"hooks":{"handoffIntegrity":{"enabled":true}}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\handoff-integrity.ps1') $hiPayload
+Assert-Exit0 'handoff-integrity out of scope' $script:Code
+Assert-Contains 'handoff-integrity out of scope' $script:Stdout '"decision":"block"'
+Assert-Contains 'handoff-integrity out of scope' $script:Stdout 'src/other.ts is outside the declared Files'
+
+Write-Section 'handoff-integrity (PowerShell): in-scope edit - silent'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\handoff-integrity.ps1') ($hiPayload -replace 'other\.ts', 'service.ts')
+Assert-Exit0 'handoff-integrity in scope' $script:Code
+Assert-Empty 'handoff-integrity in scope' $script:Stdout
 if ($null -ne $savedProjectDir) { $env:CLAUDE_PROJECT_DIR = $savedProjectDir }
 
 # ---- cleanup + summary --------------------------------------------------------

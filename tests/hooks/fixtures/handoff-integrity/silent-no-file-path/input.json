@@ -1,0 +1,1 @@
+{"session_id": "conformance-fixture", "transcript_path": "{{ROOT}}/transcript.jsonl", "cwd": "{{CWD}}", "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_input": {}, "tool_response": {"filePath": "{{ROOT}}/src/util/strings.ts", "success": true}}

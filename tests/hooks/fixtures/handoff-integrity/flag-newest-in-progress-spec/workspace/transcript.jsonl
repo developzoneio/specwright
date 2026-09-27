@@ -1,0 +1,3 @@
+{"type": "user", "message": {"content": "/sd:feature TEST-001"}}
+{"type": "assistant", "message": {"content": "Executing T02 of FEAT-TEST-001 - SPEC_REF = .specs/FEAT-TEST-001/00-spec.md"}}
+{"type": "user", "message": {"content": "now FEAT-TEST-002"}}

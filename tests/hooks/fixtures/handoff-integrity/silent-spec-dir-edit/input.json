@@ -1,0 +1,1 @@
+{"session_id": "conformance-fixture", "transcript_path": "{{ROOT}}/transcript.jsonl", "cwd": "{{CWD}}", "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_input": {"file_path": "{{ROOT}}/.specs/FEAT-TEST-001/02-tasks.md", "old_string": "a", "new_string": "b"}, "tool_response": {"filePath": "{{ROOT}}/.specs/FEAT-TEST-001/02-tasks.md", "success": true}}

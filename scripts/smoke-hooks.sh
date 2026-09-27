@@ -304,6 +304,35 @@ section "stop-gate (bash): re-fire with stop_hook_active - silent"
 run_hook "$repo_root/hooks/bash/stop-gate.sh" "${payload/\"stop_hook_active\":false/\"stop_hook_active\":true}"
 assert_exit0 "stop-gate re-fire" "$CODE"
 assert_empty "stop-gate re-fire" "$STDOUT"
+
+# ---- handoff-integrity: an edit outside the ready task's Files is flagged (SW-70)
+
+# Its own workspace, for the same reason as stop-gate: the hook is opt-in.
+hi="$fixture/handoff-ws"
+mkdir -p "$hi/.claude" "$hi/.specs/FEAT-SMOKE-1"
+printf -- '---\nid: FEAT-SMOKE-1\ntype: feature\nstatus: in-progress\n---\n' > "$hi/.specs/FEAT-SMOKE-1/00-spec.md"
+printf -- '### T01 - Add service\n\n- **Files**: src/service.ts\n- **Depends on**: none\n- **Status**: open\n' \
+    > "$hi/.specs/FEAT-SMOKE-1/02-tasks.md"
+printf '%s\n' '{"type":"user","message":{"content":"/sd:feature SMOKE-1 (FEAT-SMOKE-1)"}}' > "$hi/transcript.jsonl"
+payload="$(printf '{"session_id":"smoke-ptu","cwd":"%s","transcript_path":"%s/transcript.jsonl","tool_name":"Edit","tool_input":{"file_path":"%s/src/other.ts"}}' "$hi" "$hi" "$hi")"
+
+section "handoff-integrity (bash): off by default - silent"
+printf '%s\n' '{"spec":{"dir":".specs"}}' > "$hi/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/handoff-integrity.sh" "$payload"
+assert_exit0 "handoff-integrity default off" "$CODE"
+assert_empty "handoff-integrity default off" "$STDOUT"
+
+section "handoff-integrity (bash): enabled, out-of-scope edit - flagged"
+printf '%s\n' '{"spec":{"dir":".specs"},"hooks":{"handoffIntegrity":{"enabled":true}}}' > "$hi/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/handoff-integrity.sh" "$payload"
+assert_exit0 "handoff-integrity out of scope" "$CODE"
+assert_contains "handoff-integrity out of scope" "$STDOUT" '"decision":"block"'
+assert_contains "handoff-integrity out of scope" "$STDOUT" "src/other.ts is outside the declared Files"
+
+section "handoff-integrity (bash): in-scope edit - silent"
+run_hook "$repo_root/hooks/bash/handoff-integrity.sh" "${payload/other.ts/service.ts}"
+assert_exit0 "handoff-integrity in scope" "$CODE"
+assert_empty "handoff-integrity in scope" "$STDOUT"
 [[ -n "$saved_project_dir" ]] && export CLAUDE_PROJECT_DIR="$saved_project_dir"
 
 # ---- summary -----------------------------------------------------------------

@@ -1,0 +1,1 @@
+{"session_id": "conformance-fixture", "transcript_path": "{{ROOT}}/transcript.jsonl", "cwd": "{{CWD}}", "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/tmp/sd-scratch/notes.md", "old_string": "a", "new_string": "b"}, "tool_response": {"filePath": "/tmp/sd-scratch/notes.md", "success": true}}

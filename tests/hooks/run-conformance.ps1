@@ -626,7 +626,12 @@ function ConvertTo-StopGateDecision {
     }
 }
 
+# handoff-integrity (SW-70) flags an out-of-scope edit with the same output
+# shape: stdout {"decision":"block","reason"} and exit 0 (ADR 0017), or
+# nothing. On PostToolUse the edit is already on disk; "block" only routes the
+# reason to the model. The stop-gate normalizer reads it unchanged.
 $hookNormalizers = @{
+    'handoff-integrity' = ${function:ConvertTo-StopGateDecision}
     'spec-gate'       = ${function:ConvertTo-SpecGateDecision}
     'prompt-router'   = ${function:ConvertTo-PromptRouterDecision}
     'subagent-retro'  = ${function:ConvertTo-SubagentRetroDecision}

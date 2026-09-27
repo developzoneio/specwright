@@ -63,7 +63,7 @@ function Read-StdinJson {
 #   4. Cwd itself - the pre-SW-78 behaviour.
 # Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
 # left behind by an older hook cannot shadow a configured root. Identical in all
-# six hooks; mirrors resolve_project_root in the .sh twins.
+# seven hooks; mirrors resolve_project_root in the .sh twins.
 function Resolve-ProjectRoot {
     param([string]$Cwd)
     $envRoot = $env:CLAUDE_PROJECT_DIR
@@ -89,7 +89,7 @@ function Resolve-ProjectRoot {
 }
 
 # A missing or malformed config yields $null, which Test-HookEnabled reads as
-# OFF: unlike the other five hooks, this one is opt-in (ADR 0016).
+# OFF: like handoff-integrity, and unlike the other hooks, this one is opt-in (ADR 0016).
 function Get-ProjectConfig {
     param([string]$Root)
     $cfgPath = Join-Path $Root '.claude/project-config.json'
