@@ -43,11 +43,12 @@ been in a .NET project.
 ## Findings recorded while building it
 
 - `--permission-mode acceptEdits` silently overrides a `PreToolUse` hook's deny. Only `dontAsk`,
-  with no `--allowedTools` override, respects one. **Update (SW-80):** the `--allowedTools` half
-  was a spec-gate bug. Its deny JSON lacked `hookSpecificOutput.hookEventName`, so the CLI dropped
-  it whenever an allow rule matched. With that field, a deny wins over an explicit `Edit`/`Write`
-  grant under `dontAsk` (`claude` 2.1.283), and the scenarios that need writes now run that way
-  instead of with `--dangerously-skip-permissions`.
+  with no `--allowedTools` override, respects one. **Update (SW-80):** both halves were a
+  spec-gate bug. Its deny JSON lacked `hookSpecificOutput.hookEventName`, so the CLI dropped it
+  whenever the tool was already allowed. With that field, a deny wins over an explicit
+  `Edit`/`Write` grant, `acceptEdits` and `--dangerously-skip-permissions` alike (`claude`
+  2.1.283). The scenarios that need writes now run under `dontAsk` with a narrow grant instead of
+  with skip-permissions.
 - `spec-gate`'s matcher covers `Edit` / `Write` / `MultiEdit` only, not file writes made through
   `Bash`. **Update (SW-79):** the matcher now also covers `Bash` / `PowerShell`; a command that
   visibly writes a protected path or the spec index is denied, as a heuristic.

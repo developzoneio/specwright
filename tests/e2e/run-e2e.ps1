@@ -332,15 +332,17 @@ function Invoke-ClaudeHeadless {
     # finally block in Invoke-Scenario). Off by default - a transcript is
     # debugging evidence, not an assertion input.
     if (-not $env:SD_E2E_TRANSCRIPT) { $cliArgs += '--no-session-persistence' }
-    # Permission posture (SW-80, re-verified on claude 2.1.283 with an
-    # always-deny PreToolUse repro). dontAsk refuses every tool call no rule
+    # Permission posture (SW-80, verified on claude 2.1.283 with
+    # probe-permission-posture.ps1). dontAsk refuses every tool call no rule
     # allows, so a scenario that writes files or runs its test command grants
-    # exactly those via AllowedTools (allowed-tools.txt). A hook's deny still
-    # wins over that grant, provided the hook's JSON carries
-    # hookSpecificOutput.hookEventName - spec-gate's did not before SW-80,
-    # which is why an Edit/Write grant used to look like it overrode the deny.
-    # --dangerously-skip-permissions does override a deny, so it is kept only
-    # for 01-setup (writes .claude/settings.json, asserts no deny), and
+    # exactly those via AllowedTools (allowed-tools.txt). A hook's deny wins
+    # over that grant - and over acceptEdits and skip-permissions too -
+    # provided the hook's JSON carries hookSpecificOutput.hookEventName;
+    # spec-gate's did not before SW-80, which is why every one of those
+    # postures used to look like it overrode the deny. The narrow grant is
+    # still the point: acceptEdits and skip-permissions also let a Bash
+    # `echo x > file` through, which dontAsk refuses. Skip is kept only for
+    # 01-setup (writes .claude/settings.json, asserts no deny), and
     # Assert-ScenarioPosture refuses it for any scenario that asserts one.
     $cliArgs += '--permission-mode'
     $cliArgs += $PermissionMode
@@ -429,10 +431,13 @@ function Get-ScenarioAllowedTools {
 }
 
 function Assert-ScenarioPosture {
-    # SW-80: a scenario that asserts a hook deny must not run under a posture
-    # that overrides one, or its assertion measures nothing. The negative
-    # scenarios and any scenario with a permission-denied assertion count as
-    # asserting a deny. A misconfigured scenario exits 2 before any spend.
+    # SW-80: a scenario that asserts a hook deny runs under dontAsk with a
+    # narrow grant, never acceptEdits or skip-permissions. A well-formed deny
+    # holds under all of them, but those two also approve Bash file writes
+    # that only spec-gate's shell-write heuristic would catch, and SW-27 sets a
+    # no-skip-permissions bar. The negative scenarios and any scenario with a
+    # permission-denied assertion count as asserting a deny. A misconfigured
+    # scenario exits 2 before any spend.
     param([string]$ScenarioDir)
     $name = Split-Path -Leaf $ScenarioDir
     $expectPath = Join-Path $ScenarioDir 'expect.json'
@@ -445,7 +450,7 @@ function Assert-ScenarioPosture {
     $mode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
     if ((Get-ScenarioSkipPermissions -ScenarioDir $ScenarioDir) -or
         ($mode -in @('acceptEdits', 'bypassPermissions'))) {
-        Write-Host "[FAIL] scenario $name asserts a hook deny but runs under a posture that overrides one"
+        Write-Host "[FAIL] scenario $name asserts a hook deny but runs under a posture broader than dontAsk + a narrow grant"
         Write-Host '       (skip-permissions.txt, or permission-mode.txt acceptEdits/bypassPermissions).'
         Write-Host '       Grant what it needs in allowed-tools.txt instead. See tests/e2e/README.md "Permission mode".'
         exit 2

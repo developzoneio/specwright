@@ -14,20 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both implementations emitted `hookSpecificOutput` without `hookEventName`, so the CLI ignored
   the block. The legacy `decision: "block"` alone does not override an allow rule
   (`--allowedTools`, `permissions.allow`), so the edit went through and `permission_denials`
-  stayed empty. Verified on `claude` 2.1.283 with an always-deny `PreToolUse` repro under
-  `dontAsk` plus an `Edit`/`Write` grant: the old JSON let the file change; the same JSON with
+  stayed empty. `acceptEdits` and `--dangerously-skip-permissions` allow the tool too, so under
+  them spec-gate never blocked anything. Verified on `claude` 2.1.283 with an always-deny
+  `PreToolUse` repro (Linux and Windows): under `dontAsk` plus an `Edit`/`Write` grant,
+  `acceptEdits`, and skip-permissions, the old JSON let the file change; the same JSON with
   `hookEventName: "PreToolUse"`, or exit 2, kept it unchanged and recorded the denial. The hooks now
   emit `hookEventName` and the documented `permissionDecisionReason`; `decision: "block"` is kept
   for older CLIs. `run-conformance.ps1` fails any deny without `hookEventName`, and both smoke
-  scripts assert it. The README's claim that an explicit grant overrides a hook deny came from this
-  bug, not from the CLI.
+  scripts assert it. The README's claims that `acceptEdits`, an explicit grant, or
+  skip-permissions overrides a hook deny all came from this bug, not from the CLI.
 - **e2e `02-feature-happy` and `06`-`11` no longer run with `--dangerously-skip-permissions`
   (SW-80)** - they run under `dontAsk` with a narrow grant from a new `allowed-tools.txt` marker
   (`Edit`, `Write`, `MultiEdit`, plus `Bash(npm test:*)` where the workflow runs
   `commands.test`), so a spec-gate deny is enforced during the run. `02` now makes one deliberate
   edit to a protected path and asserts it is refused, through a new `permission-denied` assertion
   type that reads `permission_denials`. The runner exits 2 if a scenario that asserts a deny is
-  configured with skip-permissions, `acceptEdits` or `bypassPermissions`. `01-setup` keeps
+  configured with skip-permissions, `acceptEdits` or `bypassPermissions`: a well-formed deny holds
+  under those too, but they also let a `Bash` `echo x > file` through, which `dontAsk` refuses. `01-setup` keeps
   skip-permissions: it writes `.claude/settings.json` and asserts no deny. `06`'s
   "no `ESC-FEAT-04b` / `capped` / `unapplied`" assertion now reads `escalation:` lines only. The
   SW-80 run failed it on a correct retro, whose T02 note said "neither ESC-FEAT-04 nor

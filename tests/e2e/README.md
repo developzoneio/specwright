@@ -215,8 +215,10 @@ the runner passes them as `--allowedTools`. `02-feature-happy`, `06`-`08` grant 
 runs and grant only the three write tools. A `Bash` call outside the grant, such as
 `echo x > file`, is refused.
 
-**A hook's deny wins over that grant.** Verified 2026-09-28 on Linux, `claude` 2.1.283, with a
-minimal always-deny `PreToolUse` hook (no spec-gate logic) that denies any call touching one file:
+**A well-formed hook deny wins over every posture.** Verified 2026-09-28, `claude` 2.1.283, with
+`probe-permission-posture.ps1` (a minimal always-deny `PreToolUse` hook, no spec-gate logic, that
+denies any call touching one file). The `dontAsk` rows ran on Linux, the `acceptEdits` and skip
+rows on Windows 10.0.26200:
 
 | Posture | Ordinary `Write` | `npm test` | Denied `Edit` |
 |---|---|---|---|
@@ -225,23 +227,35 @@ minimal always-deny `PreToolUse` hook (no spec-gate logic) that denies any call 
 | `dontAsk` + `--allowedTools "Edit,Write,Bash(npm test:*)"` | written | ran | **refused**, in `permission_denials` |
 | `dontAsk` + the same rules in project `permissions.allow`, trusted workspace | written | ran | **refused**, in `permission_denials` |
 | same, workspace not trusted | refused (rules ignored) | refused | not reached |
+| `acceptEdits` | written | refused | **refused**, in `permission_denials` |
+| `acceptEdits` + `--allowedTools "Bash(npm test:*)"` | written | ran | **refused**, in `permission_denials` |
+| `acceptEdits` + `--dangerously-skip-permissions` | written | ran | **refused**, in `permission_denials` |
 
-The two **refused** cells hold only when the hook's JSON is well-formed:
+The **refused** cells hold only when the hook's JSON is well-formed:
 `hookSpecificOutput.hookEventName: "PreToolUse"` with `permissionDecision: "deny"`, or exit 2.
 spec-gate emitted `hookSpecificOutput` without `hookEventName` before SW-80. The CLI drops such a
-block, and the legacy `decision: "block"` alone does not beat an allow rule, so in both granted
-rows the file changed and `permission_denials` stayed empty. That is where the earlier claim in
-this section came from ("an explicit `--allowedTools` grant for Edit/Write ignores a hook's
-deny"). It was a spec-gate output bug, not CLI behavior, and SW-80 fixed it in both hooks.
+block, and the legacy `decision: "block"` alone does not beat an allow rule, so in every row
+that allows the `Edit` (the two granted `dontAsk` rows and all three `acceptEdits` rows) the file
+changed and `permission_denials` stayed empty. Both earlier claims in this section came from that
+("`acceptEdits` ignores a hook's deny", "an explicit `--allowedTools` grant for Edit/Write ignores
+a hook's deny"), and so did "`--dangerously-skip-permissions` overrides a hook's deny". All three
+were a spec-gate output bug, not CLI behavior, and SW-80 fixed it in both hooks.
 `tests/hooks/run-conformance.ps1` now fails any deny that lacks `hookEventName`.
 
-`--dangerously-skip-permissions` does override a hook's deny, and it is the one posture this
-harness still uses: `01-setup` writes `.claude/settings.json` and `.claude/project-config.json`,
-which Claude Code treats as sensitive, and asserts no deny. `acceptEdits` was reported to override a
-deny as well. That was not re-checked after the hook fix, so treat it as overriding. The runner
-enforces the rule: a scenario that asserts a deny (`03`, `04`, or any `permission-denied`
-assertion) exits `2` before any spend if it is configured with `skip-permissions.txt` or with
-`permission-mode.txt` set to `acceptEdits` or `bypassPermissions`.
+**Why scenarios still grant narrowly.** The posture no longer decides whether a deny holds, but it
+does decide what else goes through. `acceptEdits` and skip-permissions both let
+`echo x > file` run through `Bash`. That is the route spec-gate's `shell-write` rule covers only
+by a text heuristic (see gap #2 below). Under `dontAsk` with a narrow grant it is refused. That
+also keeps SW-27's "no skip-permissions" bar. `01-setup` is the one scenario that still uses
+skip-permissions: it writes `.claude/settings.json` and `.claude/project-config.json`, which Claude
+Code treats as sensitive, and asserts no deny. The runner enforces the rule: a scenario that
+asserts a deny (`03`, `04`, or any `permission-denied` assertion) exits `2` before any spend if it
+is configured with `skip-permissions.txt` or with `permission-mode.txt` set to `acceptEdits` or
+`bypassPermissions`.
+
+A consequence for `03` and `04`: they run under `dontAsk` with no grant, so the mode refuses their
+`Edit` whether or not the hook's JSON is well-formed. Their `events.jsonl` assertions prove the
+hook decided to block; `run-conformance.ps1` is what proves the CLI will honor that decision.
 
 **Live run, 2026-09-28** (Linux, `claude` 2.1.283, pwsh 7.4.6, one `-Case` at a time, the
 fixture's `powershell` hook commands resolved to `pwsh`): `02` passed 14/14 ($2.00, 697 s), with
@@ -263,8 +277,10 @@ $env:CLAUDE_CODE_OAUTH_TOKEN = '<from claude setup-token>'
 .\tests\e2e\probe-permission-posture.ps1 -Posture acceptedits,skip -HookFormat fixed
 ```
 
-Its first run (Linux, `claude` 2.1.283, 2026-09-28, the five `dontAsk` postures x three formats)
-matched the table above cell for cell.
+Its first runs, 2026-09-28 on `claude` 2.1.283, are the table above: the five `dontAsk` postures x
+`legacy` / `fixed` / `exit2` on Linux, and `acceptedits`, `acceptedits-bash`, `skip` and
+`dontask-grant` x `legacy` / `fixed` on Windows. `fixed` and `exit2` held the deny in every run
+that reached the hook; `legacy` was overridden in every run that allowed the `Edit`.
 
 ## Scenario prompts: honest framing, not persuasion
 

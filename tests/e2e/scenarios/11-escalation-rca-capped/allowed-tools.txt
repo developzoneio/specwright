@@ -1,5 +1,5 @@
 # Permission rules granted under dontAsk (SW-80), one per line: spec-artifact writes only; this workflow phase runs no test command.
-# A spec-gate deny still wins over these; --dangerously-skip-permissions would not keep it.
+# A spec-gate deny still wins over these. Other shell writes stay refused, unlike under acceptEdits.
 Edit
 Write
 MultiEdit
