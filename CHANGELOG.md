@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "no `ESC-FEAT-04b` / `capped` / `unapplied`" assertion now reads `escalation:` lines only. The
   SW-80 run failed it on a correct retro, whose T02 note said "neither ESC-FEAT-04 nor
   ESC-FEAT-04b fired". That is a prose match, which the harness's rule forbids.
+  New manual probe `tests/e2e/probe-permission-posture.ps1` re-runs the posture repro (8 postures
+  x `legacy` / `fixed` / `exit2` hook JSON) and reads the outcome from disk and
+  `permission_denials`, never from the model's reply.
 - **`hooks/bash/spec-gate.sh` recorded a stray CR with a native Windows jq** - a native
   `jq.exe` (e.g. jq 1.8.1 from winget) ends every output line with CRLF, and Git Bash's `$(...)`
   trims only the last one. Rule 0b's `id<TAB>from<TAB>to` loop kept the CR on `to`, so a

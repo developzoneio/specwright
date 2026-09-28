@@ -249,13 +249,22 @@ its constitution edit in `permission_denials`, the file unchanged, and a `protec
 recorded. `03`, `04`, `07`-`11` passed. `06` failed one assertion on a correct retro: T02's note
 mentioned `ESC-FEAT-04b` in prose. That assertion now reads `escalation:` lines only.
 
-**Re-verifying.** Build a throwaway workspace whose `.claude/settings.json` wires one `PreToolUse`
-hook on `Edit|Write|Bash` that denies a single file name, and run `claude -p` in it with
-`HOME` pointed at an empty fake home, `--setting-sources project`, `--permission-mode dontAsk`
-and the grant under test. Ask for four calls: a `Write` to a new file, an `Edit` to the denied
-file, `npm test`, and `echo x > file`. Read the result from disk and from `permission_denials`,
-not from the model's reply. Run it once with spec-gate's exact JSON, once with a known-good JSON,
-so a hook-output bug cannot pass for CLI behavior again.
+**Re-verifying.** `probe-permission-posture.ps1` is the repro as a script: manual, paid (about
+$0.03 a run with haiku), not part of `run-e2e.ps1` or CI. It builds a throwaway workspace whose
+`PreToolUse` hook denies one file, asks for a `Write`, an `Edit` of that file, `npm test` and
+`echo x > file`, and reads the outcome from disk, `permission_denials` and the hook's own log,
+never from the model's reply. `-HookFormat legacy,fixed,exit2` runs spec-gate's old JSON next to
+known-good ones, so a hook-output bug cannot pass for CLI behavior again. Its `verdict` column says
+`deny held (hook)` only under a posture that grants `Edit`. Auth is the same as the other probes.
+
+```powershell
+$env:CLAUDE_CODE_OAUTH_TOKEN = '<from claude setup-token>'
+.\tests\e2e\probe-permission-posture.ps1                                  # 8 postures x legacy,fixed
+.\tests\e2e\probe-permission-posture.ps1 -Posture acceptedits,skip -HookFormat fixed
+```
+
+Its first run (Linux, `claude` 2.1.283, 2026-09-28, the five `dontAsk` postures x three formats)
+matched the table above cell for cell.
 
 ## Scenario prompts: honest framing, not persuasion
 
