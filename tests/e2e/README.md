@@ -263,6 +263,13 @@ its constitution edit in `permission_denials`, the file unchanged, and a `protec
 recorded. `03`, `04`, `07`-`11` passed. `06` failed one assertion on a correct retro: T02's note
 mentioned `ESC-FEAT-04b` in prose. That assertion now reads `escalation:` lines only.
 
+**Windows run, 2026-09-28** (the committed runner, unmodified; Windows 10.0.26200, `claude`
+2.1.283, pwsh 7.6.6, subscription auth via `CLAUDE_CODE_OAUTH_TOKEN`, commit `30ae074`): `02`
+passed 14/14 ($1.95, 706 s), including the `permission-denied` assertion. `03` (2/2) and `04`
+(3/3) passed, and `-SelfTest` detected the neutered guard in both. In the self-test, only the
+`events.jsonl` assertion failed; the file assertions still passed, because `dontAsk` refuses the
+ungranted `Edit` on its own (see "Why scenarios still grant narrowly").
+
 **Re-verifying.** `probe-permission-posture.ps1` is the repro as a script: manual, paid (about
 $0.03 a run with haiku), not part of `run-e2e.ps1` or CI. It builds a throwaway workspace whose
 `PreToolUse` hook denies one file, asks for a `Write`, an `Edit` of that file, `npm test` and
