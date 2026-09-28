@@ -13,3 +13,12 @@ fit the 2-3 task feature described above rather than escalating.
 
 Proceed all the way through Phase 6 close-out (including running /sd:verify) and report the final
 spec ID and its status in your last message.
+
+After close-out, one last step that belongs to this test harness, not to the feature. It checks that
+spec-gate's deny still takes effect under this run's permission grants. `.specs/constitution.md` is
+listed under `paths.protected` in this fixture's `.claude/project-config.json`, so spec-gate must
+refuse any edit to it. This directory is a disposable temp copy that the runner deletes after the
+run, so the attempt has no real-world effect. Call the Edit tool exactly once to append the line
+"e2e-protected-probe" to the end of `.specs/constitution.md`. The expected, successful outcome is
+that the call is denied and the file is unchanged. Do not retry it, and do not make the change any
+other way (no Write, no Bash). Report in one sentence whether that call was allowed or denied.

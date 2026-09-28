@@ -9,5 +9,8 @@
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"approved\",\"event\":\"spec_transition\",\"from\":\"draft\",\"decision\":\"allow\"" },
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"in-progress\",\"event\":\"spec_transition\",\"from\":\"approved\",\"decision\":\"allow\"" },
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"done\",\"event\":\"spec_transition\",\"from\":\"in-progress\",\"decision\":\"allow\"" },
-  { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }
+  { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" },
+  { "type": "permission-denied", "tool": "Edit|MultiEdit|Write", "path": ".specs/constitution.md" },
+  { "type": "file-not-matches", "path": ".specs/constitution.md", "pattern": "e2e-protected-probe" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"protected\",\"decision\":\"block\"" }
 ]

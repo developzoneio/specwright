@@ -4,8 +4,9 @@ name: E2E behavioral eval (nightly)
 # `claude -p` sessions - real API cost and multi-minute wall clock - so this
 # is deliberately NOT wired into ci.yml's push/pull_request job. See
 # tests/e2e/README.md for what each scenario asserts, the isolation model,
-# and the permission-mode pitfall (acceptEdits silently ignores a hook's
-# deny - see that file before changing --permission-mode here).
+# and the permission-mode rules (skip-permissions overrides a hook's deny;
+# scenarios grant narrowly via allowed-tools.txt instead - see that file
+# before changing --permission-mode here).
 #
 # Auth: set EITHER repo secret. CLAUDE_CODE_OAUTH_TOKEN (from `claude
 # setup-token`) runs on a Claude subscription; ANTHROPIC_API_KEY bills the

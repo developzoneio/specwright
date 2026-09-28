@@ -174,6 +174,7 @@ function Assert-Prerequisites {
     }
 
     foreach ($dir in $ScenarioDirs) {
+        Assert-ScenarioPosture -ScenarioDir $dir
         foreach ($cmd in (Get-ScenarioRequirements -ScenarioDir $dir)) {
             if ($null -eq (Get-Command $cmd -ErrorAction SilentlyContinue)) {
                 Exit-MissingPrereq "'$cmd' not found on PATH; scenario $(Split-Path -Leaf $dir) requires it (requires.txt)."
@@ -313,6 +314,7 @@ function Invoke-ClaudeHeadless {
         [int]$TimeoutSec,
         [switch]$SkipPermissions,
         [string[]]$DisallowedTools,
+        [string[]]$AllowedTools,
         [string]$PermissionMode = 'dontAsk'
     )
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
@@ -330,24 +332,24 @@ function Invoke-ClaudeHeadless {
     # finally block in Invoke-Scenario). Off by default - a transcript is
     # debugging evidence, not an assertion input.
     if (-not $env:SD_E2E_TRANSCRIPT) { $cliArgs += '--no-session-persistence' }
-    # PermissionMode matters a lot more here than it looks. Verified directly
-    # (minimal repro: a trivial always-deny PreToolUse hook, no spec-gate
-    # involved): under --permission-mode acceptEdits, OR under dontAsk
-    # combined with an explicit --allowedTools grant for Edit/Write, the CLI
-    # auto-approves the tool call and the hook's deny is silently ignored
-    # (0 permission_denials recorded, file still changes). Only "dontAsk"
-    # with NO --allowedTools override actually respects a hook's deny -
-    # everything not explicitly hook/default-allowed is refused, which is
-    # exactly the posture the negative scenarios need. Positive scenarios
-    # (01, 02) that need free writes use SkipPermissions instead of
-    # acceptEdits, for the same reason.
+    # Permission posture (SW-80, re-verified on claude 2.1.283 with an
+    # always-deny PreToolUse repro). dontAsk refuses every tool call no rule
+    # allows, so a scenario that writes files or runs its test command grants
+    # exactly those via AllowedTools (allowed-tools.txt). A hook's deny still
+    # wins over that grant, provided the hook's JSON carries
+    # hookSpecificOutput.hookEventName - spec-gate's did not before SW-80,
+    # which is why an Edit/Write grant used to look like it overrode the deny.
+    # --dangerously-skip-permissions does override a deny, so it is kept only
+    # for 01-setup (writes .claude/settings.json, asserts no deny), and
+    # Assert-ScenarioPosture refuses it for any scenario that asserts one.
     $cliArgs += '--permission-mode'
     $cliArgs += $PermissionMode
     if ($SkipPermissions) {
-        # Only for scenarios that legitimately need to write files Claude Code
-        # itself treats as sensitive (.claude/settings.json) or run arbitrary
-        # Bash (npm test). NEVER set for the negative scenarios - see above.
         $cliArgs += '--dangerously-skip-permissions'
+    }
+    if ($AllowedTools -and $AllowedTools.Count -gt 0) {
+        $cliArgs += '--allowedTools'
+        $cliArgs += ($AllowedTools -join ',')
     }
     if ($DisallowedTools -and $DisallowedTools.Count -gt 0) {
         $cliArgs += '--disallowedTools'
@@ -414,6 +416,42 @@ function Get-ScenarioDisallowedTools {
     return @($line -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 }
 
+function Get-ScenarioAllowedTools {
+    # Optional allowed-tools.txt (SW-80): one permission rule per line, blank
+    # lines and # comments ignored, passed as --allowedTools. One per line
+    # because a rule such as Bash(npm test:*) contains a space.
+    param([string]$ScenarioDir)
+    $p = Join-Path $ScenarioDir 'allowed-tools.txt'
+    if (-not (Test-Path -LiteralPath $p)) { return @() }
+    return @(Get-Content -LiteralPath $p |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#') })
+}
+
+function Assert-ScenarioPosture {
+    # SW-80: a scenario that asserts a hook deny must not run under a posture
+    # that overrides one, or its assertion measures nothing. The negative
+    # scenarios and any scenario with a permission-denied assertion count as
+    # asserting a deny. A misconfigured scenario exits 2 before any spend.
+    param([string]$ScenarioDir)
+    $name = Split-Path -Leaf $ScenarioDir
+    $expectPath = Join-Path $ScenarioDir 'expect.json'
+    $assertsDeny = $negativeScenarios -contains $name
+    if ((-not $assertsDeny) -and (Test-Path -LiteralPath $expectPath)) {
+        $assertsDeny = @(Get-Content -LiteralPath $expectPath -Raw | ConvertFrom-Json |
+            Where-Object { $_.type -eq 'permission-denied' }).Count -gt 0
+    }
+    if (-not $assertsDeny) { return }
+    $mode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
+    if ((Get-ScenarioSkipPermissions -ScenarioDir $ScenarioDir) -or
+        ($mode -in @('acceptEdits', 'bypassPermissions'))) {
+        Write-Host "[FAIL] scenario $name asserts a hook deny but runs under a posture that overrides one"
+        Write-Host '       (skip-permissions.txt, or permission-mode.txt acceptEdits/bypassPermissions).'
+        Write-Host '       Grant what it needs in allowed-tools.txt instead. See tests/e2e/README.md "Permission mode".'
+        exit 2
+    }
+}
+
 # ---- assertions ---------------------------------------------------------------
 
 # Precedence: an explicitly passed -TimeoutSeconds, then timeout.txt, then the
@@ -477,6 +515,19 @@ function Test-OneAssertion {
             if ($bytes.Length -lt 3) { return $true }
             return -not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
         }
+        'permission-denied' {
+            # SW-80: the CLI recorded a refused call to a tool matching `tool`
+            # (a regex) on a file ending in `path`. Under a posture that grants
+            # the tool, only a hook deny puts it in permission_denials.
+            if (-not $Run.Result) { return $false }
+            $suffix = $Assertion.path.Replace('\', '/')
+            foreach ($d in @($Run.Result.permission_denials)) {
+                if ($null -eq $d -or $d.tool_name -notmatch "^($($Assertion.tool))$") { continue }
+                $fp = if ($d.tool_input -and $d.tool_input.file_path) { [string]$d.tool_input.file_path } else { '' }
+                if ($fp.Replace('\', '/').EndsWith($suffix, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+            }
+            return $false
+        }
         default {
             throw "unknown assertion type '$type'"
         }
@@ -493,6 +544,7 @@ function Get-AssertionLabel {
         'output-contains'  { return "output-contains: $($Assertion.value)" }
         'exit-code'        { return "exit-code: $($Assertion.value)" }
         'file-no-bom'      { return "file-no-bom: $($Assertion.path)" }
+        'permission-denied' { return "permission-denied: $($Assertion.tool) on $($Assertion.path)" }
         default            { return "unknown: $($Assertion.type)" }
     }
 }
@@ -535,13 +587,15 @@ function Invoke-Scenario {
         $budget = Get-ScenarioBudget -ScenarioDir $ScenarioDir
         $skipPermissions = Get-ScenarioSkipPermissions -ScenarioDir $ScenarioDir
         $disallowedTools = Get-ScenarioDisallowedTools -ScenarioDir $ScenarioDir
+        $allowedTools = Get-ScenarioAllowedTools -ScenarioDir $ScenarioDir
         $permissionMode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
 
         $timeoutSec = Get-ScenarioTimeout -ScenarioDir $ScenarioDir
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         $run = Invoke-ClaudeHeadless -Workspace $ws -FakeHome $fakeHome -Prompt $prompt `
             -MaxBudgetUsd $budget -TimeoutSec $timeoutSec -PermissionMode $permissionMode `
-            -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools
+            -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools `
+            -AllowedTools $allowedTools
         $stopwatch.Stop()
         $record.durationSeconds = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
         $record.timedOut = [bool]$run.TimedOut

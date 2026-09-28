@@ -31,6 +31,8 @@ dependency; it never shows up as a failed scenario assertion.
   [Auth](#auth) below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
   `02-feature-happy`, `06`-`10`).
+- Hook commands in the fixture's `settings.json` call `powershell`. On Linux or macOS that name
+  must resolve (for example a `powershell` symlink to `pwsh` on `PATH`), or the hooks never run.
 - A sandbox root with no `.claude` directory in it or in any directory above it. The defaults
   already meet this; see [the ancestor-walk rule](#the-ancestor-walk-rule-sw-73) below.
 
@@ -196,29 +198,58 @@ rotate the refresh token and log out your real CLI (it did during SW-68).
 One fact it found applies to this harness too. An untrusted workspace has its project
 `permissions.allow` **ignored** in `-p` mode (stderr: "this workspace has not been trusted"). To
 make a grant take effect, set `projects["<ws>"].hasTrustDialogAccepted: true` in the fake home's
-`.claude.json`. This matters for SW-80.
+`.claude.json`. SW-80 re-checked this and then chose `--allowedTools` instead, which needs no
+trust entry and leaves the fixture's `settings.json` alone (see "Permission mode" below).
 
 A second fact, from SW-68: hook commands in a sandbox's `settings.json` run through bash on
 Windows, so a Windows path must use forward slashes. `C:\x\hook.ps1` reaches PowerShell as
 `C:xhook.ps1`, and the hook never runs.
 
-## Permission mode - do not default to `acceptEdits`
+## Permission mode - grant narrowly, never skip permissions
 
-This was the single biggest surprise building this harness, worth stating plainly: **verified by a
-minimal repro (a trivial always-deny `PreToolUse` hook, no spec-gate logic involved) that
-`--permission-mode acceptEdits`, and `dontAsk` combined with an explicit `--allowedTools` grant for
-Edit/Write, both cause Claude Code to silently ignore a hook's `deny` decision** - the tool call
-succeeds, `permission_denials` in the JSON result stays empty, and the file changes anyway. Only
-`--permission-mode dontAsk` **with no `--allowedTools` override** actually respects a hook's deny;
-read-only tools (Read/Glob/Grep) still work fine under it without an explicit grant.
+Every scenario runs under `--permission-mode dontAsk`. That mode refuses any tool call no rule
+allows; read-only tools (Read/Glob/Grep) still work without a grant. A scenario that has to write
+files or run its test command lists exactly those rules in `allowed-tools.txt`, one per line, and
+the runner passes them as `--allowedTools`. `02-feature-happy`, `06`-`08` grant `Edit`, `Write`,
+`MultiEdit` and `Bash(npm test:*)` (the fixture's `commands.test`). `09`-`11` stop before any test
+runs and grant only the three write tools. A `Bash` call outside the grant, such as
+`echo x > file`, is refused.
 
-Consequently `run-e2e.ps1` defaults every scenario to `dontAsk`. Scenarios that need free writes
-Claude Code itself would otherwise gate interactively - `01-setup` (writes `.claude/settings.json`
-and `.claude/project-config.json`, which Claude Code treats as sensitive files) and
-`02-feature-happy` (needs Bash for `npm test` plus many ordinary file writes across a whole
-workflow, with no human to approve any of it) - opt into `acceptEdits` + `--dangerously-skip-permissions`
-via a `permission-mode.txt` / `skip-permissions.txt` marker in their scenario directory. The
-negative scenarios (`03`, `04`) never do; that would make their own assertions meaningless.
+**A hook's deny wins over that grant.** Verified 2026-09-28 on Linux, `claude` 2.1.283, with a
+minimal always-deny `PreToolUse` hook (no spec-gate logic) that denies any call touching one file:
+
+| Posture | Ordinary `Write` | `npm test` | Denied `Edit` |
+|---|---|---|---|
+| `dontAsk`, no grant | refused | refused | refused (by the mode, not the hook) |
+| `dontAsk` + `--allowedTools "Bash(npm test:*)"` | refused | ran | not reached |
+| `dontAsk` + `--allowedTools "Edit,Write,Bash(npm test:*)"` | written | ran | **refused**, in `permission_denials` |
+| `dontAsk` + the same rules in project `permissions.allow`, trusted workspace | written | ran | **refused**, in `permission_denials` |
+| same, workspace not trusted | refused (rules ignored) | refused | not reached |
+
+The two **refused** cells hold only when the hook's JSON is well-formed:
+`hookSpecificOutput.hookEventName: "PreToolUse"` with `permissionDecision: "deny"`, or exit 2.
+spec-gate emitted `hookSpecificOutput` without `hookEventName` before SW-80. The CLI drops such a
+block, and the legacy `decision: "block"` alone does not beat an allow rule, so in both granted
+rows the file changed and `permission_denials` stayed empty. That is where the earlier claim in
+this section came from ("an explicit `--allowedTools` grant for Edit/Write ignores a hook's
+deny"). It was a spec-gate output bug, not CLI behavior, and SW-80 fixed it in both hooks.
+`tests/hooks/run-conformance.ps1` now fails any deny that lacks `hookEventName`.
+
+`--dangerously-skip-permissions` does override a hook's deny, and it is the one posture this
+harness still uses: `01-setup` writes `.claude/settings.json` and `.claude/project-config.json`,
+which Claude Code treats as sensitive, and asserts no deny. `acceptEdits` was reported to override a
+deny as well. That was not re-checked after the hook fix, so treat it as overriding. The runner
+enforces the rule: a scenario that asserts a deny (`03`, `04`, or any `permission-denied`
+assertion) exits `2` before any spend if it is configured with `skip-permissions.txt` or with
+`permission-mode.txt` set to `acceptEdits` or `bypassPermissions`.
+
+**Re-verifying.** Build a throwaway workspace whose `.claude/settings.json` wires one `PreToolUse`
+hook on `Edit|Write|Bash` that denies a single file name, and run `claude -p` in it with
+`HOME` pointed at an empty fake home, `--setting-sources project`, `--permission-mode dontAsk`
+and the grant under test. Ask for four calls: a `Write` to a new file, an `Edit` to the denied
+file, `npm test`, and `echo x > file`. Read the result from disk and from `permission_denials`,
+not from the model's reply. Run it once with spec-gate's exact JSON, once with a known-good JSON,
+so a hook-output bug cannot pass for CLI behavior again.
 
 ## Scenario prompts: honest framing, not persuasion
 
@@ -248,7 +279,7 @@ modes.
 | # | Scenario | Claim under test |
 |---|---|---|
 | 1 | `01-setup` | `/sd:setup` on a bare, unscaffolded project produces `CLAUDE.md`, `.specs/`, `.claude/project-config.json`, `.claude/settings.json`, all BOM-free. |
-| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). |
+| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). |
 | 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. |
 | 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. |
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
@@ -263,7 +294,11 @@ Each scenario directory may contain: `source.txt` (repo-relative base tree to co
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
 `tests/contract-lint` `_base` + overlay fixture pattern), `prompt.txt` (the literal headless
 prompt), `expect.json` (declarative assertions), and optional `budget.txt` / `timeout.txt` / `permission-mode.txt`
-/ `skip-permissions.txt` / `disallowed-tools.txt` overrides. An optional `requires.txt` lists
+/ `skip-permissions.txt` / `disallowed-tools.txt` / `allowed-tools.txt` overrides. `allowed-tools.txt`
+holds one permission rule per line (`#` comments allowed), because a rule such as
+`Bash(npm test:*)` contains a space. Besides the file assertions, `expect.json` accepts
+`permission-denied` (`tool`, a regex, and `path`, a suffix): the run's `permission_denials` holds a
+matching call. An optional `requires.txt` lists
 commands the scenario needs on `PATH` (one per line, `#` comments allowed). The preflight checks it
 for the selected scenarios only, so `-Case 03-spec-gate-negative` does not demand Node.
 
@@ -401,10 +436,10 @@ blocked. `tests/hooks` covers both sides (`allow-index-*` / `block-index-*` fixt
 `04` and `-SelfTest` were all green. Scenario 02's `events.jsonl` recorded no
 `"gate":"protected","decision":"block"` line; the previous run recorded three. That run also
 showed the `spec_transition` metric missing partial Status-cell edits, so Rule 0b now records
-transitions from its own diff (`metrics-transition-partial-edit` fixture). **Still open:** scenario
-2 still runs with `skip-permissions` for its Bash steps (`npm test`), and that overrides hook
-denies. SW-27's "no skip-permissions" bar therefore needs a Bash grant that does not override hook
-denies. That work is tracked with SW-80, not here.
+transitions from its own diff (`metrics-transition-partial-edit` fixture). **Closed by SW-80:** scenario
+2 no longer runs with `skip-permissions`. It runs under `dontAsk` with an `allowed-tools.txt`
+grant for its writes and `npm test`, which keeps hook denies in force (see "Permission mode"), and
+it asserts one deliberate Rule 1 deny during the run.
 
 **Update, 2026-08-01 full-suite run:** this time `02-feature-happy` did not merely proceed despite
 repeated Rule 1 denials - it stalled outright and hit the 600s timeout. `events.jsonl` shows the
@@ -429,5 +464,5 @@ only, and contract-lint `CL206` keeps that sentence in place. `spec-gate` also m
 a `gate:"shell-write"` event. The hook half reads the command text only, so it is a heuristic, not a
 guarantee: `cd .specs && sed -i ... index.md` still gets through. Scenario 02 now asserts all four
 transitions and no `shell-write` gate, so a regression of the prompt half fails the run.
-`acceptEdits` still overrides a hook deny (see above), so under that mode the assertions, not the
-deny, are what catch it.
+Since SW-80, scenario 02 runs under a posture that keeps the deny, so a regression of the hook
+half is refused during the run as well as caught by the assertions.

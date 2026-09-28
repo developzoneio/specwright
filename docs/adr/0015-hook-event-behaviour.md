@@ -36,8 +36,10 @@ The spike had to answer four questions definitively, against the installed CLI:
   SessionEnd. It appends the raw stdin payload to `events.jsonl`. For the event under test it
   blocks exactly once, with a token the model is asked to repeat.
 - The runs use `--permission-mode dontAsk` with no `--allowedTools` and no
-  `--dangerously-skip-permissions`. Both of those can override a hook's decision, which is the
-  behaviour under test (see `tests/e2e/README.md`, "Permission mode").
+  `--dangerously-skip-permissions`. Both of those were then believed to override a hook's
+  decision, which is the behaviour under test (see `tests/e2e/README.md`, "Permission mode").
+  SW-80 later showed that only skip-permissions does: a well-formed deny beats an
+  `--allowedTools` grant.
 - Evidence is never the model's account:
   - Blocking: the fire count and `stop_hook_active` on the re-fire, from the payloads.
   - PreCompact: a `compact_boundary` in the transcript, checked against a log-only control.

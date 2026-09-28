@@ -1,0 +1,6 @@
+# Permission rules granted under dontAsk (SW-80), one per line: file writes plus commands.test (npm test in the fixture).
+# A spec-gate deny still wins over these; --dangerously-skip-permissions would not keep it.
+Edit
+Write
+MultiEdit
+Bash(npm test:*)

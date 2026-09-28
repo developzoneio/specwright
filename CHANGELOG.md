@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`spec-gate` denies were dropped whenever a permission rule already allowed the tool (SW-80)** -
+  both implementations emitted `hookSpecificOutput` without `hookEventName`, so the CLI ignored
+  the block. The legacy `decision: "block"` alone does not override an allow rule
+  (`--allowedTools`, `permissions.allow`), so the edit went through and `permission_denials`
+  stayed empty. Verified on `claude` 2.1.283 with an always-deny `PreToolUse` repro under
+  `dontAsk` plus an `Edit`/`Write` grant: the old JSON let the file change; the same JSON with
+  `hookEventName: "PreToolUse"`, or exit 2, kept it unchanged and recorded the denial. The hooks now
+  emit `hookEventName` and the documented `permissionDecisionReason`; `decision: "block"` is kept
+  for older CLIs. `run-conformance.ps1` fails any deny without `hookEventName`, and both smoke
+  scripts assert it. The README's claim that an explicit grant overrides a hook deny came from this
+  bug, not from the CLI.
+- **e2e `02-feature-happy` and `06`-`11` no longer run with `--dangerously-skip-permissions`
+  (SW-80)** - they run under `dontAsk` with a narrow grant from a new `allowed-tools.txt` marker
+  (`Edit`, `Write`, `MultiEdit`, plus `Bash(npm test:*)` where the workflow runs
+  `commands.test`), so a spec-gate deny is enforced during the run. `02` now makes one deliberate
+  edit to a protected path and asserts it is refused, through a new `permission-denied` assertion
+  type that reads `permission_denials`. The runner exits 2 if a scenario that asserts a deny is
+  configured with skip-permissions, `acceptEdits` or `bypassPermissions`. `01-setup` keeps
+  skip-permissions: it writes `.claude/settings.json` and asserts no deny.
 - **`hooks/bash/spec-gate.sh` recorded a stray CR with a native Windows jq** - a native
   `jq.exe` (e.g. jq 1.8.1 from winget) ends every output line with CRLF, and Git Bash's `$(...)`
   trims only the last one. Rule 0b's `id<TAB>from<TAB>to` loop kept the CR on `to`, so a
