@@ -24,7 +24,8 @@
     blocked in every mode. Heuristic - see Get-ShellWriteTarget below.
 
     Output schema (dual-format for forward + backward compatibility):
-      New:    hookSpecificOutput.permissionDecision = "deny"   (CLI >= schema v2)
+      New:    hookSpecificOutput.permissionDecision = "deny", with
+              hookEventName = "PreToolUse" (required - SW-80)  (CLI >= schema v2)
       Legacy: decision = "block"                               (CLI < schema v2)
     Both are emitted in the same JSON object so either CLI generation can act.
 
@@ -981,12 +982,17 @@ function Write-BlockDecision {
     param([string]$Reason)
     # Dual-format: new hookSpecificOutput schema + legacy decision field.
     # The CLI reads whichever field it understands; both are harmless to the other.
+    # hookEventName is required (SW-80): without it the CLI drops the whole
+    # hookSpecificOutput block, and the legacy field alone does not override a
+    # permission rule that already allows the tool (--allowedTools,
+    # permissions.allow), so the edit went through with no denial recorded.
     $obj = [pscustomobject]@{
         decision           = 'block'
         reason             = $Reason
         hookSpecificOutput = [pscustomobject]@{
-            permissionDecision = 'deny'
-            reason             = $Reason
+            hookEventName            = 'PreToolUse'
+            permissionDecision       = 'deny'
+            permissionDecisionReason = $Reason
         }
     }
     [Console]::Out.WriteLine(($obj | ConvertTo-Json -Compress))

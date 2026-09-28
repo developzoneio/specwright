@@ -413,13 +413,19 @@ function ConvertTo-SpecGateDecision {
             if ($obj.decision) { $decision = [string]$obj.decision }
             if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.permissionDecision) {
                 $permission = [string]$obj.hookSpecificOutput.permissionDecision
+                # Without hookEventName the CLI drops the whole block, and the
+                # deny stops overriding an allow rule (SW-80). No golden carries
+                # this value, so a hook that omits the field fails every case.
+                if ($obj.hookSpecificOutput.hookEventName -ne 'PreToolUse') {
+                    $permission = 'MISSING-HOOK-EVENT-NAME'
+                }
             }
             # The human-readable reason is duplicated into both schema halves by
             # both implementations; if the two copies ever disagree the object
             # must not silently keep one of them.
             $topReason = if ($obj.reason) { [string]$obj.reason } else { $null }
-            $nestedReason = if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.reason) {
-                [string]$obj.hookSpecificOutput.reason
+            $nestedReason = if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.permissionDecisionReason) {
+                [string]$obj.hookSpecificOutput.permissionDecisionReason
             } else { $null }
             if ($topReason -ne $nestedReason) {
                 $reason = 'REASON-MISMATCH-BETWEEN-SCHEMA-HALVES'

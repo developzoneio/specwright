@@ -156,6 +156,7 @@ Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\spec-gate.ps1') $payload
 Assert-Exit0 'spec-gate (b) header-only, mode=block' $script:Code
 Assert-Contains 'spec-gate (b) header-only, mode=block' $script:Stdout '"decision":"block"'
 Assert-Contains 'spec-gate (b) header-only, mode=block' $script:Stdout '"permissionDecision":"deny"'
+Assert-Contains 'spec-gate (b) header-only, mode=block' $script:Stdout '"hookEventName":"PreToolUse"'
 
 Write-Section 'spec-gate (PowerShell): (b) header-only in-progress text -> warn (mode=warn)'
 (Get-Content -LiteralPath $configPath -Raw) -replace '"mode": "block"', '"mode": "warn"' |

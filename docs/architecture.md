@@ -272,13 +272,17 @@ log section below for the schema.
   "decision": "block",
   "reason": "spec-gate: editing code file 'src/foo.cs' but no in-progress spec is recorded ...",
   "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "reason": "spec-gate: editing code file 'src/foo.cs' but no in-progress spec is recorded ..."
+    "permissionDecisionReason": "spec-gate: editing code file 'src/foo.cs' but no in-progress spec is recorded ..."
   }
 }
 ```
 
 - New schema (`hookSpecificOutput.permissionDecision = "deny"`) is read by recent CLI builds.
+  `hookEventName` is required: without it the CLI drops the whole block, and the legacy field
+  alone does not override a permission rule that already allows the tool (`--allowedTools`,
+  `permissions.allow`). The edit then goes through with no denial recorded (SW-80).
 - Legacy schema (`decision = "block"`) is read by older CLI builds.
 - Both are harmless to the other reader. No version probing required.
 

@@ -313,11 +313,15 @@ fi
 # --- emit-block helper --------------------------------------------------------
 # Emits dual-format JSON: new hookSpecificOutput schema + legacy decision field.
 # The CLI reads whichever field it understands; both are harmless to the other.
+# hookEventName is required (SW-80): without it the CLI drops the whole
+# hookSpecificOutput block, and the legacy field alone does not override a
+# permission rule that already allows the tool (--allowedTools,
+# permissions.allow), so the edit went through with no denial recorded.
 
 emit_block() {
     local reason="$1"
     jq -nc --arg r "${reason}" \
-        '{decision:"block",reason:$r,hookSpecificOutput:{permissionDecision:"deny",reason:$r}}'
+        '{decision:"block",reason:$r,hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
 }
 
 # --- metrics: shared event writer ---------------------------------------------

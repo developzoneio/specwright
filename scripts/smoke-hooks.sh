@@ -154,6 +154,7 @@ run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
 assert_exit0 "spec-gate (b) header-only, mode=block" "$CODE"
 assert_contains "spec-gate (b) header-only, mode=block" "$STDOUT" '"decision":"block"'
 assert_contains "spec-gate (b) header-only, mode=block" "$STDOUT" '"permissionDecision":"deny"'
+assert_contains "spec-gate (b) header-only, mode=block" "$STDOUT" '"hookEventName":"PreToolUse"'
 
 section "spec-gate (bash): (b) header-only in-progress text -> warn (mode=warn)"
 python_free_sed() { sed -i.bak 's/"mode": "block"/"mode": "warn"/' "$config_block" && rm -f "$config_block.bak"; }

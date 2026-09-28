@@ -1,1 +1,0 @@
-Needs Bash for npm test and multiple file writes across the workflow with no human to approve them.
