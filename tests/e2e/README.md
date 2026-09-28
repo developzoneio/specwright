@@ -243,6 +243,12 @@ enforces the rule: a scenario that asserts a deny (`03`, `04`, or any `permissio
 assertion) exits `2` before any spend if it is configured with `skip-permissions.txt` or with
 `permission-mode.txt` set to `acceptEdits` or `bypassPermissions`.
 
+**Live run, 2026-09-28** (Linux, `claude` 2.1.283, pwsh 7.4.6, one `-Case` at a time, the
+fixture's `powershell` hook commands resolved to `pwsh`): `02` passed 14/14 ($2.00, 697 s), with
+its constitution edit in `permission_denials`, the file unchanged, and a `protected` block
+recorded. `03`, `04`, `07`-`11` passed. `06` failed one assertion on a correct retro: T02's note
+mentioned `ESC-FEAT-04b` in prose. That assertion now reads `escalation:` lines only.
+
 **Re-verifying.** Build a throwaway workspace whose `.claude/settings.json` wires one `PreToolUse`
 hook on `Edit|Write|Bash` that denies a single file name, and run `claude -p` in it with
 `HOME` pointed at an empty fake home, `--setting-sources project`, `--permission-mode dontAsk`
