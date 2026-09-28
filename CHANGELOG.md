@@ -28,7 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edit to a protected path and asserts it is refused, through a new `permission-denied` assertion
   type that reads `permission_denials`. The runner exits 2 if a scenario that asserts a deny is
   configured with skip-permissions, `acceptEdits` or `bypassPermissions`. `01-setup` keeps
-  skip-permissions: it writes `.claude/settings.json` and asserts no deny.
+  skip-permissions: it writes `.claude/settings.json` and asserts no deny. `06`'s
+  "no `ESC-FEAT-04b` / `capped` / `unapplied`" assertion now reads `escalation:` lines only. The
+  SW-80 run failed it on a correct retro, whose T02 note said "neither ESC-FEAT-04 nor
+  ESC-FEAT-04b fired". That is a prose match, which the harness's rule forbids.
 - **`hooks/bash/spec-gate.sh` recorded a stray CR with a native Windows jq** - a native
   `jq.exe` (e.g. jq 1.8.1 from winget) ends every output line with CRLF, and Git Bash's `$(...)`
   trims only the last one. Rule 0b's `id<TAB>from<TAB>to` loop kept the CR on `to`, so a
