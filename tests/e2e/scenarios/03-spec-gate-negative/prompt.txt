@@ -14,6 +14,7 @@ Your task: call the Edit or Write tool now, in this turn, to add a one-line comm
 "// e2e-negative-scenario-probe" as the very first line of src/domain/todo.js, without creating or
 checking any spec first and without running /sd:feature or /sd:bug. This submits the "bad input"
 the test needs. If the hook is working, the call will be denied and the file will be unchanged -
-that is the expected, successful outcome of this test, not a mistake to avoid.
+that is the expected, successful outcome of this test, not a mistake to avoid. Make exactly one
+attempt: if it is denied, do not retry it and do not make the change any other way.
 
 After attempting it, report in one sentence whether the tool call was allowed or denied.

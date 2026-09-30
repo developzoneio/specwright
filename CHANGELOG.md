@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **e2e `03` and `04` passed with no spec-gate at all (SW-82)** - they ran under `dontAsk` with no
+  grant, so the mode refused their `Edit` on its own and the file assertions could not tell the
+  hook's deny from the mode's. A deny JSON missing `hookEventName` (the bug SW-80 fixed) kept them
+  green too. Both now grant `Edit`, `Write` and `MultiEdit` in `allowed-tools.txt` and assert a
+  `permission-denied` entry for their target file, so only the hook's deny can keep the file
+  unchanged. `-SelfTest` adds a second guard mutation, `malformed-deny`: the real installed
+  spec-gate with its deny JSON rewritten to the pre-SW-80 shape. It runs next to the always-allow
+  stub, in both scenarios. The rewrite throws if the hook's deny emitter no longer matches, so a
+  refactor cannot quietly turn the mutation into the real guard. Both prompts now ask for exactly
+  one attempt, since a granted `Write` could otherwise retry a denied `Edit`. Verified on Windows,
+  `claude` 2.1.285: `03` 3/3 and `04` 4/4 with a `permission_denials` entry each ($0.14 and $0.15).
+  `-SelfTest` detected both mutations in both scenarios ($0.58). Under always-allow every
+  assertion failed, not only `events.jsonl`.
 - **e2e hooks never ran on Linux/macOS, and an erroring `claude -p` was invisible in CI (SW-81)** -
   the fixture's `.claude/settings.json` calls `powershell`, which the ubuntu runner lacks (it
   ships `pwsh`). A hook whose command is not found exits 127, which is non-blocking, so every

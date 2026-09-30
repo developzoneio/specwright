@@ -61,11 +61,13 @@
     the sandbox root holds a `.claude/` (SW-73). A missing prerequisite
     exits 2 with the dependency named, never as a failed assertion.
 
-    -SelfTest re-runs the negative scenarios (03, 04) with spec-gate's
-    installed hook files replaced by an always-allow stub, and asserts they
-    now FAIL - proving the harness would catch a regression that removes the
-    guard (mirrors tests/hooks/run-conformance.ps1 and
-    tests/contract-lint/run-selftest.ps1's own -SelfTest modes).
+    -SelfTest re-runs the negative scenarios (03, 04) once per guard
+    mutation of spec-gate's installed hook files - an always-allow stub, and
+    the real hook with its deny JSON in the pre-SW-80 shape (SW-82) - and
+    asserts they now FAIL, proving the harness would catch a regression that
+    removes the guard or breaks its output (mirrors
+    tests/hooks/run-conformance.ps1 and tests/contract-lint/run-selftest.ps1's
+    own -SelfTest modes).
 
     A scenario whose claude -p timed out, printed no parseable result, or
     returned is_error: true "could not run" (SW-81): its assertions are
@@ -313,18 +315,59 @@ function Convert-HookShellToPwsh {
     }
 }
 
-# ---- guard neutering (for -SelfTest) ----------------------------------------
+# ---- guard mutations (for -SelfTest) ----------------------------------------
 
-function Set-SpecGateNeutered {
-    param([string]$FakeHome)
-    # Overwrite the INSTALLED copy in the fake home with an always-allow stub -
-    # never touches the repo's real hooks/ source.
-    $stubPwsh = "#requires -Version 5.1`n[Console]::In.ReadToEnd() | Out-Null`nexit 0`n"
-    $stubBash = "#!/usr/bin/env bash`ncat >/dev/null`nexit 0`n"
+$guardMutations = @('always-allow', 'malformed-deny')
+
+function Set-SpecGateMutation {
+    # Rewrites the INSTALLED copy in the fake home - never the repo's real
+    # hooks/ source. install.ps1 installs only spec-gate.ps1, which is what
+    # the fixture's settings.json invokes; spec-gate.sh is covered too in
+    # case a sandbox ever carries it.
+    #   always-allow   - a stub that decides nothing, so the guard is gone.
+    #   malformed-deny - the real hook with its deny JSON in the pre-SW-80
+    #                    shape (no hookSpecificOutput.hookEventName). It still
+    #                    decides to block and records the block event, but
+    #                    the CLI drops the deny, so a granted edit lands
+    #                    (SW-82). Only the outcome assertions can catch it.
+    param([string]$FakeHome, [string]$Mutation)
     $pwshPath = Join-Path $FakeHome '.claude' 'hooks' 'sd' 'spec-gate.ps1'
     $bashPath = Join-Path $FakeHome '.claude' 'hooks' 'sd' 'spec-gate.sh'
-    Set-Content -LiteralPath $pwshPath -Value $stubPwsh -NoNewline -Encoding ascii
-    Set-Content -LiteralPath $bashPath -Value $stubBash -NoNewline -Encoding ascii
+    switch ($Mutation) {
+        'always-allow' {
+            $stubPwsh = "#requires -Version 5.1`n[Console]::In.ReadToEnd() | Out-Null`nexit 0`n"
+            $stubBash = "#!/usr/bin/env bash`ncat >/dev/null`nexit 0`n"
+            Set-Content -LiteralPath $pwshPath -Value $stubPwsh -NoNewline -Encoding ascii
+            Set-Content -LiteralPath $bashPath -Value $stubBash -NoNewline -Encoding ascii
+        }
+        'malformed-deny' {
+            # `$$` is a literal `$` in a -replace replacement string.
+            $pwshPattern = "hookEventName\s*=\s*'PreToolUse'\s*" +
+                "permissionDecision\s*=\s*'deny'\s*permissionDecisionReason\s*=\s*\`$Reason"
+            Edit-InstalledHook -Path $pwshPath -Pattern $pwshPattern `
+                -Replacement "permissionDecision = 'deny'; reason = `$`$Reason"
+            if (Test-Path -LiteralPath $bashPath) {
+                Edit-InstalledHook -Path $bashPath `
+                    -Pattern 'hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:\$r' `
+                    -Replacement 'permissionDecision:"deny",reason:$$r'
+            }
+        }
+        default { throw "unknown guard mutation '$Mutation'" }
+    }
+}
+
+function Edit-InstalledHook {
+    # A pattern that no longer matches means the hook's deny emitter changed
+    # shape. Fail loudly rather than run the real guard and call it mutated.
+    param([string]$Path, [string]$Pattern, [string]$Replacement)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "malformed-deny mutation: installed hook not found: $Path"
+    }
+    $raw = [System.IO.File]::ReadAllText($Path)
+    if ($raw -notmatch $Pattern) {
+        throw "malformed-deny mutation: deny emitter not found in $Path; update Set-SpecGateMutation"
+    }
+    [System.IO.File]::WriteAllText($Path, ($raw -replace $Pattern, $Replacement))
 }
 
 # ---- headless invocation -----------------------------------------------------
@@ -583,12 +626,12 @@ function Get-AssertionLabel {
 function Invoke-Scenario {
     param(
         [string]$ScenarioDir,
-        [switch]$NeuterGuard,
+        [string]$GuardMutation,
         [switch]$ExpectFailure
     )
     $name = Split-Path -Leaf $ScenarioDir
     Write-Host ''
-    Write-Host "=== $name $(if ($NeuterGuard) { '(neutered guard)' }) ==="
+    Write-Host "=== $name $(if ($GuardMutation) { "(guard mutation: $GuardMutation)" }) ==="
 
     $fakeHome = $null
     $ws = $null
@@ -597,7 +640,8 @@ function Invoke-Scenario {
     # return below sets it.
     $record = [ordered]@{
         name             = $name
-        neuteredGuard    = [bool]$NeuterGuard
+        neuteredGuard    = [bool]$GuardMutation
+        guardMutation    = $(if ($GuardMutation) { $GuardMutation } else { $null })
         passed           = $false
         assertionsPassed = 0
         assertionsTotal  = 0
@@ -610,7 +654,7 @@ function Invoke-Scenario {
     }
     try {
         $fakeHome = New-FakeHome
-        if ($NeuterGuard) { Set-SpecGateNeutered -FakeHome $fakeHome }
+        if ($GuardMutation) { Set-SpecGateMutation -FakeHome $fakeHome -Mutation $GuardMutation }
         $ws = New-ScenarioWorkspace -ScenarioDir $ScenarioDir
 
         $prompt = Get-Content -LiteralPath (Join-Path $ScenarioDir 'prompt.txt') -Raw
@@ -684,7 +728,7 @@ function Invoke-Scenario {
         }
 
         if ($ExpectFailure) {
-            # -SelfTest inverted expectation: the guard is neutered, so the
+            # -SelfTest inverted expectation: the guard is mutated, so the
             # scenario's assertions (which describe blocked behavior) must
             # NOT all pass - if they do, the harness failed to notice.
             $record.passed = (-not $scenarioOk)
@@ -781,24 +825,27 @@ Assert-Prerequisites -ScenarioDirs $selectedDirs
 # ---- self-test mode ------------------------------------------------------------
 
 if ($SelfTest) {
-    Write-Host '=== e2e self-test: harness must DETECT a removed guard ==='
+    Write-Host '=== e2e self-test: harness must DETECT a removed or malformed guard ==='
     $allDetected = $true
-    foreach ($n in $negativeScenarios) {
-        $dir = Join-Path $scenariosDir $n
-        if (-not (Test-Path -LiteralPath $dir)) {
-            Write-Bad "self-test: scenario '$n' not found"
-            $allDetected = $false
-            continue
-        }
-        $detected = Invoke-Scenario -ScenarioDir $dir -NeuterGuard -ExpectFailure
-        if ($script:scenarioResults[-1].couldNotRun) {
-            Write-CouldNotRun "self-test: $n : could not run, so it cannot tell whether the guard was exercised"
-            $allDetected = $false
-        } elseif ($detected) {
-            Write-Ok "self-test: $n : harness detected the neutered guard"
-        } else {
-            Write-Bad "self-test: $n : harness did NOT notice the guard was removed"
-            $allDetected = $false
+    foreach ($mutation in $guardMutations) {
+        foreach ($n in $negativeScenarios) {
+            $dir = Join-Path $scenariosDir $n
+            if (-not (Test-Path -LiteralPath $dir)) {
+                Write-Bad "self-test: scenario '$n' not found"
+                $allDetected = $false
+                continue
+            }
+            $detected = Invoke-Scenario -ScenarioDir $dir -GuardMutation $mutation -ExpectFailure
+            if ($script:scenarioResults[-1].couldNotRun) {
+                Write-CouldNotRun ("self-test: $n [$mutation] : could not run, " +
+                    'so it cannot tell whether the guard was exercised')
+                $allDetected = $false
+            } elseif ($detected) {
+                Write-Ok "self-test: $n [$mutation] : harness detected the mutated guard"
+            } else {
+                Write-Bad "self-test: $n [$mutation] : harness did NOT notice the guard was mutated"
+                $allDetected = $false
+            }
         }
     }
     Write-ResultsFile -Mode 'selftest' -Passed $allDetected

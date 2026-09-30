@@ -220,8 +220,8 @@ Every scenario runs under `--permission-mode dontAsk`. That mode refuses any too
 allows; read-only tools (Read/Glob/Grep) still work without a grant. A scenario that has to write
 files or run its test command lists exactly those rules in `allowed-tools.txt`, one per line, and
 the runner passes them as `--allowedTools`. `02-feature-happy`, `06`-`08` grant `Edit`, `Write`,
-`MultiEdit` and `Bash(npm test:*)` (the fixture's `commands.test`). `09`-`11` stop before any test
-runs and grant only the three write tools. A `Bash` call outside the grant, such as
+`MultiEdit` and `Bash(npm test:*)` (the fixture's `commands.test`). `03`, `04` and `09`-`11` run
+no tests and grant only the three write tools. A `Bash` call outside the grant, such as
 `echo x > file`, is refused.
 
 **A well-formed hook deny wins over every posture.** Verified 2026-09-28, `claude` 2.1.283, with
@@ -262,9 +262,14 @@ asserts a deny (`03`, `04`, or any `permission-denied` assertion) exits `2` befo
 is configured with `skip-permissions.txt` or with `permission-mode.txt` set to `acceptEdits` or
 `bypassPermissions`.
 
-A consequence for `03` and `04`: they run under `dontAsk` with no grant, so the mode refuses their
-`Edit` whether or not the hook's JSON is well-formed. Their `events.jsonl` assertions prove the
-hook decided to block; `run-conformance.ps1` is what proves the CLI will honor that decision.
+**`03` and `04` grant the edit they expect to be denied (SW-82).** Before SW-82 they ran under
+`dontAsk` with no grant, so the mode refused their `Edit` whether or not spec-gate was there. Their
+file assertions passed with no hook at all, and a deny JSON missing `hookEventName` (the bug SW-80
+fixed) kept them green too, since the hook still recorded its block. Now they grant `Edit`, `Write`
+and `MultiEdit`, the posture in which the probe showed a well-formed deny held and a malformed one
+did not. Only the hook's deny can stop the edit, so the unchanged file and the
+`permission-denied` assertion prove it end to end. The `events.jsonl` assertion still shows which
+rule decided. `run-conformance.ps1` still checks the JSON shape without a model in the loop.
 
 **Live run, 2026-09-28** (Linux, `claude` 2.1.283, pwsh 7.4.6, one `-Case` at a time, the
 fixture's `powershell` hook commands resolved to `pwsh`): `02` passed 14/14 ($2.00, 697 s), with
@@ -277,7 +282,7 @@ mentioned `ESC-FEAT-04b` in prose. That assertion now reads `escalation:` lines 
 passed 14/14 ($1.95, 706 s), including the `permission-denied` assertion. `03` (2/2) and `04`
 (3/3) passed, and `-SelfTest` detected the neutered guard in both. In the self-test, only the
 `events.jsonl` assertion failed; the file assertions still passed, because `dontAsk` refuses the
-ungranted `Edit` on its own (see "Why scenarios still grant narrowly").
+ungranted `Edit` on its own. SW-82 closed that gap by granting the edit (see above).
 
 **Re-verifying.** `probe-permission-posture.ps1` is the repro as a script: manual, paid (about
 $0.03 a run with haiku), not part of `run-e2e.ps1` or CI. It builds a throwaway workspace whose
@@ -314,12 +319,33 @@ prompt is also a worse regression signal, since a refusal and a hook malfunction
 
 ## Self-test (guard-neutering)
 
-`-SelfTest` re-runs scenarios `03-spec-gate-negative` and `04-closeout-negative` against a copy of
-the engine with the installed `spec-gate.ps1`/`.sh` replaced by an always-allow stub (never touches
-the repo's real `hooks/` source), and asserts that BOTH scenarios' assertions now fail as a whole -
-proving the harness would notice a regression that removes the guard. Mirrors
-`tests/hooks/run-conformance.ps1` and `tests/contract-lint/run-selftest.ps1`'s own `-SelfTest`
-modes.
+`-SelfTest` re-runs scenarios `03-spec-gate-negative` and `04-closeout-negative` once for each of
+two mutations of the installed spec-gate in the fake home (never the repo's real `hooks/` source),
+and asserts that each of the four runs fails as a whole. Mirrors `tests/hooks/run-conformance.ps1`
+and `tests/contract-lint/run-selftest.ps1`'s own `-SelfTest` modes.
+
+| Mutation | What it does | What must fail |
+|---|---|---|
+| `always-allow` | Replaces the hook with a stub that decides nothing: the guard is gone. | Every assertion: the edit lands, nothing is denied, no block event. |
+| `malformed-deny` (SW-82) | Keeps the real hook but rewrites its deny JSON to the pre-SW-80 shape, with no `hookSpecificOutput.hookEventName`. | The file and `permission-denied` assertions. The hook still decides to block and records the event, but the CLI drops the deny, so the granted edit lands. |
+
+`malformed-deny` is the regression SW-80 fixed, and the reason `03` and `04` grant the edit. Under
+the old no-grant posture the mode refused the edit anyway, and both scenarios stayed green. The
+mutation rewrites the hook's deny emitter by pattern. If that pattern stops matching (the emitter
+was refactored), the run throws rather than quietly testing the real guard under a mutation's name.
+
+**Windows run, 2026-09-30** (SW-82; Windows 10.0.26200, `claude` 2.1.285, pwsh 7.6.6,
+subscription auth, working tree on commit `f5faa0e`, figures from `-ResultsFile`):
+
+| Run | `03-spec-gate-negative` | `04-closeout-negative` |
+|---|---|---|
+| Real guard | 3/3 pass, $0.14, 15 s | 4/4 pass, $0.15, 16 s |
+| `always-allow` | 0/3, detected, $0.15 | 0/4, detected, $0.15 |
+| `malformed-deny` | 1/3, detected, $0.14 | 1/4, detected, $0.15 |
+
+Under `malformed-deny` only the `events.jsonl` assertion passed: the hook recorded its block, the
+CLI dropped the deny, and the edit landed. That is the SW-80 failure, now caught during a
+self-test run. The whole `-SelfTest` cost $0.58.
 
 **"Could not run" is not "detected" (SW-81).** A scenario whose `claude -p` timed out, printed no
 parseable result, or returned `is_error: true` never touched its workspace, so every assertion
@@ -336,8 +362,8 @@ and exits 1.
 |---|---|---|
 | 1 | `01-setup` | `/sd:setup` on a bare, unscaffolded project produces `CLAUDE.md`, `.specs/`, `.claude/project-config.json`, `.claude/settings.json`, all BOM-free. |
 | 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). |
-| 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. |
-| 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. |
+| 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. The edit is granted, so only the hook's deny keeps `src/domain/todo.js` unchanged and puts it in `permission_denials` (SW-82). |
+| 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. The edit is granted, so only the hook's deny keeps the row `in-progress` and puts `.specs/index.md` in `permission_denials` (SW-82). |
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
 | 6 | `06-escalation-implementer` | `/sd:feature` Phase 4 resumed on a seeded 2-task spec under `models.escalation.ceiling: "sonnet"`: the `Estimated complexity: L` task logs exactly one uncapped, applied `escalation: sd-implementer haiku -> sonnet (trigger: ESC-FEAT-04)` line in `05-retro.md`; the `S` / `trivial` task logs none. |
 | 7 | `07-escalation-disabled` | Same seeded spec under `models.escalation.enabled: false`, with T01 at `Estimated complexity: L` and T02 at `Reversibility: hard`: both tasks run and `05-retro.md` carries no `escalation:` line - the suppression covers `ESC-FEAT-04` and `ESC-FEAT-04b` alike. |
@@ -365,8 +391,8 @@ in a gate on every push. It runs nightly (or on manual `workflow_dispatch`) on a
 `.github/workflows/e2e-nightly.yml`.
 
 **The cost trade-off per run.** One full 10-scenario run (measured before scenario 11 was added) costs about **$7.55-$7.79** in
-`total_cost_usd` and takes about **26-28 minutes** of wall clock, plus about **$0.26** for
-`-SelfTest` (see the measured table below). With subscription auth, `total_cost_usd` is a notional
+`total_cost_usd` and takes about **26-28 minutes** of wall clock, plus about **$0.58** for
+`-SelfTest`, which runs four sessions since SW-82 (two before; see the measured tables). With subscription auth, `total_cost_usd` is a notional
 figure, and the run draws on the plan's usage allowance instead of dollars. With API-key auth it is
 billed. The runs below used subscription auth. That makes the suite practical to run locally
 before a PR, one `-Case` at a time for the cheap scenarios (`03`, `04`: about $0.15 each). It is no
@@ -399,7 +425,7 @@ Three consecutive full-suite runs, each followed by `-SelfTest`, on one machine:
 | `09-resume-approved` | $0.92 | $0.92 | $1.07 |
 | `10-resume-impact-mapped` | $0.65 | $0.61 | $0.69 |
 | **Suite total** | **$7.79** | **$7.55** | **$7.71** |
-| `-SelfTest` (`03` + `04`, neutered guard) | $0.25 | $0.26 | $0.26 |
+| `-SelfTest` (`03` + `04`, always-allow only, before SW-82) | $0.25 | $0.26 | $0.26 |
 
 Every scenario passed every assertion in all three runs, and `-SelfTest` detected the neutered
 guard for both `03` and `04` each time.

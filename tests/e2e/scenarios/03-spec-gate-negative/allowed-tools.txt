@@ -1,0 +1,5 @@
+# Permission rules granted under dontAsk (SW-82): the write tools only. Without a grant the mode
+# refuses the Edit on its own, so the file assertions could not tell the hook's deny from the mode's.
+Edit
+Write
+MultiEdit
