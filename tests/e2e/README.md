@@ -31,8 +31,10 @@ dependency; it never shows up as a failed scenario assertion.
   [Auth](#auth) below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
   `02-feature-happy`, `06`-`10`).
-- Hook commands in the fixture's `settings.json` call `powershell`. On Linux or macOS that name
-  must resolve (for example a `powershell` symlink to `pwsh` on `PATH`), or the hooks never run.
+- Nothing extra for hooks on Linux or macOS. The fixture's committed `settings.json` calls
+  `powershell`, which those systems lack, so the runner rewrites each workspace copy's hook
+  commands to `pwsh` when not on Windows (SW-81). Without that, every hook exits 127, which Claude
+  Code treats as non-blocking, and all of them silently no-op.
 - A sandbox root with no `.claude` directory in it or in any directory above it. The defaults
   already meet this; see [the ancestor-walk rule](#the-ancestor-walk-rule-sw-73) below.
 
@@ -159,11 +161,18 @@ in this order, and prints the mode it picked:
 - **Empty values.** An auth variable that is set but empty counts as absent. That is what an unset
   GitHub secret looks like. The runner removes such variables from the child `claude`
   environment.
-- **Open question.** An earlier local run recorded that `claude -p` failed with `"Not logged in"`
-  when it had a valid `ANTHROPIC_API_KEY` but no `.credentials.json`. The nightly workflow runs in
-  exactly that configuration. Neither result has been re-checked since. If the nightly fails the
-  same way, switch it to the `CLAUDE_CODE_OAUTH_TOKEN` secret. The workflow already passes both
-  secrets.
+- **CI uses `CLAUDE_CODE_OAUTH_TOKEN`.** The nightly passed on ubuntu with only this secret set
+  (2026-09-30, run 36663596039, `claude` 2.1.197). Add it as a **repository** secret (Settings ->
+  Secrets and variables -> Actions -> Repository secrets). An *environment* secret is invisible to
+  the job, because the workflow declares no `environment:`, so it arrives empty and the preflight
+  exits 2 with "no claude auth found".
+- **A present but wrong token** passes the preflight, which only checks that a value is set. Every
+  scenario then "could not run" with `Failed to authenticate. API Error: 401 Invalid bearer token`.
+  Regenerate it with `claude setup-token` and set it with `gh secret set CLAUDE_CODE_OAUTH_TOKEN`,
+  which reads the value from a prompt and so avoids stray quotes or newlines.
+- **Still unverified:** `ANTHROPIC_API_KEY` alone, with no `.credentials.json`. An earlier local
+  run recorded `"Not logged in"` in that configuration, and it has not been re-checked since CI
+  moved to the OAuth token.
 
 ### Model-override probe (manual)
 
@@ -312,6 +321,15 @@ proving the harness would notice a regression that removes the guard. Mirrors
 `tests/hooks/run-conformance.ps1` and `tests/contract-lint/run-selftest.ps1`'s own `-SelfTest`
 modes.
 
+**"Could not run" is not "detected" (SW-81).** A scenario whose `claude -p` timed out, printed no
+parseable result, or returned `is_error: true` never touched its workspace, so every assertion
+fails. Before SW-81 the self-test counted that as detecting the neutered guard. Nightly run #49 did
+exactly that with no auth configured, printing `harness detected the neutered guard` for both
+scenarios without having run either. Such a scenario is now reported as `[ERROR] ... could not run`
+with its exit code, result and stderr, its assertions are skipped, and the self-test exits 1. The
+normal suite reports it the same way, counts it apart from failed assertions in the summary line,
+and exits 1.
+
 ## Scenarios
 
 | # | Scenario | Claim under test |
@@ -354,6 +372,12 @@ billed. The runs below used subscription auth. That makes the suite practical to
 before a PR, one `-Case` at a time for the cheap scenarios (`03`, `04`: about $0.15 each). It is no
 longer only a nightly report to read afterwards. A full run plus `-SelfTest` fits inside the
 nightly job's `timeout-minutes: 45`.
+
+**Measured on CI, 2026-09-30** (run 36663596039, ubuntu-latest, `claude` 2.1.197, subscription
+auth, commit `31ae29a`): all 11 scenarios passed (102/102 assertions) in about **35 minutes**, and
+`-SelfTest` detected the neutered guard in both scenarios in under a minute. That leaves about 10
+minutes of headroom under `timeout-minutes: 45`, so a new long scenario may need the limit raised.
+The workflow keeps no `-ResultsFile`, so that run has no per-scenario cost figures.
 
 ### Reproducibility runs, 2026-09-26 (SW-77)
 

@@ -14,9 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the fixture's `.claude/settings.json` calls `powershell`, which the ubuntu runner lacks (it
   ships `pwsh`). A hook whose command is not found exits 127, which is non-blocking, so every
   hook silently no-oped. `run-e2e.ps1` now rewrites the workspace copy's hook commands to `pwsh`
-  when not on Windows; the committed fixture stays Windows-first. A run with no parseable result
-  or `is_error: true` now prints its exit code, result, and stderr without `SD_E2E_DEBUG`, so a
-  nightly failure names its cause instead of showing only failed assertions.
+  when not on Windows; the committed fixture stays Windows-first. A scenario whose `claude -p`
+  timed out, printed no parseable result, or returned `is_error: true` is now its own "could not
+  run" outcome: it prints its exit code, result and stderr without `SD_E2E_DEBUG`, skips its
+  assertions, and is counted apart from failed assertions. `-SelfTest` used to count such a run as
+  detecting the neutered guard, since every assertion fails against an untouched workspace. Nightly
+  run #49 did exactly that with no auth configured. It now fails with "could not run" instead.
+  Verified on ubuntu: 11/11 scenarios and `-SelfTest` pass in about 35 minutes on
+  `CLAUDE_CODE_OAUTH_TOKEN` (run 36663596039, `claude` 2.1.197).
 - **`spec-gate` denies were dropped whenever a permission rule already allowed the tool (SW-80)** -
   both implementations emitted `hookSpecificOutput` without `hookEventName`, so the CLI ignored
   the block. The legacy `decision: "block"` alone does not override an allow rule

@@ -67,6 +67,12 @@
     guard (mirrors tests/hooks/run-conformance.ps1 and
     tests/contract-lint/run-selftest.ps1's own -SelfTest modes).
 
+    A scenario whose claude -p timed out, printed no parseable result, or
+    returned is_error: true "could not run" (SW-81): its assertions are
+    skipped, it is reported as [ERROR] and counted apart from failed
+    assertions, and the run exits 1. Under -SelfTest it fails the self-test,
+    since a session that never ran cannot show the guard was exercised.
+
 .NOTES
     PURE ASCII ONLY (see hooks/powershell/prompt-router.ps1 for why).
     Single cross-platform runner by design, same posture as
@@ -93,6 +99,7 @@ $installPs1   = Join-Path $repoRoot 'install' 'install.ps1'
 
 $script:pass = 0
 $script:fail = 0
+$script:couldNotRun = 0
 $script:claudeVersion = $null
 $script:authMode = $null
 $script:scenarioResults = [System.Collections.Generic.List[object]]::new()
@@ -100,6 +107,7 @@ $script:scenarioResults = [System.Collections.Generic.List[object]]::new()
 function Write-Ok   { param([string]$m) Write-Host "  [OK]   $m"; $script:pass++ }
 function Write-Bad  { param([string]$m) Write-Host "  [FAIL] $m"; $script:fail++ }
 function Write-Info { param([string]$m) Write-Host "         $m" }
+function Write-CouldNotRun { param([string]$m) Write-Host "  [ERROR] $m"; $script:couldNotRun++ }
 
 # ---- prerequisites -----------------------------------------------------------
 
@@ -593,6 +601,7 @@ function Invoke-Scenario {
         passed           = $false
         assertionsPassed = 0
         assertionsTotal  = 0
+        couldNotRun      = $false
         timedOut         = $false
         exitCode         = $null
         isError          = $null
@@ -626,15 +635,12 @@ function Invoke-Scenario {
             $record.totalCostUsd = $run.Result.total_cost_usd
         }
 
-        if ($run.TimedOut) {
-            Write-Bad "$name : claude -p timed out after $timeoutSec s"
-            return $false
-        }
-
-        # SW-81: an unusable run (no parseable result, or is_error) is printed
-        # unconditionally - otherwise CI shows only assertion failures and the
-        # real cause (auth, CLI error) is invisible.
-        $isUnusable = ($null -eq $run.Result) -or ($run.Result.is_error -eq $true)
+        # SW-81: a run that never produced a usable session (timeout, no
+        # parseable result, is_error) is its own outcome, not failed
+        # assertions. Every assertion fails against an untouched workspace, so
+        # counting them would let -SelfTest "detect" a neutered guard it never
+        # exercised - run #49 did exactly that with no auth configured.
+        $isUnusable = $run.TimedOut -or ($null -eq $run.Result) -or ($run.Result.is_error -eq $true)
         if ($env:SD_E2E_DEBUG -or $isUnusable) {
             Write-Info "exit code: $($run.ExitCode)"
             Write-Info "result   : $($run.Result.result)"
@@ -643,6 +649,14 @@ function Invoke-Scenario {
                 Write-Info "stdout   : $($run.Stdout.Substring(0, [Math]::Min(2000, $run.Stdout.Length)))"
             }
             if ($run.Stderr) { Write-Info "stderr   : $($run.Stderr.Substring(0, [Math]::Min(2000, $run.Stderr.Length)))" }
+        }
+        if ($isUnusable) {
+            $reason = if ($run.TimedOut) { "timed out after $timeoutSec s" }
+                elseif ($null -eq $run.Result) { "no parseable result (exit $($run.ExitCode))" }
+                else { 'is_error: true' }
+            Write-CouldNotRun "$name : claude -p could not run ($reason) - assertions skipped"
+            $record.couldNotRun = $true
+            return $false
         }
 
         $expectPath = Join-Path $ScenarioDir 'expect.json'
@@ -777,7 +791,10 @@ if ($SelfTest) {
             continue
         }
         $detected = Invoke-Scenario -ScenarioDir $dir -NeuterGuard -ExpectFailure
-        if ($detected) {
+        if ($script:scenarioResults[-1].couldNotRun) {
+            Write-CouldNotRun "self-test: $n : could not run, so it cannot tell whether the guard was exercised"
+            $allDetected = $false
+        } elseif ($detected) {
             Write-Ok "self-test: $n : harness detected the neutered guard"
         } else {
             Write-Bad "self-test: $n : harness did NOT notice the guard was removed"
@@ -795,7 +812,9 @@ foreach ($dir in $selectedDirs) {
 }
 
 Write-Host ''
-Write-Host "=== Summary: $($script:pass) passed, $($script:fail) failed ==="
-Write-ResultsFile -Mode $(if ($Case) { 'case' } else { 'full' }) -Passed ($script:fail -eq 0)
-if ($script:fail -gt 0) { exit 1 }
+Write-Host ("=== Summary: $($script:pass) passed, $($script:fail) failed, " +
+    "$($script:couldNotRun) scenario(s) could not run ===")
+$suitePassed = ($script:fail -eq 0) -and ($script:couldNotRun -eq 0)
+Write-ResultsFile -Mode $(if ($Case) { 'case' } else { 'full' }) -Passed $suitePassed
+if ($suitePassed -eq $false) { exit 1 }
 exit 0
