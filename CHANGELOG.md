@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **e2e hooks never ran on Linux/macOS, and an erroring `claude -p` was invisible in CI (SW-81)** -
+  the fixture's `.claude/settings.json` calls `powershell`, which the ubuntu runner lacks (it
+  ships `pwsh`). A hook whose command is not found exits 127, which is non-blocking, so every
+  hook silently no-oped. `run-e2e.ps1` now rewrites the workspace copy's hook commands to `pwsh`
+  when not on Windows; the committed fixture stays Windows-first. A run with no parseable result
+  or `is_error: true` now prints its exit code, result, and stderr without `SD_E2E_DEBUG`, so a
+  nightly failure names its cause instead of showing only failed assertions.
 - **`spec-gate` denies were dropped whenever a permission rule already allowed the tool (SW-80)** -
   both implementations emitted `hookSpecificOutput` without `hookEventName`, so the CLI ignored
   the block. The legacy `decision: "block"` alone does not override an allow rule

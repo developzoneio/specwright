@@ -286,7 +286,23 @@ function New-ScenarioWorkspace {
         Copy-TreeContents -Source $overlay -Destination $ws
     }
 
+    if (-not $IsWindows) { Convert-HookShellToPwsh -Workspace $ws }
     return $ws
+}
+
+function Convert-HookShellToPwsh {
+    # SW-81: the committed fixture settings are Windows-first and call
+    # `powershell`, which Linux/macOS runners lack (they ship `pwsh`). A hook
+    # whose command is not found exits 127 - non-blocking - so every hook
+    # silently no-ops. Rewrite only this throwaway workspace's copy.
+    param([string]$Workspace)
+    $settingsPath = Join-Path $Workspace '.claude' 'settings.json'
+    if (-not (Test-Path -LiteralPath $settingsPath)) { return }
+    $raw = Get-Content -LiteralPath $settingsPath -Raw
+    $rewritten = $raw -replace '"command":\s*"powershell\s', '"command": "pwsh '
+    if ($rewritten -ne $raw) {
+        Set-Content -LiteralPath $settingsPath -Value $rewritten -NoNewline -Encoding utf8
+    }
 }
 
 # ---- guard neutering (for -SelfTest) ----------------------------------------
@@ -615,10 +631,17 @@ function Invoke-Scenario {
             return $false
         }
 
-        if ($env:SD_E2E_DEBUG) {
+        # SW-81: an unusable run (no parseable result, or is_error) is printed
+        # unconditionally - otherwise CI shows only assertion failures and the
+        # real cause (auth, CLI error) is invisible.
+        $isUnusable = ($null -eq $run.Result) -or ($run.Result.is_error -eq $true)
+        if ($env:SD_E2E_DEBUG -or $isUnusable) {
             Write-Info "exit code: $($run.ExitCode)"
             Write-Info "result   : $($run.Result.result)"
             Write-Info "is_error : $($run.Result.is_error)  cost: $($run.Result.total_cost_usd)"
+            if ($null -eq $run.Result -and $run.Stdout) {
+                Write-Info "stdout   : $($run.Stdout.Substring(0, [Math]::Min(2000, $run.Stdout.Length)))"
+            }
             if ($run.Stderr) { Write-Info "stderr   : $($run.Stderr.Substring(0, [Math]::Min(2000, $run.Stderr.Length)))" }
         }
 
