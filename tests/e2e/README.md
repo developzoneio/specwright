@@ -255,12 +255,35 @@ were a spec-gate output bug, not CLI behavior, and SW-80 fixed it in both hooks.
 does decide what else goes through. `acceptEdits` and skip-permissions both let
 `echo x > file` run through `Bash`. That is the route spec-gate's `shell-write` rule covers only
 by a text heuristic (see gap #2 below). Under `dontAsk` with a narrow grant it is refused. That
-also keeps SW-27's "no skip-permissions" bar. `01-setup` is the one scenario that still uses
-skip-permissions: it writes `.claude/settings.json` and `.claude/project-config.json`, which Claude
-Code treats as sensitive, and asserts no deny. The runner enforces the rule: a scenario that
-asserts a deny (`03`, `04`, or any `permission-denied` assertion) exits `2` before any spend if it
-is configured with `skip-permissions.txt` or with `permission-mode.txt` set to `acceptEdits` or
-`bypassPermissions`.
+also keeps SW-27's "no skip-permissions" bar, with one exception, `01-setup` (below). The runner
+enforces the rule: a scenario that asserts a deny (`03`, `04`, or any `permission-denied`
+assertion) exits `2` before any spend if it is configured with `skip-permissions.txt` or with
+`permission-mode.txt` set to `acceptEdits` or `bypassPermissions`. A `skip-permissions.txt` that
+states no reason also exits `2` (SW-83).
+
+**`01-setup` keeps skip-permissions: no grant opens `.claude/` (SW-83).** `/sd:setup` writes
+`.claude/project-config.json` and `.claude/settings.json`, and Claude Code treats both as
+protected paths. `probe-permission-posture.ps1 -Probe claude-dir` asked for a `Write` of
+`free.txt` (the control), a `Write` of each of those two files, then an `Edit` of `settings.json`,
+in a bare workspace with no `.claude/`. Verified 2026-09-30, `claude` 2.1.285, Windows 10.0.26200,
+haiku, about $0.26 for all six:
+
+| Posture | `free.txt` | `.claude/project-config.json` | `.claude/settings.json` |
+|---|---|---|---|
+| `dontAsk`, no grant | refused | refused | refused |
+| `dontAsk` + `--allowedTools "Edit,Write,MultiEdit"` | written | **refused**, in `permission_denials` | **refused**, in `permission_denials` |
+| the same plus `Edit(.claude/**)`, `Write(.claude/**)`, `Edit(/.claude/**)`, `Write(/.claude/**)` | written | **refused**, in `permission_denials` | **refused**, in `permission_denials` |
+| `acceptEdits` | written | refused | refused |
+| `bypassPermissions` | written | written | written, then edited |
+| `acceptEdits` + `--dangerously-skip-permissions` | written | written | written, then edited |
+
+The whole of `.claude/` is protected, not only the settings files: `project-config.json` was
+refused as well. This matches the documented rule that `dontAsk` denies protected-path writes and
+that allow rules do not pre-approve them. The probe shows that an `--allowedTools` grant does not
+either. `bypassPermissions` is no narrower than skip-permissions, so `01` stays on skip, and
+`skip-permissions.txt` states why. The cost is the one the ticket named: under skip, a
+`/sd:setup` regression that writes its files through `Bash` rather than the Write tool would still
+pass `01`. `01` asserts no deny, so skip does not hide a hook failure.
 
 **`03` and `04` grant the edit they expect to be denied (SW-82).** Before SW-82 they ran under
 `dontAsk` with no grant, so the mode refused their `Edit` whether or not spec-gate was there. Their
@@ -296,7 +319,12 @@ known-good ones, so a hook-output bug cannot pass for CLI behavior again. Its `v
 $env:CLAUDE_CODE_OAUTH_TOKEN = '<from claude setup-token>'
 .\tests\e2e\probe-permission-posture.ps1                                  # 8 postures x legacy,fixed
 .\tests\e2e\probe-permission-posture.ps1 -Posture acceptedits,skip -HookFormat fixed
+.\tests\e2e\probe-permission-posture.ps1 -Probe claude-dir                # SW-83: writes under .claude/
 ```
+
+`-Probe claude-dir` is the evidence for `01-setup`'s exception (above). Re-run it when the minimum
+`claude` version is raised: if a `dontAsk` row ever writes both `.claude/` files, `01` can move to
+`allowed-tools.txt` and drop `skip-permissions.txt` and `permission-mode.txt`.
 
 Its first runs, 2026-09-28 on `claude` 2.1.283, are the table above: the five `dontAsk` postures x
 `legacy` / `fixed` / `exit2` on Linux, and `acceptedits`, `acceptedits-bash`, `skip` and
@@ -376,7 +404,9 @@ Each scenario directory may contain: `source.txt` (repo-relative base tree to co
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
 `tests/contract-lint` `_base` + overlay fixture pattern), `prompt.txt` (the literal headless
 prompt), `expect.json` (declarative assertions), and optional `budget.txt` / `timeout.txt` / `permission-mode.txt`
-/ `skip-permissions.txt` / `disallowed-tools.txt` / `allowed-tools.txt` overrides. `allowed-tools.txt`
+/ `skip-permissions.txt` / `disallowed-tools.txt` / `allowed-tools.txt` overrides. A
+`skip-permissions.txt` must hold the evidenced reason the scenario cannot run under `dontAsk` with a
+grant; the preflight refuses an empty one. `allowed-tools.txt`
 holds one permission rule per line (`#` comments allowed), because a rule such as
 `Bash(npm test:*)` contains a space. Besides the file assertions, `expect.json` accepts
 `permission-denied` (`tool`, a regex, and `path`, a suffix): the run's `permission_denials` holds a

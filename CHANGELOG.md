@@ -524,6 +524,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     approved before this rule existed.
 
 ### Changed
+- **e2e `01-setup` keeps skip-permissions, now with evidence (SW-83)** - `/sd:setup` writes
+  `.claude/project-config.json` and `.claude/settings.json`, which Claude Code protects.
+  `probe-permission-posture.ps1` gains `-Probe claude-dir`, which asks for both writes in a bare
+  workspace. On `claude` 2.1.285 (Windows), `dontAsk` refused both with a bare
+  `Edit,Write,MultiEdit` grant and with `Edit`/`Write(.claude/**)` and `(/.claude/**)` rules added,
+  and so did `acceptEdits`. Every refusal was in `permission_denials` while the `free.txt` control
+  was written. Only `bypassPermissions` and `--dangerously-skip-permissions` wrote them. So no
+  narrower posture works, and `01` stays on skip, won't-fix on the current CLI.
+  `skip-permissions.txt` and `tests/e2e/README.md` "Permission mode" record the evidence, and
+  `run-e2e.ps1` now exits 2 before any spend on a `skip-permissions.txt` that states no reason.
 - **`probe-hook-events.ps1` no longer copies your CLI credentials** - like
   `probe-model-override.ps1`, it now authenticates from `CLAUDE_CODE_OAUTH_TOKEN`
   (`claude setup-token`) or `ANTHROPIC_API_KEY`, and copies `~/.claude/.credentials.json` into the

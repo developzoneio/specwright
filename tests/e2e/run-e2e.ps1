@@ -409,8 +409,10 @@ function Invoke-ClaudeHeadless {
     # postures used to look like it overrode the deny. The narrow grant is
     # still the point: acceptEdits and skip-permissions also let a Bash
     # `echo x > file` through, which dontAsk refuses. Skip is kept only for
-    # 01-setup (writes .claude/settings.json, asserts no deny), and
-    # Assert-ScenarioPosture refuses it for any scenario that asserts one.
+    # 01-setup: it writes .claude/settings.json and project-config.json,
+    # protected paths no grant opens under dontAsk (SW-83). It asserts no
+    # deny, and Assert-ScenarioPosture refuses skip for any scenario that
+    # asserts one, or whose skip-permissions.txt states no reason.
     $cliArgs += '--permission-mode'
     $cliArgs += $PermissionMode
     if ($SkipPermissions) {
@@ -507,6 +509,15 @@ function Assert-ScenarioPosture {
     # scenario exits 2 before any spend.
     param([string]$ScenarioDir)
     $name = Split-Path -Leaf $ScenarioDir
+    # SW-83: skip-permissions is the exception, so its file must say why.
+    $skipTxt = Join-Path $ScenarioDir 'skip-permissions.txt'
+    if ((Test-Path -LiteralPath $skipTxt) -and
+        [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $skipTxt -Raw))) {
+        Write-Host "[FAIL] scenario $name has an empty skip-permissions.txt; state the reason the scenario"
+        Write-Host '       cannot run under dontAsk + a narrow grant, with the probe evidence for it.'
+        Write-Host '       See tests/e2e/README.md "Permission mode".'
+        exit 2
+    }
     $expectPath = Join-Path $ScenarioDir 'expect.json'
     $assertsDeny = $negativeScenarios -contains $name
     if ((-not $assertsDeny) -and (Test-Path -LiteralPath $expectPath)) {
