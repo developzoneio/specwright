@@ -477,6 +477,7 @@
       { "id": "ESC-BUG-03",   "command": "bug",      "phase": "3",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
       { "id": "ESC-BUG-03b",  "command": "bug",      "phase": "3",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
       { "id": "ESC-RCA-02",   "command": "rca",      "phase": "2",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-REF-02",   "command": "refactor", "phase": "2",  "agent": "sd-code-explorer",  "from": "haiku",  "to": "sonnet" },
       { "id": "ESC-REF-04",   "command": "refactor", "phase": "4",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
       { "id": "ESC-PERF-04",  "command": "perf",     "phase": "4a", "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
       { "id": "ESC-PORT-01",  "command": "port",     "phase": "1",  "agent": "sd-code-explorer",  "from": "haiku",  "to": "sonnet" },
