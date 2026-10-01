@@ -11,6 +11,7 @@ Origin: ADR 0002 ("Sanctioned model escalation, aliases only"), shipped for `/sd
 extracted here by SW-60 and extended to `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf` and
 `/sd:port` by SW-62. `ESC-REF-02` was added by SW-84, and `ESC-PORT-01` (the port
 extraction, including its donor-side `/sd:explore --port` call site) by SW-85.
+SW-86 extended the `sd-implementer` rows beyond `/sd:feature`.
 
 ---
 
@@ -66,10 +67,14 @@ story that wires them, mirrored row for row in the engine manifest's
 | `ESC-FEAT-04b` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Reversibility` is `hard`, and `ESC-FEAT-04` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-BUG-03` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | spec `severity` (`00-spec.md` frontmatter) is `P0` or `P1` | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-BUG-03b` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | `03-decisions.md` already records two or more exhausted hypothesis trees (Gate 3a reached twice), and `ESC-BUG-03` did not fire | `sd-debugger` | `sonnet` | `opus` |
+| `ESC-BUG-05` | `/sd:bug` | Phase 5 step 3, once per run, before the implementer | spec `severity` (`00-spec.md` frontmatter) is `P0` or `P1` | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-RCA-02` | `/sd:rca` | Phase 2 step 0, once per run, before the first `sd-debugger` call | spec `severity` (`00-spec.md` frontmatter) is `P0` | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-REF-02` | `/sd:refactor` | Phase 2 step 0, before `TASK = impact-map` | `mcp.gitnexus.enabled` (project-config) is not `true` - absent or `false` | `sd-code-explorer` | `haiku` | `sonnet` |
 | `ESC-REF-04` | `/sd:refactor` | Phase 4 step 0, before the plan | the Phase 2 impact analysis in `03-decisions.md` names more than 8 distinct files, or those files fall under more than 2 `paths.layers` entries of project-config | `sd-spec-architect` | `sonnet` | `opus` |
+| `ESC-REF-05` | `/sd:refactor` | Phase 5 step 2, once per task, before the implementer | task `Estimated complexity` (`02-tasks.md` task block) is `L` | `sd-implementer` | `haiku` | `sonnet` |
+| `ESC-REF-05b` | `/sd:refactor` | Phase 5 step 2, once per task, before the implementer | task `Reversibility` is `hard`, and `ESC-REF-05` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-PERF-04` | `/sd:perf` | Phase 4a step 4, before Gate 4 is re-presented for a hotspot | the Results log holds two or more `reverted` rows for this hotspot, and `ESC-PERF-04` has not fired for this hotspot; re-invoke 4a once | `sd-debugger` | `sonnet` | `opus` |
+| `ESC-PERF-04b` | `/sd:perf` | Phase 4b step 1, once per applied hypothesis, before the implementer | the hypothesis chosen at Gate 4 has `Reversibility: hard` in its risk profile (`03-decisions.md`) | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-PORT-01` | `/sd:port` | Phase 1 Branch B step 1, before `TASK = port-extract`; also `/sd:explore --port` Phase 2, the donor side of a bridged port | `GITNEXUS_AVAILABLE` is `false` (the closure walk falls back to recursive grep), or `SCOPE` is `module` or `feature` | `sd-code-explorer` | `haiku` | `sonnet` |
 | `ESC-PORT-06` | `/sd:port` | Phase 6 step 2, before the plan | the Phase 6 step 1 port decompose metric (deviation rows requiring adaptation) is more than 8 | `sd-spec-architect` | `sonnet` | `opus` |
 
@@ -96,6 +101,10 @@ Why each row exists:
   default tier has already failed twice on this bug. The threshold is two, not one, so a single
   evidence-starved round does not buy opus. The "did not fire" clause keeps a `P0` / `P1` round to
   one line.
+- `ESC-BUG-05` - the same severity argument as `ESC-BUG-03`, applied to the diff instead of the
+  diagnosis. A `P0` / `P1` root cause found at opus and then written as a fix by haiku spends the
+  expensive tier on the half of the work the failing test already guards least. The Gate 4 test
+  bounds the risk, so the rung is one (`sonnet`), not two. `P2` / `P3` keep the default.
 - `ESC-RCA-02` - `P0` only. An RCA changes no code; its fixes spawn their own `BUG-*` specs, which
   carry `ESC-BUG-03` in their own right. Only a production-down incident justifies paying opus
   up front for the analysis itself.
@@ -110,11 +119,25 @@ Why each row exists:
   files; > 2 production layers, ADR 0004), read from the measured impact map instead of an
   estimate. A refactor that wide is where parallel-safe batching (disjoint file sets per batch)
   degrades first. When `paths.layers` is `[]`, only the file clause is evaluated.
+- `ESC-REF-05` / `ESC-REF-05b` - the `ESC-FEAT-04` / `ESC-FEAT-04b` argument, unchanged: both read
+  fields of the shared task format (**sd-atomic-task-format**), so a refactor task block means what
+  a feature task block means. An `L` refactor task holds a design decision, and a `hard` one
+  (a public API move, a data shape change) is a wrong diff whose cost is asymmetric, and the
+  implementer must keep every `INVARIANTS` entry across it. `ESC-REF-04` escalates the plan for a
+  wide refactor; these rows escalate the task that is individually hard, wide refactor or not.
+  Phase 3 characterization-test calls keep the default: they pin current behavior and read no
+  task block.
 - `ESC-PERF-04` - fires on observed failure: two optimizations the default debugger proposed were
   applied and reverted. Gate 4 would otherwise offer the rest of the same list from the same tier,
   so the rule re-runs the 4a deep dive once, escalated, with the reverted attempts in view. It is a
   re-invocation row: under a ceiling that leaves the tier unchanged the re-run is skipped
   (precedence rule 2) and Gate 4 continues with the hypotheses already listed.
+- `ESC-PERF-04b` - one optimization per call, but caching and concurrency changes are where a
+  subtly wrong diff passes the correctness suite. It reads the `Reversibility` the debugger
+  already records per hypothesis, in the task format's vocabulary (`trivial` / `moderate` /
+  `hard`), and only `hard` - the `ESC-FEAT-04b` argument. Implementation cost is not a trigger:
+  a perf attempt is measured and reverted at Gate 6 when it does not pay, so its size is already
+  bounded by the loop.
 - `ESC-PORT-01` - the extraction is the donor-side contract every later `/sd:port` phase consumes
   (snapshot, fidelity tables, the `ESC-PORT-06` metric, parity review), so a closure it misses
   propagates silently. It is the hardest task `sd-code-explorer` has: an uncapped member closure,
@@ -128,14 +151,22 @@ Why each row exists:
   judgment in a port scales with departures from the donor, not with its file count or layer
   spread, which are inherited from the donor by construction. The threshold is the same `> 8`.
 
+No row, decided (SW-86): `/sd:port` Phase 5 and Phase 7 `sd-implementer` calls keep the default.
+Each task reproduces a cited donor member range; the judgment a port needs - which departures to
+license - is made in the deviation table and the plan, which `ESC-PORT-06` already escalates. A
+task outside its member range or deviation rows fails the Phase 7 self-check instead.
+
 **Measured beats self-declared.** `ESC-FEAT-02` / `03` read an estimate the model made about the
 work before starting. `ESC-BUG-03b` and `ESC-PERF-04` fire on failure already observed, and
 `ESC-REF-04` and `ESC-PORT-06` on a quantity the workflow has measured. A measured trigger
 cannot be wrong about the past, and it escalates exactly when the default tier has shown it is not
 enough - provided the measurement is sound, which is what `ESC-REF-02` protects for
-`ESC-REF-04`. `ESC-BUG-03` / `ESC-RCA-02` read `severity`, a statement about impact, not about
-difficulty. `ESC-PORT-01` reads neither: it reads configuration and a user-chosen scope, which say
-how the walk will run and how wide it is, not how hard the model thinks it is.
+`ESC-REF-04`. `ESC-BUG-03` / `ESC-BUG-05` / `ESC-RCA-02` read `severity`, a statement about
+impact, not about difficulty. `ESC-PORT-01` reads neither: it reads configuration and a
+user-chosen scope, which say how the walk will run and how wide it is, not how hard the model
+thinks it is. The task-level rows (`ESC-FEAT-04` / `04b`, `ESC-REF-05` / `05b`,
+`ESC-PERF-04b`) read a planner's estimate of one unit of work - self-declared, but by a
+different agent than the one being escalated.
 A measured trigger for `/sd:feature` (escalate when Gate 2's computed thresholds are exceeded) is
 argued by the same reasoning, but it edits a shipped gate and is out of scope here.
 
@@ -146,7 +177,11 @@ line per round. A Gate 3a `re-enumerate` or `observe` starts a new round, decide
 Phase 2 and Phase 3 `sd-debugger` call, including Gate 2 `add hypothesis` loops and Gate 3
 `dig deeper` - one line per run. A resumed session that finds the rule's line in `05-retro.md`
 re-applies that decision without writing a second line. `ESC-PERF-04` fires at most once per
-hotspot and covers only the 4a re-invocation it triggers.
+hotspot and covers only the 4a re-invocation it triggers. `ESC-BUG-05` is decided once per run,
+at the first Phase 5 implementer call, and covers every later implementer call of that run,
+including a Gate 5 `address findings` loop - one line per run, re-applied on resume like
+`ESC-RCA-02`. `ESC-PERF-04b` is decided once per hypothesis applied at 4b and covers only that
+attempt; the next hypothesis chosen at Gate 4 is decided afresh.
 
 **Decided before the spec exists (`ESC-PORT-01`).** The extraction runs before its spec
 directory exists, so this row is the one exception to "write the line before the invocation".
@@ -158,19 +193,21 @@ due), and `/sd:port` Branch A copies it verbatim into the new spec's `05-retro.m
 stops before the spec is registered re-runs Phase 1 and decides afresh, so no line is lost or
 doubled. A bundle with no `escalation_line` key predates this rule and carries nothing.
 
-**Per-task decision in Phase 4.** `ESC-FEAT-04` / `ESC-FEAT-04b` are decided once per task, when
-the task is first invoked, and that decision covers the task's re-invocations in the same Phase 4
-pass (a scope revert, a failing test, constitution feedback) - one line per task, not per retry.
-The next task starts at the default again (invariant 3). A task regenerated by Gate Re-plan is a
-new task block and is decided afresh.
+**Per-task decision.** `ESC-FEAT-04` / `ESC-FEAT-04b` (`/sd:feature` Phase 4) and `ESC-REF-05` /
+`ESC-REF-05b` (`/sd:refactor` Phase 5) are decided once per task, when the task is first invoked,
+and that decision covers the task's re-invocations in the same pass (a scope revert, a failing
+test, constitution feedback, a red-batch fix) - one line per task, not per retry. The next task
+starts at the default again (invariant 3). A task regenerated by Gate Re-plan is a new task block
+and is decided afresh. Tasks of one refactor batch run in parallel; each is decided on its own.
 
-**Ceiling interaction.** Both Phase 4 rows, `ESC-REF-02` and `ESC-PORT-01` reach `sonnet`, so
-`ceiling: "sonnet"` leaves them untouched - they fire, uncapped. Only `ceiling: "haiku"` caps
-them (logged `capped`, reached `haiku`). `tests/e2e/scenarios/06-escalation-implementer` asserts
-the `sonnet` case. Every other non-feature row starts at `sonnet`, so `ceiling: "sonnet"` caps
-each of them to no movement: the line still records the decision
-(`sonnet -> sonnet ... capped`), so a capped run stays distinguishable from a run where the policy
-never executed.
+**Ceiling interaction.** Every `haiku`-default row - the `sd-implementer` rows (`ESC-FEAT-04` /
+`04b`, `ESC-BUG-05`, `ESC-REF-05` / `05b`, `ESC-PERF-04b`) and the `sd-code-explorer` rows
+(`ESC-FEAT-02`, `ESC-REF-02`, `ESC-PORT-01`) - reaches `sonnet`, so `ceiling: "sonnet"` leaves them
+untouched - they fire, uncapped. Only `ceiling: "haiku"` caps them (logged `capped`, reached
+`haiku`). `tests/e2e/scenarios/06-escalation-implementer` asserts the `sonnet` case. Every other row
+starts at `sonnet`, so `ceiling: "sonnet"` caps each of them to no movement: the line still records
+the decision (`sonnet -> sonnet ... capped`), so a capped run stays distinguishable from a run where
+the policy never executed.
 `tests/e2e/scenarios/11-escalation-rca-capped` asserts that for `ESC-RCA-02`.
 
 **Rule ID format.** `ESC-<WORKFLOW>-<PHASE>` with an optional lowercase suffix (`b`, `c`) for a

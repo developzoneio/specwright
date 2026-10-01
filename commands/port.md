@@ -482,8 +482,9 @@ a resolution - it makes the diff justify itself.
   `paths.layers` / `paths.protected`.
 - Model references are aliases only (`sonnet`, `haiku`, `opus`, `inherit`) - never a full model ID.
 - **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PORT-01` is applied at
-  Phase 1 (Branch B; carried from the bundle in Branch A) and `ESC-PORT-06` at Phase 6 step 2; the
-  ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
+  Phase 1 (Branch B; carried from the bundle in Branch A) and `ESC-PORT-06` at Phase 6 step 2. The
+  Phase 5 and Phase 7 `sd-implementer` calls run at the default, a decision recorded in the skill;
+  the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
   skill and are not restated here.
 - Snapshot visibility: this command warns about host tooling globbing `.specs/` and never edits the
   host's build, lint, or coverage configuration.

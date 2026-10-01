@@ -164,7 +164,11 @@ For each batch (up to 3 tasks in parallel):
 
 1. **Pre-batch**: run full test suite. Must be green. If red, abort batch and surface failure - the baseline must be clean.
 2. For each task in the batch:
-   - Invoke `sd-implementer` with:
+   - **Model escalation check.** Before this task's first implementer call, apply rules
+     `ESC-REF-05` and `ESC-REF-05b` of **sd-model-escalation** (read in Phase 0). Trigger inputs:
+     the task block's `Estimated complexity` and `Reversibility` fields. The decision also covers
+     this task's re-invocations when Gate 5 sends a red batch back for a fix.
+   - Invoke `sd-implementer` (model: default, or as resolved above) with:
      - `TASK_DETAILS = <task block>`
      - `SPEC_REF = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
      - `IMPACT_REF = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -263,8 +267,9 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
 - Implementer in refactor mode has the tightest scope discipline. Any "improvement" beyond restructuring is rejected.
 - Public API preservation is verified by reviewer (Phase 6), not assumed.
 - **Model escalation follows `sd-model-escalation` only.** Rules `ESC-REF-02` and `ESC-REF-04` are
-  applied at Phase 2 step 0 and Phase 4 step 0; the ladder, precedence, `models.escalation`
-  config and the `05-retro.md` line format live in the skill and are not restated here.
+  applied at Phase 2 step 0 and Phase 4 step 0, and `ESC-REF-05` / `ESC-REF-05b` at Phase 5 step 2;
+  the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
+  skill and are not restated here.
 - Max 3 parallel tasks per batch. More -> tests-between granularity is too coarse.
 - Each batch's tests must finish before the next batch starts. No "tests run in background while next batch starts".
 - **Gate Re-plan is a conditional gate, not a seventh always-on gate.** It fires only on a

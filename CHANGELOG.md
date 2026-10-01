@@ -166,6 +166,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   under-counts, so a wide refactor could stay under `ESC-REF-04`'s threshold. Phase 2 now opens
   with a step 0 that applies `ESC-REF-02` (`haiku` -> `sonnet` when `mcp.gitnexus.enabled` is not
   `true`), mirrored in `sd-model-escalation`'s trigger table and `contractLint.escalationTriggers`.
+- **`sd-implementer` escalation beyond `/sd:feature` (SW-86)** - four new rows in
+  `sd-model-escalation`, mirrored in manifest `contractLint.escalationTriggers`, each `haiku ->
+  sonnet`. `ESC-BUG-05`: `/sd:bug` Phase 5 for a `P0` / `P1` spec, once per run, covering the
+  Gate 5 `address findings` loop. `ESC-REF-05` / `ESC-REF-05b`: `/sd:refactor` Phase 5, per task,
+  the `ESC-FEAT-04` / `04b` conditions on the shared task format. `ESC-PERF-04b`: `/sd:perf` 4b,
+  per applied hypothesis, when its risk profile says `Reversibility: hard`. `/sd:port` keeps the
+  default by recorded decision: its tasks reproduce a cited donor range, and the judgment it needs
+  is already escalated at the plan by `ESC-PORT-06`. The `sd-implementer` description no longer
+  reads as `/sd:feature`-only.
 - **`handoff-integrity` PostToolUse hook: an edit outside the task's declared Files is flagged in
   the same turn** (SW-70, ADR 0017) - new pair `hooks/powershell/handoff-integrity.ps1` and
   `hooks/bash/handoff-integrity.sh`, wired on `PostToolUse` with matcher `Edit|Write|MultiEdit`

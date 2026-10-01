@@ -157,7 +157,10 @@ STOP. Display hypotheses. Ask:
 
 ### 4b. Apply
 
-1. Invoke `sd-implementer` with:
+1. **Model escalation check, then the implementer.** Apply rule `ESC-PERF-04b` of
+   **sd-model-escalation** (read in Phase 0). Trigger input: the `Reversibility` value in the
+   chosen hypothesis's risk profile in `03-decisions.md`. The decision covers this attempt only.
+   Invoke `sd-implementer` (model: default, or as resolved above) with:
    - `TASK_DETAILS = <hypothesis details + target files>`
    - `SPEC_REF = .specs/PERF-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT_REF = .specs/PERF-<slug>-<YYYYMMDD>/03-decisions.md` (hotspot analysis)
@@ -289,9 +292,9 @@ STOP. Display reviewer verdict. Ask:
 - One change per attempt. Bundled changes invalidate measurement.
 - Revert on no measurable improvement. The Results log is the source of truth.
 - Reverted attempts are LOGGED, not deleted. They are knowledge.
-- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PERF-04` is applied at
-  Phase 4a step 4; the ladder, precedence, `models.escalation` config and the `05-retro.md` line
-  format live in the skill and are not restated here.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PERF-04` is applied at Phase 4a
+  step 4, and `ESC-PERF-04b` at Phase 4b step 1; the ladder, precedence, `models.escalation` config
+  and the `05-retro.md` line format live in the skill and are not restated here.
 - Correctness tests must remain unchanged. If the optimization requires changing a test, it changes behavior - that needs a FEAT-* or BUG-* spec, not PERF-*.
 - Database access (via the project's MCP tool or CLI) for hotspot analysis is read-only: SELECT / EXPLAIN only.
 - If SLA cannot be met after exhausting hypotheses, close the PERF spec with the documented gap and lessons. Do not "ship anyway".

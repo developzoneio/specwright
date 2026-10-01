@@ -198,7 +198,11 @@ STOP. Display the test name and the failure output. Ask:
    - [ ] Touches only files implicated by root cause.
    - [ ] No "while I'm here" cleanups.
    - [ ] No reformatting unrelated code.
-3. Invoke `sd-implementer` with:
+3. **Model escalation check, then the implementer.** Before this run's first implementer call,
+   apply rule `ESC-BUG-05` of **sd-model-escalation** (read in Phase 0). Trigger input: the
+   `severity` frontmatter field of `.specs/BUG-<arg>/00-spec.md`. The decision also covers the
+   Gate 5 `address findings` loop. **Invoke `sd-implementer`** (model: default, or as resolved
+   above) with:
    - `TASK_DETAILS = <fix approach + target files>`
    - `SPEC_REF = .specs/BUG-<arg>/00-spec.md`
    - `IMPACT_REF = .specs/BUG-<arg>/03-decisions.md` (investigation evidence)
@@ -264,6 +268,7 @@ Ask:
 - Fix is MINIMAL. Opportunistic refactor goes into a separate REF-* spec.
 - Rejected hypotheses are documented with reasoning, not deleted.
 - **Model escalation follows `sd-model-escalation` only.** Rules `ESC-BUG-03` and `ESC-BUG-03b` are
-  applied at Phase 3 step 0; the ladder, precedence, `models.escalation` config and the
-  `05-retro.md` line format live in the skill and are not restated here.
+  applied at Phase 3 step 0, and `ESC-BUG-05` at Phase 5 step 3; the ladder, precedence,
+  `models.escalation` config and the `05-retro.md` line format live in the skill and are not
+  restated here.
 - If the bug recurs after close-out, the original BUG-<arg> stays `done`; open a new BUG-* with cross-reference.
