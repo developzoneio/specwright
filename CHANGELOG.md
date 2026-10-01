@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-01
+
+### Prompt size report
+`bash scripts/prompt-size-report.sh` against `v1.6.0`: 31 files, net +51897 bytes, 5 `FLAG` rows.
+All five are kept, not trimmed:
+- `commands/spec.md` (+18.5%) - the `SL061`-`SL066` port task-block rows (SW-49), the `SL067`
+  check-off marker row (SW-71) and the Edit-tool-only rule for `index.md` (SW-79). Each row is a
+  check `/sd:spec validate` runs; they cannot live elsewhere.
+- `skills/sd-atomic-task-format/SKILL.md` (+53.3%) - the task check-off marker (SW-71) and the
+  port-mode field constraints. The skill is the single owner of that format, so the growth moved
+  rules out of commands rather than adding copies.
+- `commands/refactor.md` (+19.0%), `commands/bug.md` (+15.0%), `commands/rca.md` (+16.9%) - the
+  model escalation steps (`ESC-REF-*`, `ESC-BUG-*`, `ESC-RCA-02`; SW-62, SW-85, SW-86) and the
+  SW-79 index-write rule. The policy text lives in `sd-model-escalation`; each command names only
+  the rule IDs and their trigger inputs.
+
 ### Fixed
 - **e2e `03` and `04` passed with no spec-gate at all (SW-82)** - they ran under `dontAsk` with no
   grant, so the mode refused their `Edit` on its own and the file assertions could not tell the
@@ -1794,7 +1810,8 @@ Each hook ships in two flavours:
 - Operating systems: Windows 11 + PowerShell 5.1 / 7.x, macOS 13+, Ubuntu 22.04+.
 - Optional MCP servers: Atlassian, Context7, sequential-thinking, GitNexus, MSSQL, Playwright, Tavily.
 
-[Unreleased]: https://github.com/developzoneio/specwright/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/developzoneio/specwright/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/developzoneio/specwright/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/developzoneio/specwright/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/developzoneio/specwright/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/developzoneio/specwright/compare/v1.3.0...v1.4.0
