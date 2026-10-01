@@ -9,7 +9,8 @@ via `skills:` so they know what the main thread may do to their own invocation.
 
 Origin: ADR 0002 ("Sanctioned model escalation, aliases only"), shipped for `/sd:feature` by SW-13,
 extracted here by SW-60 and extended to `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf` and
-`/sd:port` by SW-62.
+`/sd:port` by SW-62. `ESC-PORT-01` (the port extraction, including its donor-side
+`/sd:explore --port` call site) was added by SW-85.
 
 ---
 
@@ -68,6 +69,7 @@ story that wires them, mirrored row for row in the engine manifest's
 | `ESC-RCA-02` | `/sd:rca` | Phase 2 step 0, once per run, before the first `sd-debugger` call | spec `severity` (`00-spec.md` frontmatter) is `P0` | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-REF-04` | `/sd:refactor` | Phase 4 step 0, before the plan | the Phase 2 impact analysis in `03-decisions.md` names more than 8 distinct files, or those files fall under more than 2 `paths.layers` entries of project-config | `sd-spec-architect` | `sonnet` | `opus` |
 | `ESC-PERF-04` | `/sd:perf` | Phase 4a step 4, before Gate 4 is re-presented for a hotspot | the Results log holds two or more `reverted` rows for this hotspot, and `ESC-PERF-04` has not fired for this hotspot; re-invoke 4a once | `sd-debugger` | `sonnet` | `opus` |
+| `ESC-PORT-01` | `/sd:port` | Phase 1 Branch B step 1, before `TASK = port-extract`; also `/sd:explore --port` Phase 2, the donor side of a bridged port | `GITNEXUS_AVAILABLE` is `false` (the closure walk falls back to recursive grep), or `SCOPE` is `module` or `feature` | `sd-code-explorer` | `haiku` | `sonnet` |
 | `ESC-PORT-06` | `/sd:port` | Phase 6 step 2, before the plan | the Phase 6 step 1 port decompose metric (deviation rows requiring adaptation) is more than 8 | `sd-spec-architect` | `sonnet` | `opus` |
 
 Why each row exists:
@@ -105,6 +107,15 @@ Why each row exists:
   so the rule re-runs the 4a deep dive once, escalated, with the reverted attempts in view. It is a
   re-invocation row: under a ceiling that leaves the tier unchanged the re-run is skipped
   (precedence rule 2) and Gate 4 continues with the hypotheses already listed.
+- `ESC-PORT-01` - the extraction is the donor-side contract every later `/sd:port` phase consumes
+  (snapshot, fidelity tables, the `ESC-PORT-06` metric, parity review), so a closure it misses
+  propagates silently. It is the hardest task `sd-code-explorer` has: an uncapped member closure,
+  a complement set, and a "Non-obvious invariants" section that is judgment, not lookup. Two
+  inputs make it degrade at haiku: without GitNexus the walk is recursive grep, which the agent
+  itself flags as imprecise for dynamic dispatch, DI and reflection; and a `module` or `feature`
+  closure is wide even with GitNexus. An `endpoint` or `pattern` extraction with GitNexus keeps
+  the default. Both inputs are declared before the call - configuration and the user's `--scope`
+  - so the row fires on neither an estimate nor a failure.
 - `ESC-PORT-06` - the port decompose metric `/sd:port` already computes and records. Planning
   judgment in a port scales with departures from the donor, not with its file count or layer
   spread, which are inherited from the donor by construction. The threshold is the same `> 8`.
@@ -114,6 +125,8 @@ work before starting. `ESC-BUG-03b` and `ESC-PERF-04` fire on failure already ob
 `ESC-REF-04` and `ESC-PORT-06` on a quantity the workflow has measured. A measured trigger
 cannot be wrong about the past, and it escalates exactly when the default tier has shown it is not
 enough. `ESC-BUG-03` / `ESC-RCA-02` read `severity`, a statement about impact, not about difficulty.
+`ESC-PORT-01` reads neither: it reads configuration and a user-chosen scope, which say how the
+walk will run and how wide it is, not how hard the model thinks it is.
 A measured trigger for `/sd:feature` (escalate when Gate 2's computed thresholds are exceeded) is
 argued by the same reasoning, but it edits a shipped gate and is out of scope here.
 
@@ -126,18 +139,29 @@ Phase 2 and Phase 3 `sd-debugger` call, including Gate 2 `add hypothesis` loops 
 re-applies that decision without writing a second line. `ESC-PERF-04` fires at most once per
 hotspot and covers only the 4a re-invocation it triggers.
 
+**Decided before the spec exists (`ESC-PORT-01`).** The extraction runs before its spec
+directory exists, so this row is the one exception to "write the line before the invocation".
+It is decided once per extraction, and the line is written when the spec is registered. In
+`/sd:port` Branch B (`in-repo`) the main thread holds its own decision until then. In a bridged
+port the decision is made by `/sd:explore --port` in the donor repo, which has no spec: it records
+the line in the bundle's `contract.md` frontmatter as `escalation_line` (`none` when no line is
+due), and `/sd:port` Branch A copies it verbatim into the new spec's `05-retro.md`. A run that
+stops before the spec is registered re-runs Phase 1 and decides afresh, so no line is lost or
+doubled. A bundle with no `escalation_line` key predates this rule and carries nothing.
+
 **Per-task decision in Phase 4.** `ESC-FEAT-04` / `ESC-FEAT-04b` are decided once per task, when
 the task is first invoked, and that decision covers the task's re-invocations in the same Phase 4
 pass (a scope revert, a failing test, constitution feedback) - one line per task, not per retry.
 The next task starts at the default again (invariant 3). A task regenerated by Gate Re-plan is a
 new task block and is decided afresh.
 
-**Ceiling interaction.** Both Phase 4 rows reach `sonnet`, so `ceiling: "sonnet"` leaves them
-untouched - they fire, uncapped. Only `ceiling: "haiku"` caps them (logged `capped`, reached
-`haiku`). `tests/e2e/scenarios/06-escalation-implementer` asserts the `sonnet` case. Every
-non-feature row starts at `sonnet`, so `ceiling: "sonnet"` caps each of them to no movement: the
-line still records the decision (`sonnet -> sonnet ... capped`), so a capped run stays
-distinguishable from a run where the policy never executed.
+**Ceiling interaction.** Both Phase 4 rows and `ESC-PORT-01` reach `sonnet`, so
+`ceiling: "sonnet"` leaves them untouched - they fire, uncapped. Only `ceiling: "haiku"` caps
+them (logged `capped`, reached `haiku`). `tests/e2e/scenarios/06-escalation-implementer` asserts
+the `sonnet` case. Every other non-feature row starts at `sonnet`, so `ceiling: "sonnet"` caps
+each of them to no movement: the line still records the decision
+(`sonnet -> sonnet ... capped`), so a capped run stays distinguishable from a run where the policy
+never executed.
 `tests/e2e/scenarios/11-escalation-rca-capped` asserts that for `ESC-RCA-02`.
 
 **Rule ID format.** `ESC-<WORKFLOW>-<PHASE>` with an optional lowercase suffix (`b`, `c`) for a

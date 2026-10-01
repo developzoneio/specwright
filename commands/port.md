@@ -84,9 +84,9 @@ frontmatter first and is never resumed from its task markers.
    Scope: <scope>   Topology: <bridged|in-repo>   Snapshot mode: <contract|contract+source>
    ```
 7. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 6 step 2; this file names only rule IDs and trigger inputs. If that file is
-   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
-   `~/.claude/skills/sd/`. Re-run the installer."
+   applied at Phase 1 and Phase 6 step 2; this file names only rule IDs and trigger inputs. If
+   that file is unreadable, STOP: "specwright install incomplete - model escalation skill not
+   found under `~/.claude/skills/sd/`. Re-run the installer."
 8. Detect state from the table above. Print the resume plan.
 
 ---
@@ -106,10 +106,17 @@ frontmatter first and is never resumed from its task markers.
 3. A `source_commit` reading `dirty (...)` is a WARN, not a STOP - record it as an Open question in
    the spec once created.
 4. `--snapshot contract+source` with no `source/` subtree in the bundle -> STOP.
+5. Read the bundle's `escalation_line` frontmatter value: the donor-side `/sd:explore --port`
+   decision for rule `ESC-PORT-01` of **sd-model-escalation**. Hold it for step 6 under "Both
+   branches". `none` -> nothing to carry. Key absent -> WARN "bundle predates ESC-PORT-01 - no
+   escalation decision to carry" and carry nothing.
 
 ### Branch B - topology `in-repo`
 
-1. Invoke `sd-code-explorer` with:
+1. **Model escalation check, then the extraction.** Apply rule `ESC-PORT-01` of
+   **sd-model-escalation** (read in Phase 0). Trigger inputs: `GITNEXUS_AVAILABLE` and `SCOPE`
+   below. The spec does not exist yet - hold the decision for step 6 under "Both branches".
+   Invoke `sd-code-explorer` (model: default, or as resolved above) with:
    - `TASK = port-extract`
    - `ENTRY_POINT = <the --from value>`
    - `SCOPE = <scope from Phase 0>`
@@ -133,6 +140,9 @@ frontmatter first and is never resumed from its task markers.
    invariants (from the extraction's Non-obvious invariants section), leaves the three fidelity
    tables' `<<...>>` rows for Phase 4, leaves `AC-1` verbatim. Register in `.specs/index.md` at
    status `draft`.
+6. **Write the held `ESC-PORT-01` decision.** Append it to the new spec's `05-retro.md` per
+   **sd-model-escalation**'s logging contract: Branch A copies the bundle's `escalation_line`
+   verbatim, Branch B writes the decision it made at its step 1. Nothing held -> write nothing.
 
 No gate here - Gate 1 covers the freeze that follows in Phase 2, not the raw extraction.
 
@@ -471,9 +481,10 @@ a resolution - it makes the diff justify itself.
   `commands.build` / `commands.lint` / `commands.coverage`; paths from `paths.src` / `paths.tests` /
   `paths.layers` / `paths.protected`.
 - Model references are aliases only (`sonnet`, `haiku`, `opus`, `inherit`) - never a full model ID.
-- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PORT-06` is applied at Phase 6
-  step 2; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
-  in the skill and are not restated here.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PORT-01` is applied at
+  Phase 1 (Branch B; carried from the bundle in Branch A) and `ESC-PORT-06` at Phase 6 step 2; the
+  ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
+  skill and are not restated here.
 - Snapshot visibility: this command warns about host tooling globbing `.specs/` and never edits the
   host's build, lint, or coverage configuration.
 - Implementer touches only files declared in the task's `Files` list. Any scope creep -> stop,

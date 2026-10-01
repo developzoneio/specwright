@@ -62,12 +62,17 @@ contract|contract+source]`.
    module / feature / pattern."
 3. `SNAPSHOT` = the value following `--snapshot` when present, else `contract`. STOP if present
    and not one of `contract`, `contract+source`.
-4. Print: "Port extraction: ENTRY_POINT=<ENTRY_POINT>, SCOPE=<SCOPE>, SNAPSHOT=<SNAPSHOT>.
+4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md` and `models.escalation` from the
+   project-config read in Phase 0. The skill owns the model escalation policy applied in Phase 2;
+   this file names only the rule ID and its trigger inputs. If that file is unreadable, STOP:
+   "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+5. Print: "Port extraction: ENTRY_POINT=<ENTRY_POINT>, SCOPE=<SCOPE>, SNAPSHOT=<SNAPSHOT>.
    Routing to sd-code-explorer."
 
 ---
 
-<!-- contract-lint: allow CL601 - single read-only explorer call per run, and no 00-spec.md exists in either branch to read a trigger from (SW-62) -->
+<!-- contract-lint: allow CL601 - the standard branch is a single read-only explorer call with no trigger input; the --port branch applies ESC-PORT-01, whose row belongs to /sd:port (SW-62, SW-85) -->
 ## Phase 2 - Invoke `sd-code-explorer`
 
 ### Standard exploration - Invoke `sd-code-explorer`
@@ -92,7 +97,11 @@ Explorer routes internally based on `DETECTED_INTENT`:
 
 Runs only when Phase 1b ran.
 
-1. Invoke `sd-code-explorer` with:
+1. **Model escalation check, then the extraction.** Apply rule `ESC-PORT-01` of
+   **sd-model-escalation** (read in Phase 1b) - this is the donor side of a bridged `/sd:port`.
+   Trigger inputs: `GITNEXUS_AVAILABLE` (Phase 0) and `SCOPE` (Phase 1b). No spec exists here, so
+   the decision is held for the `escalation_line` key Phase 3b saves. Invoke
+   `sd-code-explorer` (model: default, or as resolved above) with:
    - `TASK = port-extract`
    - `ENTRY_POINT = <ENTRY_POINT from Phase 1b>`
    - `SCOPE = <SCOPE from Phase 1b>`
@@ -164,6 +173,7 @@ whole point of `--port` is a durable, donor-side artifact for a later host-side 
    scope: <SCOPE>
    snapshot: <SNAPSHOT>
    source_commit: <sha, or the dirty-tree sentence from step 3>
+   escalation_line: <the ESC-PORT-01 line held in Phase 2, or none>
    created: <ISO timestamp>
    ---
 
@@ -171,6 +181,9 @@ whole point of `--port` is a durable, donor-side artifact for a later host-side 
 
    <explorer's eight-section output, verbatim>
    ```
+   `escalation_line` is the exact line **sd-model-escalation**'s logging contract would write for
+   the Phase 2 decision, or `none` when no line is due. The host `/sd:port` copies it verbatim into
+   its spec's `05-retro.md` - this is the only record that the donor-side extraction escalated.
 5. Only when `SNAPSHOT = contract+source`:
    1. Create `<dir>/source/`.
    2. For every distinct `Donor path` in the explorer's Member closure and Complement set tables,

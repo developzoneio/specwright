@@ -364,7 +364,7 @@ forgetting one:
 | Command | Agent | Reason |
 |---|---|---|
 | `commands/adr.md` | `sd-docs-writer` | one drafting call per ADR, re-run only on a user edit, and no spec frontmatter to read a trigger from |
-| `commands/explore.md` | `sd-code-explorer` | one read-only call per run, and no `00-spec.md` exists in either branch |
+| `commands/explore.md` | `sd-code-explorer` | the standard branch is one read-only call with no trigger input; the `--port` branch applies `ESC-PORT-01`, whose row belongs to `/sd:port` (SW-85) |
 | `commands/review.md` | `sd-reviewer` | one read-only call per run, and modes A/B/D have no spec frontmatter |
 
 A fourth `allow CL601` should arrive with its own reason in the PR that adds it, and this table

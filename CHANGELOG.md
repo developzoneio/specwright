@@ -153,6 +153,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`ESC-PORT-01`: escalate `sd-code-explorer` for `TASK = port-extract` (SW-85)** - haiku ->
+  sonnet when `GITNEXUS_AVAILABLE` is `false` or `SCOPE` is `module` / `feature`. The extraction
+  is the donor contract every later `/sd:port` phase consumes, and it ran at the haiku default.
+  Applied at `/sd:port` Phase 1 Branch B and at `/sd:explore --port` Phase 2. Both run before a
+  spec exists, so the line is written when Phase 1 registers the spec; the donor-side decision
+  travels in the bundle's new `escalation_line` frontmatter key and `/sd:port` Branch A copies it
+  into `05-retro.md`. One row, mirrored in `contractLint.escalationTriggers`.
 - **`handoff-integrity` PostToolUse hook: an edit outside the task's declared Files is flagged in
   the same turn** (SW-70, ADR 0017) - new pair `hooks/powershell/handoff-integrity.ps1` and
   `hooks/bash/handoff-integrity.sh`, wired on `PostToolUse` with matcher `Edit|Write|MultiEdit`
