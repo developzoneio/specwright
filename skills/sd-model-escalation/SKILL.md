@@ -9,7 +9,7 @@ via `skills:` so they know what the main thread may do to their own invocation.
 
 Origin: ADR 0002 ("Sanctioned model escalation, aliases only"), shipped for `/sd:feature` by SW-13,
 extracted here by SW-60 and extended to `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf` and
-`/sd:port` by SW-62.
+`/sd:port` by SW-62. `ESC-REF-02` was added by SW-84.
 
 ---
 
@@ -66,6 +66,7 @@ story that wires them, mirrored row for row in the engine manifest's
 | `ESC-BUG-03` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | spec `severity` (`00-spec.md` frontmatter) is `P0` or `P1` | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-BUG-03b` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | `03-decisions.md` already records two or more exhausted hypothesis trees (Gate 3a reached twice), and `ESC-BUG-03` did not fire | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-RCA-02` | `/sd:rca` | Phase 2 step 0, once per run, before the first `sd-debugger` call | spec `severity` (`00-spec.md` frontmatter) is `P0` | `sd-debugger` | `sonnet` | `opus` |
+| `ESC-REF-02` | `/sd:refactor` | Phase 2 step 0, before `TASK = impact-map` | `mcp.gitnexus.enabled` (project-config) is not `true` - absent or `false` | `sd-code-explorer` | `haiku` | `sonnet` |
 | `ESC-REF-04` | `/sd:refactor` | Phase 4 step 0, before the plan | the Phase 2 impact analysis in `03-decisions.md` names more than 8 distinct files, or those files fall under more than 2 `paths.layers` entries of project-config | `sd-spec-architect` | `sonnet` | `opus` |
 | `ESC-PERF-04` | `/sd:perf` | Phase 4a step 4, before Gate 4 is re-presented for a hotspot | the Results log holds two or more `reverted` rows for this hotspot, and `ESC-PERF-04` has not fired for this hotspot; re-invoke 4a once | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-PORT-06` | `/sd:port` | Phase 6 step 2, before the plan | the Phase 6 step 1 port decompose metric (deviation rows requiring adaptation) is more than 8 | `sd-spec-architect` | `sonnet` | `opus` |
@@ -96,6 +97,13 @@ Why each row exists:
 - `ESC-RCA-02` - `P0` only. An RCA changes no code; its fixes spawn their own `BUG-*` specs, which
   carry `ESC-BUG-03` in their own right. Only a production-down incident justifies paying opus
   up front for the analysis itself.
+- `ESC-REF-02` - `ESC-REF-04` is only as good as the impact map it measures. Without GitNexus
+  the explorer walks callers by grep, which misses DI / reflection / dynamic-dispatch callers and
+  under-counts the surface; a wide refactor then stays at or under 8 files, `ESC-REF-04` never
+  fires, and the plan is made at the default tier. The condition is a project fact read before the
+  call, not an estimate. Absent reads as disabled, matching the project-config template default.
+  Not covered: GitNexus enabled but failing at runtime - the explorer falls back after the
+  decision was made, and notes the caveat in its output.
 - `ESC-REF-04` - the same two size limits `/sd:feature` Gate 2 Face B applies (impact surface > 8
   files; > 2 production layers, ADR 0004), read from the measured impact map instead of an
   estimate. A refactor that wide is where parallel-safe batching (disjoint file sets per batch)
@@ -113,7 +121,7 @@ Why each row exists:
 work before starting. `ESC-BUG-03b` and `ESC-PERF-04` fire on failure already observed, and
 `ESC-REF-04` and `ESC-PORT-06` on a quantity the workflow has measured. A measured trigger
 cannot be wrong about the past, and it escalates exactly when the default tier has shown it is not
-enough. `ESC-BUG-03` / `ESC-RCA-02` read `severity`, a statement about impact, not about difficulty.
+enough - provided the measurement is sound, which is what `ESC-REF-02` protects for `ESC-REF-04`. `ESC-BUG-03` / `ESC-RCA-02` read `severity`, a statement about impact, not about difficulty.
 A measured trigger for `/sd:feature` (escalate when Gate 2's computed thresholds are exceeded) is
 argued by the same reasoning, but it edits a shipped gate and is out of scope here.
 
@@ -134,8 +142,8 @@ new task block and is decided afresh.
 
 **Ceiling interaction.** Both Phase 4 rows reach `sonnet`, so `ceiling: "sonnet"` leaves them
 untouched - they fire, uncapped. Only `ceiling: "haiku"` caps them (logged `capped`, reached
-`haiku`). `tests/e2e/scenarios/06-escalation-implementer` asserts the `sonnet` case. Every
-non-feature row starts at `sonnet`, so `ceiling: "sonnet"` caps each of them to no movement: the
+`haiku`). `tests/e2e/scenarios/06-escalation-implementer` asserts the `sonnet` case. `ESC-REF-02`
+also reaches `sonnet` and behaves the same way. Every other non-feature row starts at `sonnet`, so `ceiling: "sonnet"` caps each of them to no movement: the
 line still records the decision (`sonnet -> sonnet ... capped`), so a capped run stays
 distinguishable from a run where the policy never executed.
 `tests/e2e/scenarios/11-escalation-rca-capped` asserts that for `ESC-RCA-02`.

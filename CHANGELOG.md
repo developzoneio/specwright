@@ -153,6 +153,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   therefore recorded; the old `new_string` row scan missed it (found in a live scenario 02 run).
 
 ### Added
+- **`ESC-REF-02`: `/sd:refactor` escalates the impact-map explorer (SW-84)** - `ESC-REF-04` reads
+  its file and layer counts from the Phase 2 impact map, which `sd-code-explorer` produced at
+  `haiku` with no escalation row. Without GitNexus the explorer walks callers by grep and
+  under-counts, so a wide refactor could stay under `ESC-REF-04`'s threshold. Phase 2 now opens
+  with a step 0 that applies `ESC-REF-02` (`haiku` -> `sonnet` when `mcp.gitnexus.enabled` is not
+  `true`), mirrored in `sd-model-escalation`'s trigger table and `contractLint.escalationTriggers`.
 - **`handoff-integrity` PostToolUse hook: an edit outside the task's declared Files is flagged in
   the same turn** (SW-70, ADR 0017) - new pair `hooks/powershell/handoff-integrity.ps1` and
   `hooks/bash/handoff-integrity.sh`, wired on `PostToolUse` with matcher `Edit|Write|MultiEdit`

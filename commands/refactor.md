@@ -83,7 +83,9 @@ STOP. Display spec summary, especially Invariants and Out-of-scope. Ask:
 
 ## Phase 2 - Impact
 
-1. Invoke `sd-code-explorer` with:
+0. **Model escalation check.** Apply rule `ESC-REF-02` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: `mcp.gitnexus.enabled` of project-config.
+1. Invoke `sd-code-explorer` (model: default, or as resolved by step 0) with:
    - `TASK = impact-map`
    - `SPEC = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
    - `OUTPUT_TARGET = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -260,9 +262,9 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
 - Gate 5 (Tests green per batch) is HARD. A red batch is reverted or fixed - never deferred.
 - Implementer in refactor mode has the tightest scope discipline. Any "improvement" beyond restructuring is rejected.
 - Public API preservation is verified by reviewer (Phase 6), not assumed.
-- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-REF-04` is applied at Phase 4
-  step 0; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
-  in the skill and are not restated here.
+- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-REF-02` and `ESC-REF-04` are
+  applied at Phase 2 step 0 and Phase 4 step 0; the ladder, precedence, `models.escalation`
+  config and the `05-retro.md` line format live in the skill and are not restated here.
 - Max 3 parallel tasks per batch. More -> tests-between granularity is too coarse.
 - Each batch's tests must finish before the next batch starts. No "tests run in background while next batch starts".
 - **Gate Re-plan is a conditional gate, not a seventh always-on gate.** It fires only on a
