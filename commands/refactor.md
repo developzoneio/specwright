@@ -37,19 +37,25 @@ Spec ID = `REF-<slug>-<YYYYMMDD>`.
 | All tasks checked, no holistic review | Resume Phase 6 |
 | status `done` | Refuse |
 
+"Checked" and "unchecked" mean the task's check-off marker as defined in the "Check-off marker"
+section of the **sd-atomic-task-format** skill - the one definition; do not invent a marker. Task
+rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
+frontmatter first and is never resumed from its task markers.
+
 ---
 
 ## Phase 0 - Bootstrap
 
-1. Read `CLAUDE.md`. If missing, WARN and continue - print "No `CLAUDE.md` found; stack
-   conventions may be incomplete." (the constitution is the binding Layer-2 contract, not
-   `CLAUDE.md`).
-2. Read `.specs/constitution.md`, `.claude/project-config.json`, `.specs/index.md`. If `.specs/`
-   or any of these is missing, STOP: "No `.specs/` found - run `/sd:setup` first." If
-   `.claude/project-config.json` is present but fails to parse as JSON, STOP:
-   "`.claude/project-config.json` failed to parse - fix it or re-run `/sd:setup`."
-3. Compute UTC date for spec ID.
-4. Read coverage threshold from project-config or default to 80%.
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. Compute UTC date for spec ID.
+3. Read coverage threshold from project-config or default to 80%.
+4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 4 step 0; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
 5. Detect state. Print resume plan.
 
 ---
@@ -77,7 +83,9 @@ STOP. Display spec summary, especially Invariants and Out-of-scope. Ask:
 
 ## Phase 2 - Impact
 
-1. Invoke `sd-code-explorer` with:
+0. **Model escalation check.** Apply rule `ESC-REF-02` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: `mcp.gitnexus.enabled` of project-config.
+1. Invoke `sd-code-explorer` (model: default, or as resolved by step 0) with:
    - `TASK = impact-map`
    - `SPEC = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
    - `OUTPUT_TARGET = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -126,7 +134,11 @@ If user picks (2) explicit exception, document the threshold reduction in `05-re
 
 ## Phase 4 - Plan parallel-safe tasks
 
-1. Invoke `sd-spec-architect` with:
+0. **Model escalation check.** Apply rule `ESC-REF-04` of **sd-model-escalation** (read in
+   Phase 0). Trigger inputs: the distinct files named by the Phase 2 impact analysis in
+   `.specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`, and the `paths.layers` entries of project-config
+   those files fall under.
+1. Invoke `sd-spec-architect` (model: default, or as resolved by step 0) with:
    - `TASK = plan`
    - `SPEC = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -152,7 +164,11 @@ For each batch (up to 3 tasks in parallel):
 
 1. **Pre-batch**: run full test suite. Must be green. If red, abort batch and surface failure - the baseline must be clean.
 2. For each task in the batch:
-   - Invoke `sd-implementer` with:
+   - **Model escalation check.** Before this task's first implementer call, apply rules
+     `ESC-REF-05` and `ESC-REF-05b` of **sd-model-escalation** (read in Phase 0). Trigger inputs:
+     the task block's `Estimated complexity` and `Reversibility` fields. The decision also covers
+     this task's re-invocations when Gate 5 sends a red batch back for a fix.
+   - Invoke `sd-implementer` (model: default, or as resolved above) with:
      - `TASK_DETAILS = <task block>`
      - `SPEC_REF = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
      - `IMPACT_REF = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -165,7 +181,8 @@ For each batch (up to 3 tasks in parallel):
 
 STOP after every batch. Display test results.
 
-- All green -> check off tasks in `02-tasks.md`, proceed to next batch.
+- All green -> check off the batch's tasks in `02-tasks.md` (set each `Status` line to `done`, per
+  the "Check-off marker" section of the **sd-atomic-task-format** skill), proceed to next batch.
 - Any red -> REFUSE to proceed. Revert the batch or fix the regression. The point of batched-with-tests-between is to localize failures.
 
 ### Gate Re-plan (HARD) - adaptive re-plan on a plan-invalidating discovery
@@ -242,10 +259,17 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Gate 2 (Coverage) is HARD. No code edits until threshold met OR explicit exception logged.
 - Gate 5 (Tests green per batch) is HARD. A red batch is reverted or fixed - never deferred.
 - Implementer in refactor mode has the tightest scope discipline. Any "improvement" beyond restructuring is rejected.
 - Public API preservation is verified by reviewer (Phase 6), not assumed.
+- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-REF-02` and `ESC-REF-04` are
+  applied at Phase 2 step 0 and Phase 4 step 0, and `ESC-REF-05` / `ESC-REF-05b` at Phase 5 step 2;
+  the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
+  skill and are not restated here.
 - Max 3 parallel tasks per batch. More -> tests-between granularity is too coarse.
 - Each batch's tests must finish before the next batch starts. No "tests run in background while next batch starts".
 - **Gate Re-plan is a conditional gate, not a seventh always-on gate.** It fires only on a

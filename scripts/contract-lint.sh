@@ -14,6 +14,8 @@
 #   CL0xx  reference resolution
 #   CL3xx  gate integrity
 #   CL9xx  suppression hygiene
+# Later waves add CL1xx (invocation contract), CL2xx (role and tool
+# integrity), CL4xx (stack-agnostic prose) and CL6xx (escalation policy).
 #
 # Usage:
 #   contract-lint.sh [--root <path>] [--rule <ids>] [--quiet]
@@ -173,6 +175,10 @@ RE_TPLPATH='templates/[A-Za-z0-9_./-]+'
 # matches '07-cqrs-read-path.md' inside the ADR filename '0007-cqrs-read-path.md'
 # (agents/docs-writer.md), which is not a spec artifact at all.
 RE_ARTIFACT='(^|[^0-9A-Za-z_.-])[0-9][0-9]-[a-z0-9-]+\.md'
+# CL009 - a command's Phase 0 section: opens at '## Phase 0' (not 'Phase 01'),
+# closes at the next H1/H2 heading outside a fence.
+RE_PHASE0='^## Phase 0([^0-9]|$)'
+RE_SECTION_END='^#{1,2}[[:blank:]]'
 RE_SUPPRESS='<!--[[:blank:]]*contract-lint:[[:blank:]]*allow[[:blank:]]+CL[0-9][0-9][0-9]'
 # An option set: a slash-separated parenthetical carrying no nested parens.
 RE_OPTPAREN='\(([^()/]+/)+[^()]+\)'
@@ -217,6 +223,17 @@ RE_MCPTOOL='mcp__[A-Za-z0-9_-]+'
 # after a comma) all pass, with no exclusion list, the same way
 # classify_heading needs none for '## Gate activity'.
 RE_WRITEVERB='^[[:blank:]]*(-[[:blank:]]+|[0-9]+\.[[:blank:]]+)?(Write|Append|Create)[[:blank:]]'
+# CL205's predicates. A spec artifact is a numbered NN-name.md file or the
+# 04-artifacts/ folder. The write form is word-bounded by hand (ERE has no \b)
+# and case-folded only on its first letter, never via a locale-aware lowercase,
+# so both twins agree byte-for-byte on non-ASCII lines. The actor test is a
+# 'main thread' mention - the phrase every sibling step already uses - matched
+# against the whole enclosing numbered step joined with single spaces, never
+# the one line: commands/port.md Phase 3 wraps 'Main' / 'thread appends ...'
+# across two lines, and names the actor in step 3's opening parenthetical.
+RE_SPECARTIFACT='[0-9]{2}-[a-z][a-z0-9-]*\.md|04-artifacts/'
+RE_ARTIFACTWRITE='(^|[^A-Za-z])([Ww]rit(e|es|ing|ten)|[Aa]ppend(s|ed|ing)?|[Ss]av(e|es|ed|ing)|[Rr]ecord(s|ed|ing)?|[Pp]ersist(s|ed|ing)?|[Ss]tor(e|es|ed|ing))([^A-Za-z]|$)'
+RE_MAINTHREAD='[Mm]ain[[:blank:]]+thread'
 # CL4xx stack-agnostic prose. A <<...>> placeholder span is scrubbed from a
 # copy of the line before vocabulary/path matching (via a bash glob
 # substitution at the call site, never a per-line sed fork - see
@@ -230,6 +247,13 @@ RE_WRITEVERB='^[[:blank:]]*(-[[:blank:]]+|[0-9]+\.[[:blank:]]+)?(Write|Append|Cr
 # their OWN interior '/', which is not what CL402 means to catch.
 RE_ABSPATH_POSIX='(^|[[:blank:]`"'\''(])(/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*)'
 RE_ABSPATH_WIN='(^|[[:blank:]`"'\''(])([A-Za-z]:\\[^[:blank:]`]+)'
+# CL6xx escalation policy. A rule ID is ESC-<WORKFLOW>-<PHASE> with an
+# optional lowercase suffix (the skill's own "Rule IDs" section). The skill's
+# sections are H2 headings; '^##[[:blank:]]' never matches an H3.
+RE_ESCID='ESC-[A-Z]+-[0-9][0-9][a-z]?'
+RE_ESCID_FULL='^ESC-[A-Z]+-([0-9][0-9])[a-z]?$'
+RE_H2='^##[[:blank:]]'
+RE_LEADDIGITS='^([0-9]+)'
 
 # ---- Phase A: index ---------------------------------------------------------
 
@@ -261,6 +285,7 @@ CL005
 CL006
 CL007
 CL008
+CL009
 CL100
 CL101
 CL102
@@ -270,6 +295,9 @@ CL200
 CL201
 CL202
 CL203
+CL204
+CL205
+CL206
 CL300
 CL301
 CL302
@@ -280,7 +308,11 @@ CL306
 CL400
 CL401
 CL402
-CL500
+CL601
+CL602
+CL603
+CL604
+CL605
 CL900
 CL901
 CL902"
@@ -324,6 +356,11 @@ GATE_PROSE_ESCAPE_TOKENS=""
 while IFS= read -r _t; do
     [[ -n "$_t" ]] && set_add GATE_PROSE_ESCAPE_TOKENS "$_t"
 done < <(mjq '.contractLint.gateProseEscapeTokens[]?')
+
+BOOTSTRAP_GUARD_PHRASES=""
+while IFS= read -r _t; do
+    [[ -n "$_t" ]] && set_add BOOTSTRAP_GUARD_PHRASES "$_t"
+done < <(mjq '.contractLint.bootstrapGuardPhrases[]?')
 
 STACK_COMMANDS=""
 while IFS= read -r _t; do
@@ -378,27 +415,6 @@ while IFS= read -r _t; do
     [[ -n "$_t" ]] && set_add KNOWN_MCP_TOOLS "$_t"
 done < <(mjq '.contractLint.knownMcpTools[]?')
 
-# CL500's per-area byte ceilings. Empty (not zero) when unconfigured, so a
-# manifest with no budgets subtree makes CL500 a structural no-op rather than
-# firing on every file with a phantom zero ceiling.
-BUDGET_COMMANDS="$(mjq '.contractLint.budgets.commandsBytes // empty')"
-BUDGET_AGENTS="$(mjq '.contractLint.budgets.agentsBytes // empty')"
-BUDGET_SKILLS="$(mjq '.contractLint.budgets.skillsBytes // empty')"
-
-budget_for_file() { # rel_path -> echoes the configured ceiling, or nothing
-    case "$1" in
-        commands/*) [[ -n "$BUDGET_COMMANDS" ]] && printf '%s' "$BUDGET_COMMANDS" ;;
-        agents/*)   [[ -n "$BUDGET_AGENTS" ]] && printf '%s' "$BUDGET_AGENTS" ;;
-        skills/*)   [[ -n "$BUDGET_SKILLS" ]] && printf '%s' "$BUDGET_SKILLS" ;;
-    esac
-    # Explicit, unconditional: under 'set -e', a bare '[[ cond ]] && cmd' that
-    # takes the false branch leaves this function's exit status at 1, and
-    # '_budget="$(budget_for_file ...)"' is an assignment-via-command-
-    # substitution - bash treats that failure as fatal, silently killing the
-    # whole script the moment it reaches a file with no configured budget.
-    return 0
-}
-
 # Write/Edit/MultiEdit, and nothing else - matches docs/architecture.md's own
 # definition of a read-only agent. Bash CAN write a file, but that is a
 # different, harder problem, deliberately out of scope for CL200/CL201.
@@ -421,6 +437,62 @@ while IFS=$'\x1f' read -r g_file g_hard g_cond; do
     GATE_DECL_TABLE="${GATE_DECL_TABLE}${g_file}"$'\x1f'"${g_hard}"$'\x1f'"${g_cond}"$'\n'
     set_add GATE_DECL_FILES "$g_file"
 done < <(mjq '.contractLint.gates // {} | to_entries[] | "\(.key)\u001f\(.value.hard)\u001f\(.value.conditional | join(","))"')
+
+# editToolOnly (CL206, SW-79): the phrase every listed command must carry.
+# Optional key; a listed file that does not exist, or files with no phrase,
+# is a broken contract (exit 2), the same as gates.
+EDIT_TOOL_ONLY_PHRASE="$(mjq '.contractLint.editToolOnly.phrase // ""')"
+EDIT_TOOL_ONLY_FILES=""
+while IFS= read -r _f; do
+    [[ -z "$_f" ]] && continue
+    if [[ ! -f "$ROOT/$_f" ]]; then
+        echo "contract-lint: contractLint.editToolOnly names a file that does not exist: $_f" >&2
+        exit 2
+    fi
+    if [[ -z "$EDIT_TOOL_ONLY_PHRASE" ]]; then
+        echo "contract-lint: contractLint.editToolOnly lists files but no phrase" >&2
+        exit 2
+    fi
+    set_add EDIT_TOOL_ONLY_FILES "$_f"
+done < <(mjq '.contractLint.editToolOnly.files[]?')
+
+# escalationTriggers / escalationPolicy (CL6xx, SW-63). The band switches on
+# when skills/sd-model-escalation/SKILL.md exists on disk, NOT when the
+# manifest keys exist: deleting the keys must fail loudly (CL602-CL605 each
+# report their own missing config) rather than turn the band off in silence -
+# the SW-20 lesson. The skill name is therefore a constant here, never read
+# from the manifest. A row naming a command with no file is a broken contract
+# (exit 2), the same as gates.
+ESC_SKILL_NAME="sd-model-escalation"
+ESC_SKILL_REL="skills/${ESC_SKILL_NAME}/SKILL.md"
+ESC_ACTIVE=0
+[[ -f "$ROOT/$ESC_SKILL_REL" ]] && ESC_ACTIVE=1
+MANIFEST_REL="specwright.manifest.json"
+
+ESC_ROWS=""   # id \x1f command \x1f phase \x1f agent \x1f from \x1f to
+while IFS=$'\x1f' read -r _eid _ecmd _eph _eag _efr _eto; do
+    [[ -z "$_eid" ]] && continue
+    if [[ -n "$_ecmd" && ! -f "$ROOT/commands/${_ecmd}.md" ]]; then
+        echo "contract-lint: contractLint.escalationTriggers row $_eid names a command with no file: commands/${_ecmd}.md" >&2
+        exit 2
+    fi
+    ESC_ROWS="${ESC_ROWS}${_eid}"$'\x1f'"${_ecmd}"$'\x1f'"${_eph}"$'\x1f'"${_eag}"$'\x1f'"${_efr}"$'\x1f'"${_eto}"$'\n'
+done < <(mjq '.contractLint.escalationTriggers[]? | "\(.id // "")\u001f\(.command // "")\u001f\(.phase // "")\u001f\(.agent // "")\u001f\(.from // "")\u001f\(.to // "")"')
+
+ESC_LADDER=""        # ordered, newline-delimited
+while IFS= read -r _t; do
+    [[ -n "$_t" ]] && set_add ESC_LADDER "$_t"
+done < <(mjq '.contractLint.escalationPolicy.ladder[]?')
+
+ESC_ALIASES=""
+while IFS= read -r _t; do
+    [[ -n "$_t" ]] && set_add ESC_ALIASES "$_t"
+done < <(mjq '.contractLint.escalationPolicy.aliases[]?')
+
+ESC_RESTATE_PHRASES=""
+while IFS= read -r _t; do
+    [[ -n "$_t" ]] && set_add ESC_RESTATE_PHRASES "$_t"
+done < <(mjq '.contractLint.escalationPolicy.restatePhrases[]?')
 
 # Scan files: every scanScope glob, deduplicated, byte-sorted for a stable
 # report order that the twin can reproduce exactly.
@@ -653,6 +725,17 @@ collect_agent_tools() {
 }
 
 collect_agent_tools
+
+# WRITE_CAPABLE_AGENTS - derived from disk (AGENT_TOOL_REFS), not declared.
+# Mirrors how CL200 itself decides write-capability: an agent whose own
+# tools: line carries Write/Edit/MultiEdit right now, regardless of whether
+# anyone remembers to list it anywhere. Used by CL203/CL204 to pick severity.
+WRITE_CAPABLE_AGENTS=""
+while IFS=$'\x1f' read -r _wca _wct _wcf _wcl; do
+    [[ -z "$_wca" ]] && continue
+    is_write_tool "$_wct" || continue
+    set_add WRITE_CAPABLE_AGENTS "$_wca"
+done <<< "$AGENT_TOOL_REFS"
 
 body_start_of() { # agent_name -> stdout 1-based first body line
     local _n="$1" _an _al
@@ -1032,6 +1115,52 @@ rule_CL008() {
     done <<< "$REFS"
 }
 
+# CL009 - a command's '## Phase 0' section restates text sd-bootstrap-guard
+# owns. Commands cannot load skills via frontmatter, so they read the skill at
+# runtime; a copy of its messages in Phase 0 is the drift SW-54 removed. A
+# phrase wrapped across two lines is caught by joining each line with the
+# next (trimmed, one space) - reported on the line where it starts, and only
+# when the next line alone does not already carry it, so one occurrence is one
+# finding. Case-sensitive literal match, the same as CL306. Fork-free trim.
+rule_CL009() {
+    local _rel _i _in _s _cur _nxt _phrase _hit _j
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" ]] && continue
+        case "$_rel" in commands/*) ;; *) continue ;; esac
+        load_file "$_rel"
+        _in=0
+        for ((_i = 0; _i < CUR_N; _i++)); do
+            [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
+            if [[ "${CUR_LINES[$_i]}" =~ $RE_PHASE0 ]]; then _in=1; continue; fi
+            if [[ $_in -eq 1 && "${CUR_LINES[$_i]}" =~ $RE_SECTION_END ]]; then _in=0; fi
+            [[ $_in -eq 1 ]] || continue
+            [[ "${CUR_LINES[$_i]}" =~ $RE_SUPPRESS ]] && continue
+            _s="${CUR_LINES[$_i]}"
+            _cur="${_s#"${_s%%[![:blank:]]*}"}"; _cur="${_cur%"${_cur##*[![:blank:]]}"}"
+            _nxt=""
+            _j=$((_i + 1))
+            if [[ $_j -lt $CUR_N && "${CUR_FENCE[$_j]}" != "1" ]] \
+                && ! [[ "${CUR_LINES[$_j]}" =~ $RE_SECTION_END ]] \
+                && ! [[ "${CUR_LINES[$_j]}" =~ $RE_SUPPRESS ]]; then
+                _s="${CUR_LINES[$_j]}"
+                _nxt="${_s#"${_s%%[![:blank:]]*}"}"; _nxt="${_nxt%"${_nxt##*[![:blank:]]}"}"
+            fi
+            _hit=0
+            while IFS= read -r _phrase; do
+                [[ -z "$_phrase" ]] && continue
+                case "$_cur" in *"$_phrase"*) _hit=1; break ;; esac
+                if [[ -n "$_nxt" ]]; then
+                    case "$_nxt" in *"$_phrase"*) continue ;; esac
+                    case "$_cur $_nxt" in *"$_phrase"*) _hit=1; break ;; esac
+                fi
+            done <<< "$BOOTSTRAP_GUARD_PHRASES"
+            if [[ $_hit -eq 1 ]]; then
+                add_finding CL009 "$_rel" "$((_i + 1))" "Phase 0 restates '$_phrase', which sd-bootstrap-guard owns - read the skill instead of copying its text"
+            fi
+        done
+    done <<< "$SCAN_FILES"
+}
+
 # CL100 / CL102 / CL103 - each invocation against the mode it names. A target
 # agent that CL001 already flagged as unresolved gets no CL100 pile-on.
 rule_CL100_CL102_CL103() {
@@ -1134,10 +1263,16 @@ rule_CL202() {
     done <<< "$REFS"
 }
 
-# CL203 - a tool this agent's own frontmatter declares, that its own body
-# (everything after the closing ---) never mentions by name.
-rule_CL203() {
-    local _a _tool _f _l _start _i _used
+# CL203/CL204 - a tool this agent's own frontmatter declares, that its own
+# body (everything after the closing ---) never mentions by name. WARN
+# (CL203) when the agent has no write tool of its own; BLOCK (CL204) when
+# the agent is write-capable - an unexplained unused Write/Edit/MultiEdit
+# sibling on the one class of agent that holds write power is the
+# highest-value thing this check can find. Severity is still looked up from
+# the manifest at emit time per rule id (never computed) - CL204 is a
+# distinct rule id precisely so that invariant holds.
+rule_CL203_CL204() {
+    local _a _tool _f _l _start _i _used _rid
     while IFS=$'\x1f' read -r _a _tool _f _l; do
         [[ -z "$_a" ]] && continue
         load_file "$_f"
@@ -1149,9 +1284,101 @@ rule_CL203() {
             esac
         done
         if [[ $_used -eq 0 ]]; then
-            add_finding CL203 "$_f" "$_l" "agent '$_a' declares tool '$_tool' but its body never mentions it"
+            _rid="CL203"
+            set_has WRITE_CAPABLE_AGENTS "$_a" && _rid="CL204"
+            add_finding "$_rid" "$_f" "$_l" "agent '$_a' declares tool '$_tool' but its body never mentions it"
         fi
     done <<< "$AGENT_TOOL_REFS"
+}
+
+# CL205 - the command-side twin of CL200. An invocation of an agent with no
+# write tool (read off disk, WRITE_CAPABLE_AGENTS) opens a window that runs to
+# the next heading or the next anchor. Unlike the CL1xx token span it does NOT
+# stop at a numbered step: the defect this catches (SW-51, rca.md Phase 2) lives
+# in step 3, two steps after step 1's invocation. Inside the window, a line
+# that names a spec artifact and a write form, in a numbered step that never
+# says 'main thread', asserts a write nobody is told to perform - the agent
+# cannot, and the main thread was never asked. The step is [nearest numbered
+# step at or above the line (clamped to the anchor), next numbered step /
+# heading / anchor), fenced lines skipped. Unresolved targets are CL001's
+# problem, not this one.
+step_text_around() { # startIdx0 idx0 file -> STEP_TEXT (non-fenced lines, space-joined)
+    local _lo="$1" _i="$2" _f="$3" _s _k
+    _s=$_i
+    while [[ $_s -gt $_lo ]]; do
+        [[ "${CUR_FENCE[$_s]}" != "1" && "${CUR_LINES[$_s]}" =~ $RE_NUMSTEP ]] && break
+        _s=$((_s - 1))
+    done
+    STEP_TEXT=""
+    for ((_k = _s; _k < CUR_N; _k++)); do
+        [[ "${CUR_FENCE[$_k]}" == "1" ]] && continue
+        if [[ $_k -gt $_s ]]; then
+            [[ "${CUR_LINES[$_k]}" =~ $RE_HEADING ]] && break
+            [[ "${CUR_LINES[$_k]}" =~ $RE_NUMSTEP ]] && break
+            set_has ANCHOR_LINES "${_f}:$((_k + 1))" && break
+        fi
+        STEP_TEXT="${STEP_TEXT} ${CUR_LINES[$_k]}"
+    done
+}
+
+rule_CL205() {
+    local _agent _file _line _start _j _txt _seen=""
+    while IFS=$'\x1f' read -r _agent _file _line; do
+        [[ -z "$_agent" ]] && continue
+        set_has AGENT_NAMES "$_agent" || continue
+        set_has WRITE_CAPABLE_AGENTS "$_agent" && continue
+        if [[ "$CUR_REL" != "$_file" ]]; then load_file "$_file"; fi
+        _start=$((_line - 1))
+        for ((_j = _start; _j < CUR_N; _j++)); do
+            [[ "${CUR_FENCE[$_j]}" == "1" ]] && continue
+            _txt="${CUR_LINES[$_j]}"
+            if [[ $_j -gt $_start ]]; then
+                [[ "$_txt" =~ $RE_HEADING ]] && break
+                set_has ANCHOR_LINES "${_file}:$((_j + 1))" && break
+            fi
+            [[ "$_txt" =~ $RE_SPECARTIFACT ]] || continue
+            [[ "$_txt" =~ $RE_ARTIFACTWRITE ]] || continue
+            step_text_around "$_start" "$_j" "$_file"
+            [[ "$STEP_TEXT" =~ $RE_MAINTHREAD ]] && continue
+            set_has _seen "${_file}:$((_j + 1))" && continue
+            set_add _seen "${_file}:$((_j + 1))"
+            add_finding CL205 "$_file" "$((_j + 1))" "step asserts a spec-artifact write inside the block of '$_agent', which has no write tool, and names no main-thread writer"
+        done
+    done <<< "$ANCHORS"
+}
+
+# CL206 - a workflow that writes .specs/index.md or a spec's status: must tell
+# the model to do it with the Edit tool, never a shell command (SW-79): a
+# shell write sidesteps spec-gate's Rules 0, 0b and 1 and records no
+# spec_transition event. The files are DECLARED (contractLint.editToolOnly),
+# not inferred - "does this command write the index" is not decidable from
+# prose. The phrase must sit on a non-fenced line, or be wrapped across it and
+# the next non-fenced line (trimmed, joined with one space, as CL009 joins).
+# Case-sensitive literal match. Reported on line 1: the defect is an absence.
+rule_CL206() {
+    local _rel _i _j _s _cur _nxt _found
+    [[ -z "$EDIT_TOOL_ONLY_FILES" ]] && return 0
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" ]] && continue
+        set_has EDIT_TOOL_ONLY_FILES "$_rel" || continue
+        load_file "$_rel"
+        _found=0
+        for ((_i = 0; _i < CUR_N; _i++)); do
+            [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
+            _s="${CUR_LINES[$_i]}"
+            _cur="${_s#"${_s%%[![:blank:]]*}"}"; _cur="${_cur%"${_cur##*[![:blank:]]}"}"
+            case "$_cur" in *"$EDIT_TOOL_ONLY_PHRASE"*) _found=1; break ;; esac
+            _j=$((_i + 1))
+            if [[ $_j -lt $CUR_N && "${CUR_FENCE[$_j]}" != "1" ]]; then
+                _s="${CUR_LINES[$_j]}"
+                _nxt="${_s#"${_s%%[![:blank:]]*}"}"; _nxt="${_nxt%"${_nxt##*[![:blank:]]}"}"
+                case "$_cur $_nxt" in *"$EDIT_TOOL_ONLY_PHRASE"*) _found=1; break ;; esac
+            fi
+        done
+        if [[ $_found -eq 0 ]]; then
+            add_finding CL206 "$_rel" 1 "workflow writes the spec index or a spec status but never says to do it with the Edit tool only (contractLint.editToolOnly.phrase)"
+        fi
+    done <<< "$SCAN_FILES"
 }
 
 # Collect a gate block's selectable OPTIONS: the slash-separated tokens of a
@@ -1331,36 +1558,6 @@ rule_CL400_CL401_CL402() {
     done <<< "$SCAN_FILES"
 }
 
-# CL500 - file budgets. Byte count is NORMALIZED (sum of each line's byte
-# length, plus one separator per line boundary), never a raw disk read: this
-# repo's *.md scanScope is 'text=auto', checking out LF on Linux CI and CRLF on
-# Windows, so ReadAllBytes().Length / `wc -c` would make CL500 disagree with
-# itself across platforms for byte-identical content. LC_ALL=C at the top of
-# this script already makes bash's ${#line} a true byte count, not a
-# multibyte character count, so no extra decode is needed here - see the
-# manifest's $budgetsComment.
-rule_CL500() {
-    local _rel _budget _bytes _i _over
-    while IFS= read -r _rel; do
-        [[ -z "$_rel" ]] && continue
-        _budget="$(budget_for_file "$_rel")"
-        [[ -z "$_budget" ]] && continue
-        load_file "$_rel"
-        _bytes=0
-        for ((_i = 0; _i < CUR_N; _i++)); do
-            _bytes=$((_bytes + ${#CUR_LINES[$_i]}))
-        done
-        if ((CUR_N > 1)); then
-            _bytes=$((_bytes + CUR_N - 1))
-        fi
-        if ((_bytes > _budget)); then
-            _over=$((_bytes - _budget))
-            add_finding CL500 "$_rel" 1 \
-                "file is $_bytes bytes, $_over over the $_budget-byte budget"
-        fi
-    done <<< "$SCAN_FILES"
-}
-
 rule_CL302_CL303_CL304() {
     local _rel _f _l _kind _label _hard _end
     local _count _labels _decl_hard _decl_cond _c _want _dup _seen _n
@@ -1430,6 +1627,249 @@ rule_CL302_CL303_CL304() {
     done <<< "$SCAN_FILES"
 }
 
+# CL601-CL605 - the model escalation policy (SW-63). skills/sd-model-escalation
+# states it in prose; contractLint.escalationTriggers is its assertable copy.
+# These rules check that the policy is STATED consistently - never that a
+# subagent RAN on the escalated model (see docs/adr/0014).
+#   CL601  a command invokes an agent but has no escalation row, has rows but
+#          never reads the skill, or never names one of its own rows
+#   CL602  manifest rows vs the skill's trigger table, both directions, plus
+#          any ESC- id cited outside the skill that no row declares
+#   CL603  a row's from/to is not an alias
+#   CL604  the ladder differs from the skill's, or a row is not one rung up
+#   CL605  a command restates the ladder, a precedence rule or the retro line
+# Manifest-side findings land on specwright.manifest.json line 1: it is outside
+# scanScope, so no suppression can reach them - on purpose.
+
+ESC_IDX=-1
+esc_ladder_index() { # alias -> ESC_IDX (0-based position, -1 if not a rung)
+    local _t _n=0
+    ESC_IDX=-1
+    while IFS= read -r _t; do
+        [[ -z "$_t" ]] && continue
+        if [[ "$_t" == "$1" ]]; then ESC_IDX=$_n; return; fi
+        _n=$((_n + 1))
+    done <<< "$ESC_LADDER"
+}
+
+rule_CL601_CL605() {
+    [[ $ESC_ACTIVE -eq 1 ]] || return 0
+    local _i _j _s _t _sec _line _row _c _n _ncell _skill_ladder=""
+    local _skill_rows=""   # id \x1f command \x1f agent \x1f from \x1f to \x1f line
+    local _cells _sid _scmd _sag _sfr _sto _sln
+    local _eid _ecmd _eph _eag _efr _eto _seen_ids="" _found _nn _pd _fi _ti
+    local _mladder _rel _name _agent _has_rows _first _raw _lno _tok _cur _nxt _phrase _hit
+    local _esc_refs=""     # "file:id" set - ids a scan file names outside fences
+
+    # -- skill side: the ladder line and the trigger table.
+    load_file "$ESC_SKILL_REL"
+    _sec=""
+    for ((_i = 0; _i < CUR_N; _i++)); do
+        [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
+        _line="${CUR_LINES[$_i]}"
+        if [[ "$_line" =~ $RE_H2 ]]; then
+            _sec="${_line#"${_line%%[![:blank:]#]*}"}"
+            _sec="${_sec%"${_sec##*[![:blank:]]}"}"
+            continue
+        fi
+        if [[ "$_sec" == "Ladder" && -z "$_skill_ladder" ]]; then
+            if [[ "$_line" =~ ^\`([^\`]+)\` ]]; then _skill_ladder="${BASH_REMATCH[1]}"; fi
+            continue
+        fi
+        [[ "$_sec" == "Trigger table" ]] || continue
+        _t="${_line#"${_line%%[![:blank:]]*}"}"; _t="${_t%"${_t##*[![:blank:]]}"}"
+        case "$_t" in '|'*) ;; *) continue ;; esac
+        _row="${_t#|}"; _row="${_row%|}"
+        # The sentinel '|' keeps a trailing empty cell, which bash's read would
+        # otherwise drop and String.Split in the twin would not.
+        IFS='|' read -r -a _cells <<< "${_row}|"
+        _ncell=${#_cells[@]}
+        for ((_j = 0; _j < _ncell; _j++)); do
+            _c="${_cells[$_j]//\`/}"
+            _c="${_c#"${_c%%[![:blank:]]*}"}"; _c="${_c%"${_c##*[![:blank:]]}"}"
+            _cells[$_j]="$_c"
+        done
+        [[ "${_cells[0]}" == "Rule ID" ]] && continue
+        case "${_cells[0]}" in -*) continue ;; esac
+        if [[ $_ncell -ne 7 ]]; then
+            add_finding CL602 "$ESC_SKILL_REL" "$((_i + 1))" "trigger-table row has $_ncell cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
+            continue
+        fi
+        _scmd="${_cells[1]#/sd:}"
+        _skill_rows="${_skill_rows}${_cells[0]}"$'\x1f'"${_scmd}"$'\x1f'"${_cells[4]}"$'\x1f'"${_cells[5]}"$'\x1f'"${_cells[6]}"$'\x1f'"$((_i + 1))"$'\n'
+    done
+
+    if [[ -z "$ESC_ROWS" ]]; then
+        # One error, not a pile-on: with no rows every downstream check would
+        # restate this same fact once per command and per cited id.
+        add_finding CL602 "$MANIFEST_REL" 1 "skills/$ESC_SKILL_NAME exists but contractLint.escalationTriggers declares no rows - the policy has no assertable copy"
+        return 0
+    fi
+    if [[ -z "$_skill_rows" ]]; then
+        add_finding CL602 "$ESC_SKILL_REL" 1 "no trigger table under '## Trigger table' - nothing to compare contractLint.escalationTriggers against"
+    fi
+    [[ -z "$ESC_ALIASES" ]] && add_finding CL603 "$MANIFEST_REL" 1 "contractLint.escalationPolicy.aliases is empty - no row tier can be checked"
+    [[ -z "$ESC_RESTATE_PHRASES" ]] && add_finding CL605 "$MANIFEST_REL" 1 "contractLint.escalationPolicy.restatePhrases is empty - restatement cannot be detected"
+
+    # -- the ladder: manifest vs skill.
+    _mladder=""
+    while IFS= read -r _t; do
+        [[ -z "$_t" ]] && continue
+        if [[ -z "$_mladder" ]]; then _mladder="$_t"; else _mladder="$_mladder -> $_t"; fi
+    done <<< "$ESC_LADDER"
+    if [[ -z "$_mladder" ]]; then
+        add_finding CL604 "$MANIFEST_REL" 1 "contractLint.escalationPolicy.ladder is empty - no row can be checked for one-rung movement"
+    elif [[ -z "$_skill_ladder" ]]; then
+        add_finding CL604 "$ESC_SKILL_REL" 1 "no backticked ladder line under '## Ladder' to compare contractLint.escalationPolicy.ladder against"
+    elif [[ "$_mladder" != "$_skill_ladder" ]]; then
+        add_finding CL604 "$MANIFEST_REL" 1 "contractLint.escalationPolicy.ladder '$_mladder' differs from the skill's '$_skill_ladder'"
+        # Every row measured against a wrong ladder would restate this finding.
+        _mladder=""
+    fi
+
+    # -- manifest rows: shape, skill parity, tiers.
+    while IFS=$'\x1f' read -r _eid _ecmd _eph _eag _efr _eto; do
+        [[ -z "$_eid" ]] && continue
+        if set_has _seen_ids "$_eid"; then
+            add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers declares $_eid twice"
+            continue
+        fi
+        set_add _seen_ids "$_eid"
+        if [[ "$_eid" =~ $RE_ESCID_FULL ]]; then
+            _nn=$((10#${BASH_REMATCH[1]}))
+            _pd=""
+            [[ "$_eph" =~ $RE_LEADDIGITS ]] && _pd=$((10#${BASH_REMATCH[1]}))
+            if [[ "$_pd" != "$_nn" ]]; then
+                add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid has phase '$_eph', but its id names phase $_nn"
+            fi
+        else
+            add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers id '$_eid' is not ESC-<WORKFLOW>-<NN>[suffix]"
+        fi
+        _found=0
+        while IFS=$'\x1f' read -r _sid _scmd _sag _sfr _sto _sln; do
+            [[ "$_sid" == "$_eid" ]] || continue
+            _found=1
+            [[ "$_scmd" == "$_ecmd" ]] || add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid command '$_ecmd' differs from the skill's '/sd:$_scmd'"
+            [[ "$_sag" == "$_eag" ]] || add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid agent '$_eag' differs from the skill's '$_sag'"
+            [[ "$_sfr" == "$_efr" ]] || add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid from '$_efr' differs from the skill's '$_sfr'"
+            [[ "$_sto" == "$_eto" ]] || add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid to '$_eto' differs from the skill's '$_sto'"
+            break
+        done <<< "$_skill_rows"
+        if [[ $_found -eq 0 && -n "$_skill_rows" ]]; then
+            add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid is absent from the skill's trigger table"
+        fi
+        _n=0
+        for _t in "$_efr" "$_eto"; do
+            if [[ -n "$ESC_ALIASES" ]] && ! set_has ESC_ALIASES "$_t"; then
+                add_finding CL603 "$MANIFEST_REL" 1 "escalationTriggers row $_eid tier '$_t' is not a model alias"
+                _n=1
+            fi
+        done
+        # A non-alias tier is CL603's; CL604 on the same value would report one
+        # problem twice.
+        if [[ $_n -eq 0 && -n "$_mladder" ]]; then
+            esc_ladder_index "$_efr"; _fi=$ESC_IDX
+            esc_ladder_index "$_eto"; _ti=$ESC_IDX
+            if [[ $_fi -lt 0 ]]; then
+                add_finding CL604 "$MANIFEST_REL" 1 "escalationTriggers row $_eid from '$_efr' is not a rung of the ladder"
+            elif [[ $_ti -lt 0 ]]; then
+                add_finding CL604 "$MANIFEST_REL" 1 "escalationTriggers row $_eid to '$_eto' is not a rung of the ladder"
+            elif [[ $((_ti - _fi)) -ne 1 ]]; then
+                add_finding CL604 "$MANIFEST_REL" 1 "escalationTriggers row $_eid moves $_efr -> $_eto, which is not exactly one rung up"
+            fi
+        fi
+    done <<< "$ESC_ROWS"
+
+    # -- skill rows the manifest does not carry.
+    while IFS=$'\x1f' read -r _sid _scmd _sag _sfr _sto _sln; do
+        [[ -z "$_sid" ]] && continue
+        set_has _seen_ids "$_sid" && continue
+        add_finding CL602 "$ESC_SKILL_REL" "$_sln" "trigger-table row $_sid is absent from contractLint.escalationTriggers"
+    done <<< "$_skill_rows"
+
+    # -- every ESC- id cited outside the skill, outside fences. The skill's own
+    # mentions are covered by the table comparison above.
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" || "$_rel" == "$ESC_SKILL_REL" ]] && continue
+        load_file "$_rel"
+        while IFS= read -r _raw; do
+            [[ -z "$_raw" ]] && continue
+            _lno="${_raw%%:*}"
+            _tok="${_raw#*:}"
+            [[ "${CUR_FENCE[$((_lno - 1))]}" == "1" ]] && continue
+            set_add _esc_refs "${_rel}:${_tok}"
+            set_has _seen_ids "$_tok" && continue
+            add_finding CL602 "$_rel" "$_lno" "cites escalation rule $_tok, which contractLint.escalationTriggers does not declare"
+        done < <(grep -onE "$RE_ESCID" "$ROOT/$_rel" || true)
+    done <<< "$SCAN_FILES"
+
+    # -- CL601: every invoking command is covered.
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" ]] && continue
+        case "$_rel" in commands/*) ;; *) continue ;; esac
+        _name="${_rel#commands/}"; _name="${_name%.md}"
+        _has_rows=0
+        while IFS=$'\x1f' read -r _eid _ecmd _eph _eag _efr _eto; do
+            [[ "$_ecmd" == "$_name" ]] || continue
+            _has_rows=1
+            if ! set_has _esc_refs "${_rel}:${_eid}"; then
+                add_finding CL601 "$_rel" 1 "escalationTriggers row $_eid targets /sd:$_name, but this command never names it - the row is not live"
+            fi
+        done <<< "$ESC_ROWS"
+        if [[ $_has_rows -eq 1 ]]; then
+            _found=0
+            while IFS=$'\x1f' read -r _c _t _s _lno; do
+                [[ "$_c" == "sdref" && "$_t" == "$ESC_SKILL_NAME" && "$_s" == "$_rel" ]] && { _found=1; break; }
+            done <<< "$REFS"
+            if [[ $_found -eq 0 ]]; then
+                add_finding CL601 "$_rel" 1 "command has escalationTriggers rows but never references $ESC_SKILL_NAME - it cannot apply a policy it does not read"
+            fi
+            continue
+        fi
+        _first=0
+        while IFS=$'\x1f' read -r _t _s _lno; do
+            [[ "$_s" == "$_rel" ]] || continue
+            set_has AGENT_NAMES "$_t" || continue
+            if [[ $_first -eq 0 || $_lno -lt $_first ]]; then _first=$_lno; _agent="$_t"; fi
+        done <<< "$ANCHORS"
+        if [[ $_first -gt 0 ]]; then
+            add_finding CL601 "$_rel" "$_first" "invokes '$_agent' but no escalationTriggers row targets this command - wire an $ESC_SKILL_NAME rule, or add an allow CL601 comment with the reason"
+        fi
+    done <<< "$SCAN_FILES"
+
+    # -- CL605: a command restates policy text the skill owns. Fenced lines
+    # are NOT skipped - a fenced retro-line example is exactly the restatement.
+    # Two-line wrap window and one-finding-per-occurrence, as CL009.
+    while IFS= read -r _rel; do
+        [[ -z "$_rel" ]] && continue
+        case "$_rel" in commands/*) ;; *) continue ;; esac
+        load_file "$_rel"
+        for ((_i = 0; _i < CUR_N; _i++)); do
+            [[ "${CUR_LINES[$_i]}" =~ $RE_SUPPRESS ]] && continue
+            _s="${CUR_LINES[$_i]}"
+            _cur="${_s#"${_s%%[![:blank:]]*}"}"; _cur="${_cur%"${_cur##*[![:blank:]]}"}"
+            _nxt=""
+            _j=$((_i + 1))
+            if [[ $_j -lt $CUR_N ]] && ! [[ "${CUR_LINES[$_j]}" =~ $RE_SUPPRESS ]]; then
+                _s="${CUR_LINES[$_j]}"
+                _nxt="${_s#"${_s%%[![:blank:]]*}"}"; _nxt="${_nxt%"${_nxt##*[![:blank:]]}"}"
+            fi
+            _hit=0
+            while IFS= read -r _phrase; do
+                [[ -z "$_phrase" ]] && continue
+                case "$_cur" in *"$_phrase"*) _hit=1; break ;; esac
+                if [[ -n "$_nxt" ]]; then
+                    case "$_nxt" in *"$_phrase"*) continue ;; esac
+                    case "$_cur $_nxt" in *"$_phrase"*) _hit=1; break ;; esac
+                fi
+            done <<< "$ESC_RESTATE_PHRASES"
+            if [[ $_hit -eq 1 ]]; then
+                add_finding CL605 "$_rel" "$((_i + 1))" "restates '$_phrase', which $ESC_SKILL_NAME owns - name the rule ID and its trigger inputs instead"
+            fi
+        done
+    done <<< "$SCAN_FILES"
+}
+
 rule_CL001_CL003
 rule_CL002
 rule_CL004
@@ -1437,16 +1877,19 @@ rule_CL005
 rule_CL006
 rule_CL007
 rule_CL008
+rule_CL009
 rule_CL100_CL102_CL103
 rule_CL101
 rule_CL200
 rule_CL201
 rule_CL202
-rule_CL203
+rule_CL203_CL204
+rule_CL205
+rule_CL206
 rule_CL300_CL301_CL305_CL306
 rule_CL302_CL303_CL304
 rule_CL400_CL401_CL402
-rule_CL500
+rule_CL601_CL605
 
 # ---- Phase C: suppressions, sort, emit -------------------------------------
 #

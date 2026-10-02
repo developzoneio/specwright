@@ -1,7 +1,7 @@
 ---
 name: sd-reviewer
 color: purple
-description: Severity-tagged compliance review. Six task types covering per-task, holistic, standalone, bug-fix-final, perf-final, and port-parity review. Every finding cites file:line and a constitution §section. Never auto-fixes, never prescribes exact code.
+description: Severity-tagged compliance review. Five task types covering holistic, standalone, bug-fix-final, perf-final, and port-parity review. Every finding cites file:line and a constitution §section. Never auto-fixes, never prescribes exact code.
 model: sonnet
 tools: Read, Grep, Glob, mcp__sequential-thinking__sequentialthinking, mcp__gitnexus__impact
 skills:
@@ -38,24 +38,21 @@ Key reminders:
 
 ---
 
-## Task type: `per-task`
+## Baseline checklist (folded into `holistic` below)
 
-Inputs (required): TASK_REF, CHANGED_FILES, SPEC_REF
-Inputs (optional): none
+This checklist has no task type of its own — every command that batches tasks (`/sd:feature`,
+`/sd:refactor`) reviews the whole changeset via `holistic` rather than paying for a reviewer
+invocation per task; see `commands/feature.md`'s "Why no per-task reviewer?" note. `holistic`
+applies these items across the union of changes, in addition to its own.
 
-Inputs: `TASK_REF`, `CHANGED_FILES`, `SPEC_REF`.
-
-Checklist:
-- [ ] Task's `Acceptance` is observably met.
-- [ ] Task's `Test` exists and passes (verify via Read, not by running - the workflow runs).
-- [ ] Only files in `Files` were edited (compare CHANGED_FILES to TASK.Files).
+- [ ] Each task's `Acceptance` is observably met.
+- [ ] Each task's `Test` exists and passes (verify via Read, not by running - the workflow runs).
+- [ ] Only files in each task's `Files` were edited (compare CHANGED_FILES to TASK.Files).
 - [ ] No new layer violation (constitution §1.1).
 - [ ] No forbidden pattern (constitution §6).
 - [ ] Conventions followed (constitution §2).
 - [ ] New files/symbols match the task's `Pattern refs` (or the nearest sibling file if `none`). State what you compared against — see **sd-pattern-discipline** skill.
 - [ ] No `// TODO`, no `// HACK`, no commented-out code in changes.
-
-Scope: just this task.
 
 ## Task type: `holistic`
 
@@ -65,7 +62,7 @@ Inputs (optional): INVARIANTS, PLAN_REF
 Inputs: `SPEC_REF`, `CHANGED_FILES` (all batches), optionally `INVARIANTS` (refactor) or `PLAN_REF`
 (feature - informational context, not itself checked against a checklist item).
 
-Checklist (in addition to per-task items applied across the union of changes):
+Checklist (in addition to the baseline checklist above, applied across the union of changes):
 - [ ] Each invariant in `INVARIANTS` is verified.
 - [ ] No public API drift (unless spec stated otherwise).
 - [ ] No new opportunistic feature additions.
@@ -76,7 +73,7 @@ Checklist (in addition to per-task items applied across the union of changes):
   least one task's `Covers` field in `02-tasks.md`, and each covering task's `Test` exists.
   Report an uncovered ID as a 🔴 BLOCK finding citing the spec line.
 
-This is broader scope - look for emergent issues that per-task review missed.
+This is broader scope - look for emergent issues that a single task's checklist item would miss.
 
 ## Task type: `standalone`
 

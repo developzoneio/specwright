@@ -76,6 +76,16 @@ if ([string]::IsNullOrWhiteSpace($Prefix) -or
     exit 1
 }
 
+# ---- base-path safety guard -------------------------------------------------
+# Mirrors install.ps1's guard exactly - install and uninstall must accept the
+# same set of base paths, or a base path legal for one and rejected by the
+# other leaves orphaned or unreachable files.
+
+if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    Write-Fail "Invalid base path '$BasePath'. Must not be empty or whitespace-only."
+    exit 2
+}
+
 Write-Section 'specwright uninstaller'
 Write-Info  "Script:    $PSCommandPath"
 Write-Info  "Base path: $BasePath"
@@ -158,7 +168,7 @@ Write-Info '1. Projects that wired hooks in .claude/settings.json now point at d
 Write-Info '   scripts. Remove the "hooks" block there, or re-run /sd:setup after a reinstall.'
 Write-Info ''
 Write-Info '2. Per-project artifacts remain until you remove them manually:'
-Write-Info '     .claude\.hookstate\          (subagent-retro debounce state)'
+Write-Info '     .claude\.hookstate\          (subagent-retro debounce, PreCompact pointers)'
 Write-Info '     .claude\project-config.json'
 Write-Info '     .specs\'
 Write-Info '     CLAUDE.md'

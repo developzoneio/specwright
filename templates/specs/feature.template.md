@@ -13,7 +13,7 @@ linked_specs: []
      `Estimated complexity` field in 02-tasks.md (which sizes one line item). It is an estimate,
      not a measurement: Phase 3 measures the real plan against the complexity thresholds at the
      Gate 2 / Gate Complexity checkpoint. A create-time estimate of `L` also escalates the impact
-     and planning models (see /sd:feature). Leave the `<<S|M|L>>` and rationale tokens for the
+     and planning models (see the sd-model-escalation skill). Leave the `<<S|M|L>>` and rationale tokens for the
      architect to fill; both must be gone before `approved`. -->
 
 

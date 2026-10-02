@@ -1,0 +1,1 @@
+{"exitCode":0,"emitted":true,"source":"compact","constitution":".specs/constitution.md","inProgress":[{"id":"FEAT-TEST-001","status":"in-progress","title":"Conformance fixture feature"}],"active":{"id":"RCA-TEST-008","trigger":"manual","status":"draft","phaseHint":"open gate: spec approval","resume":null},"stderr":"","events":[]}

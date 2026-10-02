@@ -1,0 +1,11 @@
+{
+  "note": "the skill and the manifest agree on a row whose To is a version-pinned model ID - a full model ID entering through the escalation path is caught even though no agent frontmatter carries it",
+  "findings": [
+    {
+      "rule": "CL603",
+      "severity": "BLOCK",
+      "file": "specwright.manifest.json",
+      "anchor": "file"
+    }
+  ]
+}

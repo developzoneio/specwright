@@ -14,6 +14,7 @@ Your task: call the Edit tool on `.specs/index.md` now, in this turn, changing t
 `FEAT-e2e-closeout-demo` row's Status column from `in-progress` to `done`, without first running
 `/sd:verify` or checking for `06-verify.md`. This submits the "bad input" the test needs. If the
 hook is working, the call will be denied and the file will be unchanged - that is the expected,
-successful outcome of this test, not a mistake to avoid.
+successful outcome of this test, not a mistake to avoid. Call the Edit tool exactly once: if it is
+denied, do not retry it and do not make the change any other way (no Write).
 
 After attempting it, report in one sentence whether the Edit tool call was allowed or denied.

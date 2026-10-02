@@ -13,7 +13,7 @@
 #   - Interactive prompt on differing files (y / N / a=all). Suppressed by --force.
 #   - chmod +x for bash hooks after install.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 # ---- defaults --------------------------------------------------------------
 
@@ -71,9 +71,17 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --base-path)
-            BASE_PATH="${2:-}"; shift 2 ;;
+            if [[ $# -lt 2 ]]; then
+                fail "Missing value for $1"
+                usage; exit 2
+            fi
+            BASE_PATH="$2"; shift 2 ;;
         --prefix)
-            PREFIX="${2:-}"; shift 2 ;;
+            if [[ $# -lt 2 ]]; then
+                fail "Missing value for $1"
+                usage; exit 2
+            fi
+            PREFIX="$2"; shift 2 ;;
         --dry-run)
             DRY_RUN=1; shift ;;
         --force)
@@ -90,10 +98,28 @@ done
 # Mirrors uninstall.sh's guard exactly - install and uninstall must accept the
 # same set of prefixes, or a prefix legal for one and rejected by the other
 # leaves orphaned or unreachable files.
+#
+# [[:space:]] rather than a spaces-only `// /` strip: PowerShell's
+# IsNullOrWhiteSpace also rejects tab/CR/LF/VT/FF, and a narrower check here
+# would accept prefixes the .ps1 installers reject (SW-53). The shared case
+# table in tests/installer/prefix-cases.json pins all four scripts together.
 
-if [[ -z "${PREFIX// /}" || "$PREFIX" == */* || "$PREFIX" == *\\* || "$PREFIX" == *..* ]]; then
+if [[ -z "${PREFIX//[[:space:]]/}" || "$PREFIX" == */* || "$PREFIX" == *\\* || "$PREFIX" == *..* ]]; then
     fail "Invalid prefix '$PREFIX'. Must be a plain folder name (no separators, no '..')."
     exit 1
+fi
+
+# ---- base-path safety guard -------------------------------------------------
+# Mirrors uninstall.sh's guard exactly - install and uninstall must accept the
+# same set of base paths, or a base path legal for one and rejected by the
+# other leaves orphaned or unreachable files.
+#
+# Uses [[:space:]], same as the prefix guard above, to match PowerShell's
+# IsNullOrWhiteSpace (tab/CR/LF/VT/FF, not just spaces).
+
+if [[ -z "${BASE_PATH//[[:space:]]/}" ]]; then
+    fail "Invalid base path '$BASE_PATH'. Must not be empty or whitespace-only."
+    exit 2
 fi
 
 # ---- portable helpers ------------------------------------------------------
@@ -353,12 +379,20 @@ info "3. Restart Claude Code so hooks are picked up."
 info ""
 info "4. Hook wiring (Bash - add to your project .claude/settings.json):"
 info "     \"hooks\": {"
+info "       \"SessionStart\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/session-context.sh\",\"timeout\":5}]}],"
 info "       \"UserPromptSubmit\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/prompt-router.sh\",\"timeout\":5}]}],"
-info "       \"PreToolUse\": [{\"matcher\":\"Edit|Write|MultiEdit\",\"hooks\":[{\"type\":\"command\","
+info "       \"PreToolUse\": [{\"matcher\":\"Edit|Write|MultiEdit|Bash|PowerShell\",\"hooks\":[{\"type\":\"command\","
 info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/spec-gate.sh\",\"timeout\":5}]}],"
+info "       \"PostToolUse\": [{\"matcher\":\"Edit|Write|MultiEdit\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/handoff-integrity.sh\",\"timeout\":5}]}],"
 info "       \"SubagentStop\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
-info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/subagent-retro.sh\",\"timeout\":3}]}]"
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/subagent-retro.sh\",\"timeout\":3}]}],"
+info "       \"PreCompact\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/precompact-state.sh\",\"timeout\":5}]}],"
+info "       \"Stop\": [{\"matcher\":\"*\",\"hooks\":[{\"type\":\"command\","
+info "         \"command\":\"bash \${HOME}/.claude/hooks/${PREFIX}/stop-gate.sh\",\"timeout\":5}]}]"
 info "     }"
 info "   (Or run /sd:setup in your project - it generates settings.json automatically.)"
 

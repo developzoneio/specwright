@@ -52,6 +52,7 @@ wording can improve in one commit while a divergence still fails.
 | `cl006-unknown-command-reference` | CL006 |
 | `cl007-agent-invoked-by-no-command` | CL007 |
 | `cl008-unknown-spec-artifact` | CL008 |
+| `cl009-phase0-restates-bootstrap-guard` | CL009, wrapped and single-line |
 | `cl100-invocation-sets-undeclared-mode` | CL100 |
 | `cl101-mode-invoked-by-nobody` | CL101 |
 | `cl102-invocation-omits-required-input` | CL102 |
@@ -61,6 +62,9 @@ wording can improve in one commit while a divergence still fails.
 | `cl201-readonly-agent-declares-write-tool` | CL201 |
 | `cl202-unknown-mcp-tool-name` | CL202 |
 | `cl203-declared-tool-never-mentioned` | CL203 |
+| `cl204-write-capable-agent-block` | CL204 |
+| `cl205-readonly-block-passive-artifact-write` | CL205 |
+| `cl206-edit-tool-instruction-missing` | CL206, phrase only inside a fence |
 | `cl300-gate-without-stop` | CL300 |
 | `cl301-gate-without-options` | CL301 |
 | `cl302-gate-count-disagrees` | CL302 |
@@ -71,7 +75,13 @@ wording can improve in one commit while a divergence still fails.
 | `cl400-hardcoded-npm-test` | CL400 |
 | `cl401-hardcoded-typescript` | CL401 |
 | `cl402-hardcoded-absolute-path` | CL402 |
-| `cl500-file-over-budget` | CL500 |
+| `cl601-invoke-without-escalation-check` | CL601, a command invoking an agent with no escalation row |
+| `cl601-row-id-not-in-command` | CL601, a manifest row its command never names |
+| `cl602-manifest-skill-id-drift` | CL602, one id only in the skill table and one only in the manifest |
+| `cl602-policy-undeclared` | CL602, the escalation skill on disk with no `escalationTriggers` |
+| `cl603-full-model-id-in-row` | CL603 |
+| `cl604-row-skips-rung` | CL604 |
+| `cl605-command-restates-ladder` | CL605, fenced retro line and wrapped ladder |
 | `cl900-suppression-without-reason` | CL900 |
 | `cl901-suppression-unknown-rule` | CL901 |
 | `cl902-suppression-suppresses-nothing` | CL902 |
@@ -89,10 +99,14 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-substep-before-parent` | a conditional sub-gate authored before its parent | `commands/bug.md` |
 | `fp-hard-gate-prose-escape` | a HARD gate whose PROSE mentions an override, annotated for both CL305 and CL306 | `commands/bug.md`, `commands/release.md` |
 | `fp-negated-write-verb` | a negated ("Do not write") or third-person ("The caller will Create") use of a CL200 verb | `agents/code-explorer.md` |
+| `fp-cl205-main-thread-named` | an artifact write in a read-only agent's block whose step names the main thread, wrapped across lines or in the step's opening parenthetical | `commands/port.md` Phase 3 |
 | `fp-cl400-placeholder-and-fenced-example` | a stack command token inside a `<<placeholder>>` and inside a fenced example | `commands/perf.md`, `commands/verify.md` |
 | `fp-cl401-placeholder-and-fenced-example` | a language name inside a `<<placeholder>>` and inside a fenced example | `commands/setup.md`, `agents/spec-architect.md` |
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |
-| `fp-cl500-file-at-budget-ceiling` | a file just under `contractLint.budgets.commandsBytes` must not trip CL500 | - |
+| `fp-cl009-phrase-outside-phase0` | bootstrap guard text inside the skill that owns it, in a fenced example, and outside Phase 0; a Phase 0 that reads the skill at runtime | `skills/sd-bootstrap-guard/SKILL.md`, the Phase 0 of every workflow command |
+| `fp-cl206-phrase-wrapped` | the `editToolOnly` phrase wrapped across two lines of a rules bullet | `## Rules (hard constraints)` of every command in `contractLint.editToolOnly` |
+| `fp-cl601-allow-comment` | a fully wired escalation tree, plus an invoking command exempted by `allow CL601` with a reason | `commands/adr.md`, `commands/explore.md`, `commands/review.md` |
+| `fp-cl605-alias-list` | an alias list, and "escalate" used about a tool allowlist | `commands/port.md`, `commands/explore.md` |
 
 ## The case that must still BITE
 

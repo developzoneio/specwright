@@ -1,4 +1,5 @@
 [
+  { "type": "permission-denied", "tool": "Edit|MultiEdit|Write", "path": "src/domain/todo.js" },
   { "type": "file-not-matches", "path": "src/domain/todo.js", "pattern": "e2e-negative-scenario-probe" },
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"code-edit\",\"decision\":\"block\"" }
 ]

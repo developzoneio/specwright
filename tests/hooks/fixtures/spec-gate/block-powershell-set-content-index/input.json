@@ -1,0 +1,1 @@
+{"tool_name":"PowerShell","cwd":"{{CWD}}","tool_input":{"command":"(Get-Content .specs\\index.md) -replace 'draft','approved' | Set-Content -Path .specs\\index.md"}}

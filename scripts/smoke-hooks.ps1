@@ -129,6 +129,15 @@ Assert-Exit0 'prompt-router keyword match' $script:Code
 Assert-Contains 'prompt-router keyword match' $script:Stdout '<context-router>'
 Assert-Contains 'prompt-router keyword match' $script:Stdout '/sd:bug'
 
+# ---- session-context: in-progress spec surfaced at session start ------------
+
+Write-Section 'session-context (PowerShell): startup surfaces the in-progress spec'
+$payload = "{`"source`":`"startup`",`"cwd`":`"$($fixture -replace '\\','\\\\')`"}"
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\session-context.ps1') $payload
+Assert-Exit0 'session-context startup' $script:Code
+Assert-Contains 'session-context startup' $script:Stdout '<session-context>'
+Assert-Contains 'session-context startup' $script:Stdout 'FEAT-TEST-001'
+
 # ---- spec-gate: (a) code edit with in-progress spec -> allow ----------------
 
 Write-Section 'spec-gate (PowerShell): (a) code edit with in-progress spec -> allow'
@@ -147,6 +156,7 @@ Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\spec-gate.ps1') $payload
 Assert-Exit0 'spec-gate (b) header-only, mode=block' $script:Code
 Assert-Contains 'spec-gate (b) header-only, mode=block' $script:Stdout '"decision":"block"'
 Assert-Contains 'spec-gate (b) header-only, mode=block' $script:Stdout '"permissionDecision":"deny"'
+Assert-Contains 'spec-gate (b) header-only, mode=block' $script:Stdout '"hookEventName":"PreToolUse"'
 
 Write-Section 'spec-gate (PowerShell): (b) header-only in-progress text -> warn (mode=warn)'
 (Get-Content -LiteralPath $configPath -Raw) -replace '"mode": "block"', '"mode": "warn"' |
@@ -243,6 +253,102 @@ Write-Section 'subagent-retro (PowerShell): second run within debounce window is
 Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\subagent-retro.ps1') $payload
 Assert-Exit0 'subagent-retro second run (debounced)' $script:Code
 Assert-Empty 'subagent-retro second run (debounced)' $script:Stdout
+
+# ---- precompact-state -> session-context: state survives a compaction -------
+
+Write-Section 'precompact-state (PowerShell): records the spec named in the transcript'
+Set-Content -LiteralPath (Join-Path $fixture '.specs\FEAT-TEST-001\00-spec.md') -Encoding UTF8 -NoNewline `
+    -Value "---`nid: FEAT-TEST-001`ntype: feature`nstatus: in-progress`n---`n"
+$transcript = Join-Path $fixture 'transcript.jsonl'
+Set-Content -LiteralPath $transcript -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"resume FEAT-TEST-001"}}'
+$payload = "{`"session_id`":`"smoke-compact`",`"trigger`":`"manual`",`"cwd`":`"$fixtureEsc`",`"transcript_path`":`"$($transcript -replace '\\','\\\\')`"}"
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\precompact-state.ps1') $payload
+Assert-Exit0 'precompact-state manual' $script:Code
+Assert-Empty 'precompact-state manual' $script:Stdout
+$pointer = Join-Path $fixture '.claude\.hookstate\precompact-smoke-compact.json'
+if ((Test-Path -LiteralPath $pointer) -and ((Get-Content -LiteralPath $pointer -Raw) -match 'FEAT-TEST-001')) {
+    Add-Ok 'precompact-state manual: pointer names FEAT-TEST-001'
+} else {
+    Add-Bad 'precompact-state manual: pointer missing or wrong'
+}
+
+Write-Section 'session-context (PowerShell): compact re-injects the active spec'
+$payload = "{`"session_id`":`"smoke-compact`",`"source`":`"compact`",`"cwd`":`"$fixtureEsc`"}"
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\session-context.ps1') $payload
+Assert-Exit0 'session-context compact' $script:Code
+Assert-Contains 'session-context compact' $script:Stdout 'Active spec before compaction (trigger: manual): FEAT-TEST-001'
+Assert-Contains 'session-context compact' $script:Stdout '/sd:feature TEST-001'
+
+# ---- stop-gate: a skipped HARD gate blocks the stop, once (SW-69) -----------
+
+# Its own workspace: the hook is opt-in, and enabling it in the shared fixture
+# would change nothing above but is not this section's business. The project
+# root must come from cwd, not from a CLAUDE_PROJECT_DIR the runner inherited.
+$savedProjectDir = $env:CLAUDE_PROJECT_DIR
+Remove-Item Env:\CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
+$sg = Join-Path $fixture 'stop-gate-ws'
+New-Item -ItemType Directory -Force -Path (Join-Path $sg '.claude'), (Join-Path $sg '.specs\BUG-SMOKE-1') | Out-Null
+Set-Content -LiteralPath (Join-Path $sg '.specs\BUG-SMOKE-1\00-spec.md') -Encoding UTF8 -NoNewline `
+    -Value "---`nid: BUG-SMOKE-1`ntype: bug`nstatus: approved`n---`n`n## Reproduction`n`n1. <<step 1>>`n"
+Set-Content -LiteralPath (Join-Path $sg '.specs\BUG-SMOKE-1\03-decisions.md') -Encoding UTF8 -Value '# Decisions'
+Set-Content -LiteralPath (Join-Path $sg 'transcript.jsonl') -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"continue BUG-SMOKE-1"}}'
+$sgCfg = Join-Path $sg '.claude\project-config.json'
+$sgEsc = $sg -replace '\\', '\\\\'
+$sgPayload = "{`"session_id`":`"smoke-stop`",`"cwd`":`"$sgEsc`",`"transcript_path`":`"$sgEsc\\transcript.jsonl`",`"stop_hook_active`":false}"
+
+Write-Section 'stop-gate (PowerShell): off by default - silent'
+Set-Content -LiteralPath $sgCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') $sgPayload
+Assert-Exit0 'stop-gate default off' $script:Code
+Assert-Empty 'stop-gate default off' $script:Stdout
+
+Write-Section 'stop-gate (PowerShell): enabled, skipped Gate 2 - blocks'
+Set-Content -LiteralPath $sgCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') $sgPayload
+Assert-Exit0 'stop-gate skipped gate' $script:Code
+Assert-Contains 'stop-gate skipped gate' $script:Stdout '"decision":"block"'
+Assert-Contains 'stop-gate skipped gate' $script:Stdout 'Gate 2 (Reproduction confirmed)'
+
+Write-Section 'stop-gate (PowerShell): re-fire with stop_hook_active - silent'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($sgPayload -replace '"stop_hook_active":false', '"stop_hook_active":true')
+Assert-Exit0 'stop-gate re-fire' $script:Code
+Assert-Empty 'stop-gate re-fire' $script:Stdout
+
+# ---- handoff-integrity: an edit outside the ready task's Files is flagged (SW-70)
+
+# Its own workspace, for the same reason as stop-gate: the hook is opt-in.
+$hi = Join-Path $fixture 'handoff-ws'
+New-Item -ItemType Directory -Force -Path (Join-Path $hi '.claude'), (Join-Path $hi '.specs\FEAT-SMOKE-1') | Out-Null
+Set-Content -LiteralPath (Join-Path $hi '.specs\FEAT-SMOKE-1\00-spec.md') -Encoding UTF8 -NoNewline `
+    -Value "---`nid: FEAT-SMOKE-1`ntype: feature`nstatus: in-progress`n---`n"
+Set-Content -LiteralPath (Join-Path $hi '.specs\FEAT-SMOKE-1\02-tasks.md') -Encoding UTF8 -NoNewline `
+    -Value "### T01 - Add service`n`n- **Files**: src/service.ts`n- **Depends on**: none`n- **Status**: open`n"
+Set-Content -LiteralPath (Join-Path $hi 'transcript.jsonl') -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"/sd:feature SMOKE-1 (FEAT-SMOKE-1)"}}'
+$hiCfg = Join-Path $hi '.claude\project-config.json'
+$hiEsc = $hi -replace '\\', '\\\\'
+$hiPayload = "{`"session_id`":`"smoke-ptu`",`"cwd`":`"$hiEsc`",`"transcript_path`":`"$hiEsc\\transcript.jsonl`",`"tool_name`":`"Edit`",`"tool_input`":{`"file_path`":`"$hiEsc\\src\\other.ts`"}}"
+
+Write-Section 'handoff-integrity (PowerShell): off by default - silent'
+Set-Content -LiteralPath $hiCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\handoff-integrity.ps1') $hiPayload
+Assert-Exit0 'handoff-integrity default off' $script:Code
+Assert-Empty 'handoff-integrity default off' $script:Stdout
+
+Write-Section 'handoff-integrity (PowerShell): enabled, out-of-scope edit - flagged'
+Set-Content -LiteralPath $hiCfg -Encoding UTF8 -Value '{"spec":{"dir":".specs"},"hooks":{"handoffIntegrity":{"enabled":true}}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\handoff-integrity.ps1') $hiPayload
+Assert-Exit0 'handoff-integrity out of scope' $script:Code
+Assert-Contains 'handoff-integrity out of scope' $script:Stdout '"decision":"block"'
+Assert-Contains 'handoff-integrity out of scope' $script:Stdout 'src/other.ts is outside the declared Files'
+
+Write-Section 'handoff-integrity (PowerShell): in-scope edit - silent'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\handoff-integrity.ps1') ($hiPayload -replace 'other\.ts', 'service.ts')
+Assert-Exit0 'handoff-integrity in scope' $script:Code
+Assert-Empty 'handoff-integrity in scope' $script:Stdout
+if ($null -ne $savedProjectDir) { $env:CLAUDE_PROJECT_DIR = $savedProjectDir }
 
 # ---- cleanup + summary --------------------------------------------------------
 

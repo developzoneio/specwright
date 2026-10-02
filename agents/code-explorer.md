@@ -96,6 +96,7 @@ Structure of the returned analysis (the caller appends this verbatim):
   - `file:line` - <description>, or "none found (searched: <patterns>)"
 ```
 
+<!-- contract-lint: allow CL101 - reached only via TASK=standalone's internal DETECTED_INTENT routing (explore.md Phase 2); no command sets TASK to this value directly -->
 ### `TASK = callers`
 
 Inputs (required): none
@@ -107,6 +108,7 @@ GitNexus-first: `mcp__gitnexus__impact` with `target: SYMBOL`, `direction: upstr
 
 Output: list of `file:line` with the calling context (one line of code).
 
+<!-- contract-lint: allow CL101 - reached only via TASK=standalone's internal DETECTED_INTENT routing (explore.md Phase 2); no command sets TASK to this value directly -->
 ### `TASK = definition`
 
 Inputs (required): none
@@ -118,6 +120,7 @@ GitNexus-first: `mcp__gitnexus__context` with the symbol name (pass `file_path` 
 
 Output: `file:line` + 5-line snippet showing the definition.
 
+<!-- contract-lint: allow CL101 - reached only via TASK=standalone's internal DETECTED_INTENT routing (explore.md Phase 2); no command sets TASK to this value directly -->
 ### `TASK = trace`
 
 Inputs (required): ENTRY_POINT
@@ -129,6 +132,7 @@ GitNexus-first: `mcp__gitnexus__impact` with `target: ENTRY_POINT`, `direction: 
 
 Output: indented tree with `file:line` at each node.
 
+<!-- contract-lint: allow CL101 - reached only via TASK=standalone's internal DETECTED_INTENT routing (explore.md Phase 2); no command sets TASK to this value directly -->
 ### `TASK = pattern`
 
 Inputs (required): QUERY
@@ -140,6 +144,7 @@ Refine the query into a grep-friendly pattern. Use `Grep` (preferred for raw tex
 
 Output: grouped by file when >5 hits in one file. Limit total to 50 results; tell the caller to narrow if hit.
 
+<!-- contract-lint: allow CL101 - reached only via TASK=standalone's internal DETECTED_INTENT routing (explore.md Phase 2); no command sets TASK to this value directly -->
 ### `TASK = structure`
 
 Inputs (required): none

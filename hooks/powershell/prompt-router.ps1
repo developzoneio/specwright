@@ -5,15 +5,19 @@
 
 .DESCRIPTION
     Reads Claude Code hook JSON from stdin. Extracts the user prompt and the
-    project cwd. Loads .claude/project-config.json (or sane defaults if absent)
+    session cwd, resolving the project root from it (SW-78). Loads
+    .claude/project-config.json (or sane defaults if absent)
     and:
       1. Matches the prompt against workflow keywords (bug / feature / refactor
          / perf / rca / port) and suggests the relevant /sd:* command.
       2. Detects ticket IDs in the prompt using ticket.pattern and looks up
          matching folders under .specs/.
-      3. Reads .specs/index.md and surfaces any spec currently in-progress.
-      4. Emits a <context-router> block to stdout that Claude Code injects
+      3. Emits a <context-router> block to stdout that Claude Code injects
          into the prompt as additional context.
+
+    Only per-prompt work lives here. The in-progress spec list and the
+    constitution pointer do not change within a session, so the
+    session-context SessionStart hook emits them once instead (SW-67).
 
     The hook is defensive: any failure exits 0 silently to avoid blocking the
     user. It never writes to disk.
@@ -48,13 +52,47 @@ $script:DefaultKeywords = [pscustomobject]@{
     port     = @('backport','port from','port the','donor repo','mirror from','replicate from')
 }
 
-function Get-ProjectConfig {
+# SW-78: `cwd` is the session's CURRENT directory, and a Bash `cd` moves it.
+# Reading config and specs relative to it made a session sitting in a
+# subdirectory see no spec folders and no in-progress work.
+# Every project path is therefore resolved against the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of Cwd (Cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of Cwd holding a .specs/ directory.
+#   4. Cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Identical in all
+# seven hooks; mirrors resolve_project_root in the .sh twins.
+function Resolve-ProjectRoot {
     param([string]$Cwd)
+    $envRoot = $env:CLAUDE_PROJECT_DIR
+    if (-not [string]::IsNullOrWhiteSpace($envRoot) -and (Test-Path -LiteralPath $envRoot -PathType Container)) {
+        return $envRoot
+    }
+    $start = $Cwd.TrimEnd('/', '\')
+    if ($start.Length -eq 0) { return $Cwd }
+    $markers = @(
+        @{ Rel = '.claude/project-config.json'; Type = 'Leaf' },
+        @{ Rel = '.specs'; Type = 'Container' }
+    )
+    foreach ($m in $markers) {
+        $dir = $start
+        for ($i = 0; $i -lt 64 -and -not [string]::IsNullOrEmpty($dir); $i++) {
+            if (Test-Path -LiteralPath (Join-Path $dir $m.Rel) -PathType $m.Type) { return $dir }
+            $parent = [System.IO.Path]::GetDirectoryName($dir)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -eq $dir) { break }
+            $dir = $parent
+        }
+    }
+    return $Cwd
+}
+
+function Get-ProjectConfig {
+    param([string]$Root)
 
     $defaults = [pscustomobject]@{
         spec    = [pscustomobject]@{
-            dir       = '.specs'
-            indexFile = '.specs/index.md'
+            dir = '.specs'
         }
         ticket  = [pscustomobject]@{
             pattern = '^[A-Z]+-[0-9]+$'
@@ -68,7 +106,7 @@ function Get-ProjectConfig {
         }
     }
 
-    $cfgPath = Join-Path $Cwd '.claude/project-config.json'
+    $cfgPath = Join-Path $Root '.claude/project-config.json'
     if (-not (Test-Path -LiteralPath $cfgPath)) { return $defaults }
 
     # -ErrorAction Stop is required: the script-wide SilentlyContinue preference
@@ -172,24 +210,6 @@ function Find-SpecsByTicket {
     return $hits
 }
 
-function Get-InProgressSpecs {
-    param([string]$IndexPath)
-    $result = New-Object System.Collections.Generic.List[string]
-    if (-not (Test-Path -LiteralPath $IndexPath)) { return $result }
-    try {
-        $lines = Get-Content -LiteralPath $IndexPath -Encoding UTF8 -ErrorAction Stop
-    } catch {
-        return $result
-    }
-    foreach ($line in $lines) {
-        # Match a table row containing "in-progress" and an ID like FEAT-..., BUG-..., REF-...
-        if ($line -match 'in-progress' -and $line -match '(FEAT|BUG|REF|PERF|RCA)-[A-Za-z0-9_\-]+') {
-            $result.Add($Matches[0]) | Out-Null
-        }
-    }
-    return $result
-}
-
 # ---- main ----
 
 $hookInput = Read-StdinJson
@@ -199,21 +219,20 @@ $prompt = $hookInput.prompt
 $cwd    = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($prompt) -or [string]::IsNullOrWhiteSpace($cwd)) { exit 0 }
 if (-not (Test-Path -LiteralPath $cwd)) { exit 0 }
+$projectRoot = Resolve-ProjectRoot -Cwd $cwd
 
-$config = Get-ProjectConfig -Cwd $cwd
+$config = Get-ProjectConfig -Root $projectRoot
 if (-not (Test-HookEnabled -Config $config)) { exit 0 }
 
-$specDir   = if ($config.spec.dir)       { Join-Path $cwd $config.spec.dir }       else { Join-Path $cwd '.specs' }
-$indexFile = if ($config.spec.indexFile) { Join-Path $cwd $config.spec.indexFile } else { Join-Path $cwd '.specs/index.md' }
+$specDir   = if ($config.spec.dir)       { Join-Path $projectRoot $config.spec.dir }       else { Join-Path $projectRoot '.specs' }
 $pattern   = if ($config.ticket.pattern) { $config.ticket.pattern }                else { '^[A-Z]+-[0-9]+$' }
 $kwMap     = $config.workflow.keywords
 
 $workflowMatches = Get-KeywordMatches -Prompt $prompt -KeywordMap $kwMap -DefaultKeywordMap $script:DefaultKeywords
 $ticketIds       = Get-TicketIds      -Prompt $prompt -Pattern $pattern
 $ticketSpecs     = Find-SpecsByTicket -SpecDir $specDir -TicketIds $ticketIds
-$inProgress      = Get-InProgressSpecs -IndexPath $indexFile
 
-if ($workflowMatches.Count -eq 0 -and $ticketIds.Count -eq 0 -and $inProgress.Count -eq 0) {
+if ($workflowMatches.Count -eq 0 -and $ticketIds.Count -eq 0) {
     exit 0
 }
 
@@ -240,12 +259,6 @@ if ($ticketIds.Count -gt 0) {
     } else {
         $lines.Add('No matching spec folder found. Consider /sd:feature or /sd:bug to create one.') | Out-Null
     }
-}
-
-if ($inProgress.Count -gt 0) {
-    $lines.Add('') | Out-Null
-    $lines.Add('Specs currently in-progress (from .specs/index.md):') | Out-Null
-    foreach ($s in $inProgress) { $lines.Add("  - $s") | Out-Null }
 }
 
 $lines.Add('</context-router>') | Out-Null

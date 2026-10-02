@@ -6,7 +6,10 @@
 .DESCRIPTION
     Reads Claude Code hook JSON from stdin. If the tool is Edit / Write /
     MultiEdit, the hook decides whether the edit is allowed:
-      - Edits to paths listed under paths.protected -> ALWAYS blocked.
+      - Edits to the spec index: a FEAT- row -> done needs a passing
+        /sd:verify artifact (Rule 0); an edit that is only legal status
+        transitions / new draft rows is allowed (Rule 0b, SW-75).
+      - Other edits to paths listed under paths.protected -> ALWAYS blocked.
       - Edits to allow-listed paths (.specs/, .claude/, tests/, *.md, *.json,
         *.yaml, README, CHANGELOG, LICENSE) -> always allowed.
       - Edits to code files (cs, ts, py, rs, go, java, kt, rb, php, swift,
@@ -15,9 +18,14 @@
           mode=block -> output block JSON to stdout (see Write-BlockDecision).
           mode=warn  -> write a warning to stderr; allow the edit.
           mode=off   -> always allow.
+    A Bash / PowerShell tool call is checked by the shell-write rule instead
+    (SW-79): a command that visibly writes a protected path or the spec index
+    (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File) is
+    blocked in every mode. Heuristic - see Get-ShellWriteTarget below.
 
     Output schema (dual-format for forward + backward compatibility):
-      New:    hookSpecificOutput.permissionDecision = "deny"   (CLI >= schema v2)
+      New:    hookSpecificOutput.permissionDecision = "deny", with
+              hookEventName = "PreToolUse" (required - SW-80)  (CLI >= schema v2)
       Legacy: decision = "block"                               (CLI < schema v2)
     Both are emitted in the same JSON object so either CLI generation can act.
 
@@ -40,8 +48,44 @@ function Read-StdinJson {
     }
 }
 
-function Get-ProjectConfig {
+# SW-78: `cwd` is the session's CURRENT directory, and a Bash `cd` moves it.
+# Resolving config, the index, the metrics log and the edited path against it
+# let a session sitting in a subdirectory bypass every rule (and grow a nested
+# .specs/_metrics/ there).
+# Every project path is therefore resolved against the project root:
+#   1. CLAUDE_PROJECT_DIR (set by Claude Code for hooks), when it is a directory.
+#   2. The nearest ancestor of Cwd (Cwd included) holding .claude/project-config.json.
+#   3. The nearest ancestor of Cwd holding a .specs/ directory.
+#   4. Cwd itself - the pre-SW-78 behaviour.
+# Step 2 walks the whole chain before step 3 starts, so a stray nested .specs/
+# left behind by an older hook cannot shadow a configured root. Identical in all
+# seven hooks; mirrors resolve_project_root in the .sh twins.
+function Resolve-ProjectRoot {
     param([string]$Cwd)
+    $envRoot = $env:CLAUDE_PROJECT_DIR
+    if (-not [string]::IsNullOrWhiteSpace($envRoot) -and (Test-Path -LiteralPath $envRoot -PathType Container)) {
+        return $envRoot
+    }
+    $start = $Cwd.TrimEnd('/', '\')
+    if ($start.Length -eq 0) { return $Cwd }
+    $markers = @(
+        @{ Rel = '.claude/project-config.json'; Type = 'Leaf' },
+        @{ Rel = '.specs'; Type = 'Container' }
+    )
+    foreach ($m in $markers) {
+        $dir = $start
+        for ($i = 0; $i -lt 64 -and -not [string]::IsNullOrEmpty($dir); $i++) {
+            if (Test-Path -LiteralPath (Join-Path $dir $m.Rel) -PathType $m.Type) { return $dir }
+            $parent = [System.IO.Path]::GetDirectoryName($dir)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -eq $dir) { break }
+            $dir = $parent
+        }
+    }
+    return $Cwd
+}
+
+function Get-ProjectConfig {
+    param([string]$Root)
 
     $defaults = [pscustomobject]@{
         spec  = [pscustomobject]@{
@@ -57,7 +101,7 @@ function Get-ProjectConfig {
         }
     }
 
-    $cfgPath = Join-Path $Cwd '.claude/project-config.json'
+    $cfgPath = Join-Path $Root '.claude/project-config.json'
     if (-not (Test-Path -LiteralPath $cfgPath)) { return $defaults }
 
     # -ErrorAction Stop is required: the script-wide SilentlyContinue preference
@@ -72,6 +116,51 @@ function Get-ProjectConfig {
     } catch {
         return $defaults
     }
+}
+
+# --- spec prefix alternation (SW-44) ------------------------------------------
+# Built-in fallback covers every prefix shipped in
+# templates/project-config.template.json (FEAT, BUG, REF, PERF, RCA, PORT).
+# Any config-declared prefix that fails the shape check
+# ^[A-Z][A-Z0-9]{1,9}$ is dropped silently and the built-in default is used
+# only if NOTHING declared validates - a config with one bad entry among
+# good ones still uses the good ones. Must stay in sync with
+# resolve_spec_prefixes in spec-gate.sh.
+$script:DefaultSpecPrefixes = @('FEAT','BUG','REF','PERF','RCA','PORT')
+
+function Get-SpecPrefixAlternation {
+    param([object]$Config)
+    $raw = $null
+    try { $raw = $Config.spec.prefixes } catch { $raw = $null }
+    if ($null -eq $raw) {
+        return ($script:DefaultSpecPrefixes -join '|')
+    }
+    $valid = New-Object System.Collections.Generic.List[string]
+    foreach ($prop in $raw.PSObject.Properties) {
+        $val = [string]$prop.Value
+        if ($val -match '^[A-Z][A-Z0-9]{1,9}$') {
+            $valid.Add($val)
+        }
+    }
+    if ($valid.Count -eq 0) {
+        return ($script:DefaultSpecPrefixes -join '|')
+    }
+    return ($valid -join '|')
+}
+
+# Single-prefix lookup (used by Write-ComplexitySplitMetrics, which is
+# deliberately scoped to the 'feature' prefix only - see that function's
+# comment). Falls back to $DefaultValue when the key is absent or the
+# declared value fails the same shape check as Get-SpecPrefixAlternation.
+function Get-SpecPrefixValue {
+    param([object]$Config, [string]$Key, [string]$DefaultValue)
+    try {
+        $val = $Config.spec.prefixes.$Key
+        if ($val -and ([string]$val -match '^[A-Z][A-Z0-9]{1,9}$')) {
+            return [string]$val
+        }
+    } catch { }
+    return $DefaultValue
 }
 
 function Test-IsRootedPath {
@@ -147,17 +236,18 @@ function ConvertTo-CollapsedPath {
 
 function ConvertTo-RelativePath {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [string]$FilePath
     )
     if ([string]::IsNullOrWhiteSpace($FilePath)) { return $null }
     try {
         # If FilePath is not rooted (no leading '/' and no drive-letter prefix
-        # such as 'C:'), it is already relative to Cwd by construction, so
-        # collapsing its own dot segments directly yields the correct
-        # relative-to-Cwd path. Joining it onto Cwd and calling
+        # such as 'C:'), it is already relative to Root by construction (the
+        # caller anchors it on the session cwd first when that is not the
+        # root, SW-78), so collapsing its own dot segments directly yields the
+        # correct relative-to-Root path. Joining it onto Root and calling
         # [System.IO.Path]::GetFullPath would resolve against THIS SCRIPT
-        # PROCESS's own working directory instead of the hook payload's Cwd -
+        # PROCESS's own working directory instead of the hook payload's -
         # that mismatch was the root cause of the
         # 'src/../.specs/constitution.md' traversal bypass, since the
         # resulting absolute path never started with $base and fell through
@@ -168,7 +258,7 @@ function ConvertTo-RelativePath {
         }
 
         # Collapse '.'/'..' BEFORE the prefix strip, so a path that traverses
-        # through a directory and back (e.g. cwd/src/../.specs/x) is compared
+        # through a directory and back (e.g. root/src/../.specs/x) is compared
         # against base in its fully-resolved form, not its literal typed form.
         # A trailing separator collapses away here too (see
         # ConvertTo-CollapsedPath), which fixes the second bypass: without
@@ -176,7 +266,7 @@ function ConvertTo-RelativePath {
         # returns "" and the path escapes both the protected-path equality
         # check and the code-file extension check.
         $fpRaw = $FilePath.Replace('\','/')
-        $baseNorm = $Cwd.Replace('\','/')
+        $baseNorm = $Root.Replace('\','/')
         $fpNorm = ConvertTo-CollapsedPath -Path $fpRaw
         $baseCollapsed = ConvertTo-CollapsedPath -Path $baseNorm
 
@@ -184,7 +274,7 @@ function ConvertTo-RelativePath {
             $rel = $fpNorm.Substring($baseCollapsed.Length).TrimStart('/')
             return $rel
         }
-        # Resolving FilePath lands outside Cwd entirely (e.g. enough leading
+        # Resolving FilePath lands outside Root entirely (e.g. enough leading
         # '..' to escape the workspace) - fall back to the raw, un-collapsed
         # path, same as spec-gate.sh's normalize_rel fallback branch.
         return $fpRaw
@@ -246,7 +336,7 @@ function Test-IsCodeFile {
 }
 
 function Get-InProgressSpecs {
-    param([string]$IndexPath)
+    param([string]$IndexPath, [string]$Prefixes)
     $result = New-Object System.Collections.Generic.List[string]
     if (-not (Test-Path -LiteralPath $IndexPath)) { return $result }
     try {
@@ -255,7 +345,7 @@ function Get-InProgressSpecs {
         return $result
     }
     foreach ($line in $lines) {
-        if ($line -match 'in-progress' -and $line -match '(FEAT|BUG|REF|PERF|RCA)-[A-Za-z0-9_\-]+') {
+        if ($line -match 'in-progress' -and $line -match "($Prefixes)-[A-Za-z0-9_\-]+") {
             $result.Add($Matches[0]) | Out-Null
         }
     }
@@ -317,17 +407,18 @@ function Get-DoneTransitionIds {
 function Get-SpecStatusTransitions {
     param(
         [object]$HookInput,
-        [string]$IndexPath
+        [string]$IndexPath,
+        [string]$Prefixes
     )
-    # Read-only, general-purpose lifecycle scan (all 5 prefixes x all 5
-    # statuses) that backs the observational spec_transition metric. This is
+    # Read-only, general-purpose lifecycle scan (all configured prefixes x all
+    # 5 statuses) that backs the observational spec_transition metric. This is
     # DELIBERATELY a separate function from Get-DoneTransitionIds above - that
     # one is FEAT-/done-only and backs the live Rule 0 gate decision (see its
     # Rule 0 scope comment). Folding the two together would make a future
     # edit to either accidentally change the other's behavior.
     $result = New-Object System.Collections.Generic.List[object]
     try {
-        $rowPattern = '\|\s*((?:FEAT|BUG|REF|PERF|RCA)-[A-Za-z0-9_\-]+)\s*\|\s*[^|]*\|\s*(draft|approved|in-progress|done|archived)\s*\|'
+        $rowPattern = "\|\s*((?:$Prefixes)-[A-Za-z0-9_\-]+)\s*\|\s*[^|]*\|\s*(draft|approved|in-progress|done|archived)\s*\|"
 
         # Statuses recorded on disk BEFORE this pending edit lands - PreToolUse
         # runs before the write, so the file still reflects the prior state.
@@ -370,10 +461,146 @@ function Get-SpecStatusTransitions {
     return ,$result
 }
 
+# Rule 0b helpers (SW-75). Mirrors index_transition_changes in spec-gate.sh,
+# which does the same work in ONE jq program - every step below (CRLF
+# normalization, "\n" split, one trailing CR stripped, literal ordinal
+# replacement, '|' split, masked Status cell) is chosen to match jq's string
+# semantics exactly, so both implementations reach the same decision.
+function ConvertTo-IndexLines {
+    param([string]$Text)
+    if ($Text.Length -gt 0 -and $Text[0] -eq [char]0xFEFF) { $Text = $Text.Substring(1) }
+    $Text = $Text.Replace("`r`n", "`n")
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($l in $Text.Split("`n")) {
+        # Char compare, not EndsWith(string): the string overload is
+        # culture-sensitive on PS 5.1 / .NET Framework.
+        if ($l.Length -gt 0 -and $l[$l.Length - 1] -eq [char]13) { $l = $l.Substring(0, $l.Length - 1) }
+        $out.Add($l) | Out-Null
+    }
+    return ,$out
+}
+
+function ConvertTo-IndexRow {
+    param([string]$Line, [string]$Prefixes)
+    $f = $Line.Split('|')
+    if ($f.Count -lt 5) { return $null }
+    $id = $f[1].Trim(' ', "`t")
+    $st = $f[3].Trim(' ', "`t")
+    if ($id -cnotmatch "^($Prefixes)-[A-Za-z0-9_-]+$") { return $null }
+    if (@('draft', 'approved', 'in-progress', 'done', 'archived') -cnotcontains $st) { return $null }
+    $f[3] = '@'
+    return [pscustomobject]@{ Id = $id; St = $st; Mask = ($f -join '|') }
+}
+
+function Invoke-IndexLiteralEdit {
+    param([string]$Text, [object]$Edit)
+    # $null result = the edit cannot be applied (empty or absent old_string);
+    # the caller then falls through to Rule 1.
+    if ($null -eq $Text) { return $null }
+    $o = if ($null -ne $Edit.old_string) { ([string]$Edit.old_string).Replace("`r`n", "`n") } else { '' }
+    $n = if ($null -ne $Edit.new_string) { ([string]$Edit.new_string).Replace("`r`n", "`n") } else { '' }
+    if ($o -eq '') { return $null }
+    $i = $Text.IndexOf($o, [System.StringComparison]::Ordinal)
+    if ($i -lt 0) { return $null }
+    if (($Edit.replace_all -is [bool]) -and $Edit.replace_all) { return $Text.Replace($o, $n) }
+    return $Text.Substring(0, $i) + $n + $Text.Substring($i + $o.Length)
+}
+
+function Get-PostEditIndexText {
+    param([object]$HookInput, [string]$OldText)
+    $tool = $HookInput.tool_name
+    if ($tool -eq 'Write') {
+        if ($HookInput.tool_input.content -is [string]) { return [string]$HookInput.tool_input.content }
+        return $null
+    }
+    if ($tool -eq 'Edit') {
+        return (Invoke-IndexLiteralEdit -Text $OldText -Edit $HookInput.tool_input)
+    }
+    if ($tool -eq 'MultiEdit') {
+        $t = $OldText
+        if ($null -eq $HookInput.tool_input.edits) { return $t }
+        foreach ($e in @($HookInput.tool_input.edits)) {
+            # A null element is an unappliable edit (jq: $e.old_string -> "").
+            if ($null -eq $e) { return $null }
+            $t = Invoke-IndexLiteralEdit -Text $t -Edit $e
+        }
+        return $t
+    }
+    return $null
+}
+
+# Returns the changed rows ({Id, From, To}, in post-edit row order) when the
+# pending index edit is a pure legal transition, else an empty list. See the
+# Rule 0b comment at the call site for what "pure legal transition" means.
+function Test-IndexTransitionEdit {
+    param([object]$HookInput, [string]$IndexPath, [string]$Prefixes)
+    $empty = New-Object System.Collections.Generic.List[object]
+    try {
+        if (-not (Test-Path -LiteralPath $IndexPath)) { return ,$empty }
+        $oldText = [System.IO.File]::ReadAllText($IndexPath, (New-Object System.Text.UTF8Encoding($false)))
+        if ($oldText.Length -gt 0 -and $oldText[0] -eq [char]0xFEFF) { $oldText = $oldText.Substring(1) }
+        $oldText = $oldText.Replace("`r`n", "`n")
+        $newText = Get-PostEditIndexText -HookInput $HookInput -OldText $oldText
+        if ($null -eq $newText) { return ,$empty }
+
+        $oldLines = ConvertTo-IndexLines -Text $oldText
+        $newLines = ConvertTo-IndexLines -Text $newText
+
+        $oldStatus = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([System.StringComparer]::Ordinal)
+        $oldMask = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $oldLines) {
+            $r = ConvertTo-IndexRow -Line $l -Prefixes $Prefixes
+            if ($null -eq $r) { $oldMask.Add($l) | Out-Null; continue }
+            if ($oldStatus.ContainsKey($r.Id)) { return ,$empty }
+            $oldStatus[$r.Id] = $r.St
+            $oldMask.Add($r.Mask) | Out-Null
+        }
+
+        $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+        $newMask = New-Object System.Collections.Generic.List[string]
+        $changes = New-Object System.Collections.Generic.List[object]
+        foreach ($l in $newLines) {
+            $r = ConvertTo-IndexRow -Line $l -Prefixes $Prefixes
+            if ($null -eq $r) { $newMask.Add($l) | Out-Null; continue }
+            if (-not $seen.Add($r.Id)) { return ,$empty }
+            $from = '-'
+            if ($oldStatus.ContainsKey($r.Id)) {
+                $from = $oldStatus[$r.Id]
+                $newMask.Add($r.Mask) | Out-Null
+            }
+            if ($from -cne $r.St) {
+                $changes.Add([pscustomobject]@{ Id = $r.Id; From = $from; To = $r.St }) | Out-Null
+            }
+        }
+
+        if ($changes.Count -eq 0) { return ,$empty }
+        if ($oldMask.Count -ne $newMask.Count) { return ,$empty }
+        for ($i = 0; $i -lt $oldMask.Count; $i++) {
+            if (-not [string]::Equals($oldMask[$i], $newMask[$i], [System.StringComparison]::Ordinal)) { return ,$empty }
+        }
+
+        $edges = @('draft>approved', 'approved>in-progress', 'in-progress>done',
+                   'done>archived', 'archived>in-progress', 'draft>archived',
+                   'approved>archived')
+        foreach ($c in $changes) {
+            if ($c.From -ceq '-') {
+                if (@('draft', 'approved') -cnotcontains $c.To) { return ,$empty }
+            } elseif ($c.Id.StartsWith('FEAT-', [System.StringComparison]::Ordinal) -and $c.To -ceq 'done') {
+                return ,$empty
+            } elseif ($edges -cnotcontains ($c.From + '>' + $c.To)) {
+                return ,$empty
+            }
+        }
+        return ,$changes
+    } catch {
+        return ,$empty
+    }
+}
+
 function Test-MetricsPathSafe {
     param([string]$RelPath)
     # A metrics path is not an arbitrary-write primitive: reject anything
-    # rooted (absolute, or a drive-letter path) or that escapes Cwd via '..'
+    # rooted (absolute, or a drive-letter path) or that escapes Root via '..'
     # rather than ever writing outside the workspace. Reuses the same
     # rootedness test and dot-segment collapse used for the gate's own path
     # safety above, so the two safety checks cannot silently diverge.
@@ -386,7 +613,7 @@ function Test-MetricsPathSafe {
 
 function Write-MetricEvent {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [string]$SpecId,
         [string]$Phase,
@@ -414,7 +641,7 @@ function Write-MetricEvent {
 
         if (-not (Test-MetricsPathSafe -RelPath $relPath)) { return }
 
-        $fullPath = Join-Path $Cwd $relPath
+        $fullPath = Join-Path $Root $relPath
         $parent = Split-Path -Path $fullPath -Parent
         if (-not (Test-Path -LiteralPath $parent)) {
             New-Item -ItemType Directory -Path $parent -Force -ErrorAction Stop | Out-Null
@@ -490,7 +717,7 @@ function Write-MetricEvent {
 
 function Write-GateMetric {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [string]$SpecId,
         [string]$Phase,
@@ -500,19 +727,19 @@ function Write-GateMetric {
     )
     $fields = [ordered]@{ gate = $Gate; decision = $Decision }
     if ($Ext) { $fields['ext'] = $Ext }
-    Write-MetricEvent -Cwd $Cwd -Config $Config -SpecId $SpecId -Phase $Phase -EventKind 'gate' -Fields $fields
+    Write-MetricEvent -Root $Root -Config $Config -SpecId $SpecId -Phase $Phase -EventKind 'gate' -Fields $fields
 }
 
 function Write-TransitionMetrics {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [object[]]$Transitions,
         [string]$Decision
     )
     foreach ($t in $Transitions) {
         $fields = [ordered]@{ from = $t.From; decision = $Decision }
-        Write-MetricEvent -Cwd $Cwd -Config $Config -SpecId $t.Id -Phase $t.Phase -EventKind 'spec_transition' -Fields $fields
+        Write-MetricEvent -Root $Root -Config $Config -SpecId $t.Id -Phase $t.Phase -EventKind 'spec_transition' -Fields $fields
     }
 }
 
@@ -536,7 +763,8 @@ function Write-TransitionMetrics {
 # metrics pipeline the rest of this file keeps strictly hook-authored.
 #
 # Callers MUST only invoke this on a path where the edit was actually
-# ALLOWED through (Rule 0's verify-allow exit, Rule 2's allow-listed exit).
+# ALLOWED through (Rule 0's verify-allow exit, Rule 0b's transition-allow
+# exit, Rule 2's allow-listed exit).
 # On a block exit the edit never reached disk, so recording "split" there
 # would assert a split that did not happen - never add a call site here on a
 # block/deny path.
@@ -548,15 +776,19 @@ function Write-TransitionMetrics {
 # real-world case.
 function Write-ComplexitySplitMetrics {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [object]$Config,
         [object[]]$Transitions,
         [string]$IndexPath,
-        [object]$HookInput
+        [object]$HookInput,
+        [string]$FeaturePrefix = 'FEAT'
     )
     if (-not $Transitions -or $Transitions.Count -eq 0) { return }
     try {
-        $rowPattern = '\|\s*((?:FEAT|BUG|REF|PERF|RCA)-[A-Za-z0-9_\-]+)\s*\|\s*[^|]*\|\s*(draft|approved|in-progress|done|archived)\s*\|'
+        # Scoped to the single 'feature' prefix (see the function-level
+        # comment above) - not the full multi-prefix alternation, since a
+        # split's children always share the parent's own (feature) prefix.
+        $rowPattern = "\|\s*($FeaturePrefix-[A-Za-z0-9_\-]+)\s*\|\s*[^|]*\|\s*(draft|approved|in-progress|done|archived)\s*\|"
         $allIds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
         if (Test-Path -LiteralPath $IndexPath) {
             try {
@@ -585,14 +817,14 @@ function Write-ComplexitySplitMetrics {
 
         foreach ($t in $Transitions) {
             if ($t.Phase -ne 'archived') { continue }
-            if ($t.Id -notlike 'FEAT-*') { continue }
+            if ($t.Id -notlike "$FeaturePrefix-*") { continue }
             $childFound = $false
             foreach ($other in $allIds) {
                 if ($other -eq $t.Id) { continue }
                 if ($other.StartsWith("$($t.Id)-", [System.StringComparison]::Ordinal)) { $childFound = $true; break }
             }
             if ($childFound) {
-                Write-GateMetric -Cwd $Cwd -Config $Config -SpecId $t.Id -Phase 'archived' -Gate 'complexity' -Decision 'split'
+                Write-GateMetric -Root $Root -Config $Config -SpecId $t.Id -Phase 'archived' -Gate 'complexity' -Decision 'split'
             }
         }
     } catch { }
@@ -600,11 +832,11 @@ function Write-ComplexitySplitMetrics {
 
 function Test-VerifyArtifactPass {
     param(
-        [string]$Cwd,
+        [string]$Root,
         [string]$SpecDir,
         [string]$SpecId
     )
-    $artifact = Join-Path $Cwd (Join-Path $SpecDir (Join-Path $SpecId '06-verify.md'))
+    $artifact = Join-Path $Root (Join-Path $SpecDir (Join-Path $SpecId '06-verify.md'))
     if (-not (Test-Path -LiteralPath $artifact)) { return $false }
     try {
         $content = Get-Content -LiteralPath $artifact -Raw -Encoding UTF8 -ErrorAction Stop
@@ -614,16 +846,153 @@ function Test-VerifyArtifactPass {
     return ($content -match '(?im)^result:\s*pass\s*$')
 }
 
+# SW-79: shell-write rule for the Bash / PowerShell tool. A shell command can
+# change .specs/index.md or a protected file without the Edit tool, which would
+# sidestep Rules 0, 0b and 1 and leave no spec_transition event. This denies a
+# command that VISIBLY writes a protected path or the spec index. It is a
+# HEURISTIC, not a guarantee: it reads the command text only, so
+# `cd .specs && sed -i ... index.md`, an interpreter one-liner (python -c,
+# node -e) or a path held in a variable gets through. The workflows' own
+# "Edit tool only" instruction is the primary control; this is the backstop.
+#
+# Algorithm (must stay identical to shell_write_target in spec-gate.sh):
+#   1. Lowercase the command and turn '\' into '/'.
+#   2. Scan it once, tracking single / double quotes. Outside quotes:
+#      ';', '|', '&', CR and LF end the SEGMENT; blank, tab, '(' and ')' end
+#      the token; '>' ends the token and is a '>' token of its own; a quote
+#      character opens a quote and is dropped. Inside a quote every character
+#      is part of the token until the matching quote closes it. Empty tokens
+#      are dropped. So `sed -i 's/| draft |/| approved |/' f` stays one
+#      segment, and an unterminated quote simply runs to the end.
+#   3. The segment is a WRITER when its command word (basename of the first
+#      token) is tee / set-content / add-content / out-file, or is
+#      sed / gsed / perl with an in-place flag (a single-dash cluster that
+#      reaches an 'i', e.g. -i, -i.bak, -pi, or --in-place).
+#   4. Candidate paths: every token after the command word of a writer
+#      segment, and the token after any '>' (a redirect target, '>>'
+#      included) in any segment.
+#   5. A candidate starting with '$' or '~' drops its first segment
+#      ($ROOT/.specs/index.md -> .specs/index.md); any other relative one is
+#      anchored on cwd as file_path is; then ConvertTo-RelativePath. A result
+#      that is the spec index or matches paths.protected is a hit.
+# Returns the first hit's root-relative path, or $null on no hit.
+function Get-ShellSegmentHit {
+    param(
+        [System.Collections.Generic.List[string]]$Tokens,
+        [string]$Cwd,
+        [string]$Root,
+        [string]$CwdCollapsed,
+        [string]$RootCollapsed,
+        [string]$IndexCollapsed,
+        [string[]]$Protected
+    )
+    if ($Tokens.Count -eq 0) { return $null }
+    $verb = $Tokens[0]
+    $slash = $verb.LastIndexOf('/')
+    if ($slash -ge 0) { $verb = $verb.Substring($slash + 1) }
+    $writer = $false
+    if (@('tee', 'set-content', 'add-content', 'out-file') -ccontains $verb) {
+        $writer = $true
+    } elseif (@('sed', 'gsed', 'perl') -ccontains $verb) {
+        for ($j = 1; $j -lt $Tokens.Count; $j++) {
+            if (($Tokens[$j] -cmatch '^-[a-z0-9.]*i') -or $Tokens[$j].StartsWith('--in-place', [System.StringComparison]::Ordinal)) {
+                $writer = $true
+                break
+            }
+        }
+    }
+    $prev = ''
+    for ($k = 0; $k -lt $Tokens.Count; $k++) {
+        $tok = $Tokens[$k]
+        if ($tok -ceq '>') {
+            $prev = '>'
+            continue
+        }
+        if (($prev -ceq '>') -or ($writer -and $k -ge 1)) {
+            $rel = ''
+            if ($tok.StartsWith('$', [System.StringComparison]::Ordinal) -or $tok.StartsWith('~', [System.StringComparison]::Ordinal)) {
+                $cut = $tok.IndexOf('/')
+                if ($cut -ge 0) { $rel = ConvertTo-CollapsedPath -Path $tok.Substring($cut + 1) }
+            } else {
+                $cand = $tok
+                if ((-not (Test-IsRootedPath $cand)) -and ($CwdCollapsed -cne $RootCollapsed)) {
+                    $cand = $Cwd.TrimEnd('/', '\') + '/' + $cand
+                }
+                $rel = ConvertTo-RelativePath -Root $Root -FilePath $cand
+            }
+            if (-not [string]::IsNullOrEmpty($rel)) {
+                if ([string]::Equals($rel, $IndexCollapsed, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    (Test-IsProtected -RelPath $rel -Protected $Protected)) {
+                    return $rel
+                }
+            }
+        }
+        $prev = ''
+    }
+    return $null
+}
+
+function Get-ShellWriteTarget {
+    param(
+        [string]$CommandLower,
+        [string]$Cwd,
+        [string]$Root,
+        [string]$IndexRel,
+        [string[]]$Protected
+    )
+    $cwdC = ConvertTo-CollapsedPath -Path $Cwd.Replace('\','/')
+    $rootC = ConvertTo-CollapsedPath -Path $Root.Replace('\','/')
+    $indexC = ConvertTo-CollapsedPath -Path $IndexRel.Replace('\','/')
+    $cmd = $CommandLower.Replace('\','/')
+    $toks = New-Object System.Collections.Generic.List[string]
+    $tok = New-Object System.Text.StringBuilder
+    $q = [char]0
+    for ($i = 0; $i -le $cmd.Length; $i++) {
+        if ($i -eq $cmd.Length) {
+            # End of input closes any open quote and the last segment.
+            $q = [char]0
+            $c = [char]10
+        } else {
+            $c = $cmd[$i]
+        }
+        if ($q -ne [char]0) {
+            if ($c -eq $q) { $q = [char]0 } else { [void]$tok.Append($c) }
+            continue
+        }
+        if ($c -eq [char]39 -or $c -eq [char]34) {
+            $q = $c
+        } elseif ($c -eq ' ' -or $c -eq [char]9 -or $c -eq '(' -or $c -eq ')') {
+            if ($tok.Length -gt 0) { [void]$toks.Add($tok.ToString()); [void]$tok.Clear() }
+        } elseif ($c -eq '>') {
+            if ($tok.Length -gt 0) { [void]$toks.Add($tok.ToString()); [void]$tok.Clear() }
+            [void]$toks.Add('>')
+        } elseif ($c -eq ';' -or $c -eq '|' -or $c -eq '&' -or $c -eq [char]13 -or $c -eq [char]10) {
+            if ($tok.Length -gt 0) { [void]$toks.Add($tok.ToString()); [void]$tok.Clear() }
+            $hit = Get-ShellSegmentHit -Tokens $toks -Cwd $Cwd -Root $Root -CwdCollapsed $cwdC -RootCollapsed $rootC -IndexCollapsed $indexC -Protected $Protected
+            if ($hit) { return $hit }
+            $toks.Clear()
+        } else {
+            [void]$tok.Append($c)
+        }
+    }
+    return $null
+}
+
 function Write-BlockDecision {
     param([string]$Reason)
     # Dual-format: new hookSpecificOutput schema + legacy decision field.
     # The CLI reads whichever field it understands; both are harmless to the other.
+    # hookEventName is required (SW-80): without it the CLI drops the whole
+    # hookSpecificOutput block, and the legacy field alone does not override a
+    # permission rule that already allows the tool (--allowedTools,
+    # permissions.allow), so the edit went through with no denial recorded.
     $obj = [pscustomobject]@{
         decision           = 'block'
         reason             = $Reason
         hookSpecificOutput = [pscustomobject]@{
-            permissionDecision = 'deny'
-            reason             = $Reason
+            hookEventName            = 'PreToolUse'
+            permissionDecision       = 'deny'
+            permissionDecisionReason = $Reason
         }
     }
     [Console]::Out.WriteLine(($obj | ConvertTo-Json -Compress))
@@ -635,12 +1004,56 @@ $hookInput = Read-StdinJson
 if ($null -eq $hookInput) { exit 0 }
 
 $toolName = $hookInput.tool_name
-if ($toolName -ne 'Edit' -and $toolName -ne 'Write' -and $toolName -ne 'MultiEdit') { exit 0 }
+$isShell = $false
+if ($toolName -ceq 'Bash' -or $toolName -ceq 'PowerShell') {
+    $isShell = $true
+} elseif ($toolName -ne 'Edit' -and $toolName -ne 'Write' -and $toolName -ne 'MultiEdit') {
+    exit 0
+}
 
 $cwd = $hookInput.cwd
 if ([string]::IsNullOrWhiteSpace($cwd)) { $cwd = (Get-Location).Path }
+$projectRoot = Resolve-ProjectRoot -Cwd $cwd
 
-$config = Get-ProjectConfig -Cwd $cwd
+# SW-50: these checks are pure string ops with zero I/O, so they run
+# BEFORE Get-ProjectConfig (which reads project-config.json from disk).
+# Most tool calls in a session never touch a gate-relevant path, so this
+# ordering avoids a config-file read on the common case. Mirrors
+# spec-gate.sh, which already checked file_path before reading config.
+$rel = $null
+$shellCmdLower = ''
+if ($isShell) {
+    # SW-79: a shell command has no file_path. The hook now runs on EVERY
+    # shell call (ADR 0012 latency budget), so a command that carries none of
+    # the write markers the shell-write rule looks for exits here.
+    $shellCmd = [string]$hookInput.tool_input.command
+    if ([string]::IsNullOrWhiteSpace($shellCmd)) { exit 0 }
+    $shellCmdLower = $shellCmd.ToLowerInvariant()
+    $hasMarker = $false
+    foreach ($marker in @('>', 'sed', 'perl', 'tee', 'set-content', 'add-content', 'out-file')) {
+        if ($shellCmdLower.Contains($marker)) { $hasMarker = $true; break }
+    }
+    if (-not $hasMarker) { exit 0 }
+} else {
+    $filePath = $hookInput.tool_input.file_path
+    if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
+
+    # A relative file_path is relative to the SESSION cwd. When that is the root,
+    # keep the historical relative handling untouched; otherwise anchor it on cwd
+    # first so e.g. '../index.md' typed from .specs/FEAT-x lands on .specs/index.md.
+    # Mirrors spec-gate.sh (ordinal compare, like bash's string compare).
+    if ((-not (Test-IsRootedPath $filePath)) -and
+        ((ConvertTo-CollapsedPath -Path $cwd.Replace('\','/')) -cne (ConvertTo-CollapsedPath -Path $projectRoot.Replace('\','/')))) {
+        $filePath = $cwd.TrimEnd('/', '\') + '/' + $filePath
+    }
+
+    $rel = ConvertTo-RelativePath -Root $projectRoot -FilePath $filePath
+    if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
+}
+
+$config = Get-ProjectConfig -Root $projectRoot
+$specPrefixes = Get-SpecPrefixAlternation -Config $config
+$featurePrefix = Get-SpecPrefixValue -Config $config -Key 'feature' -DefaultValue 'FEAT'
 
 # Hook globally disabled?
 try {
@@ -658,11 +1071,19 @@ $mode = 'warn'
 try { if ($config.hooks.specGate.mode) { $mode = [string]$config.hooks.specGate.mode } } catch { }
 if ($mode -eq 'off') { exit 0 }
 
-$filePath = $hookInput.tool_input.file_path
-if ([string]::IsNullOrWhiteSpace($filePath)) { exit 0 }
-
-$rel = ConvertTo-RelativePath -Cwd $cwd -FilePath $filePath
-if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
+if ($isShell) {
+    $shellIndexRel = '.specs/index.md'
+    try { if ($config.spec.indexFile) { $shellIndexRel = ([string]$config.spec.indexFile).Replace('\','/') } } catch { }
+    $shellProtected = @()
+    try { if ($config.paths.protected) { $shellProtected = @($config.paths.protected) } } catch { }
+    $shellHit = Get-ShellWriteTarget -CommandLower $shellCmdLower -Cwd $cwd -Root $projectRoot -IndexRel $shellIndexRel -Protected $shellProtected
+    if ($shellHit) {
+        # Blocks in every mode, like Rule 1: mode only governs code edits.
+        Write-BlockDecision "spec-gate: this shell command writes '$shellHit', which is protected (paths.protected or the spec index). Make the change with the Edit tool so spec-gate can check it (Rules 0, 0b, 1)."
+        Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'shell-write' -Decision 'block'
+    }
+    exit 0
+}
 
 # Rule 0: verify gate on the spec index. A row transitioning to done requires
 # a passing /sd:verify artifact; a verified close-out is allowed through the
@@ -671,8 +1092,9 @@ if ([string]::IsNullOrWhiteSpace($rel)) { exit 0 }
 # Scope: FEAT- rows only. Bug/refactor/perf/rca workflows do not produce
 # 02-tasks.md and never run /sd:verify, so gating them here would hard-STOP
 # their close-out at VF002 with no way through. Non-FEAT rows fall through to
-# the unconditional Rule 1 protected-path block, exactly as before this
-# gate existed - until their workflows integrate /sd:verify (follow-up spec).
+# Rule 0b, which allows their in-progress -> done like any other legal
+# status transition (SW-75) - until their workflows integrate /sd:verify
+# (follow-up spec).
 #
 # Bundled-edit limitation: when every newly-done FEAT row in the pending edit
 # has a passing artifact, the WHOLE edit is allowed - including any unrelated
@@ -705,16 +1127,16 @@ try { if ($config.spec.dir) { $specDir = [string]$config.spec.dir } } catch { }
 # is actually reached. Empty (a no-op below) whenever $rel is not the index.
 $transitions = @()
 if ([string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $transitions = Get-SpecStatusTransitions -HookInput $hookInput -IndexPath (Join-Path $cwd $indexRel)
+    $transitions = Get-SpecStatusTransitions -HookInput $hookInput -IndexPath (Join-Path $projectRoot $indexRel) -Prefixes $specPrefixes
 }
 
 if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
-    $indexAbs = Join-Path $cwd $indexRel
+    $indexAbs = Join-Path $projectRoot $indexRel
     $doneIds = Get-DoneTransitionIds -HookInput $hookInput -IndexPath $indexAbs
     if ($doneIds.Count -gt 0) {
         $missing = New-Object System.Collections.Generic.List[string]
         foreach ($id in $doneIds) {
-            if (-not (Test-VerifyArtifactPass -Cwd $cwd -SpecDir $specDir -SpecId $id)) {
+            if (-not (Test-VerifyArtifactPass -Root $projectRoot -SpecDir $specDir -SpecId $id)) {
                 $missing.Add($id) | Out-Null
             }
         }
@@ -736,9 +1158,9 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
             [Array]::Sort($doneIdsForMetrics, [System.StringComparer]::Ordinal)
             foreach ($id in $doneIdsForMetrics) {
                 $idDecision = if ($missing.Contains($id)) { 'block' } else { 'allow' }
-                Write-GateMetric -Cwd $cwd -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision $idDecision
+                Write-GateMetric -Root $projectRoot -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision $idDecision
             }
-            Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'block'
+            Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'block'
             # No Write-ComplexitySplitMetrics here: the whole edit is denied,
             # so nothing in it - including any bundled parent archive + child
             # registration - actually reached disk. See the function's own
@@ -749,10 +1171,36 @@ if ($verifyGateOn -and [string]::Equals($rel, $indexRel, [System.StringCompariso
         $doneIdsForMetrics = @($doneIds)
         [Array]::Sort($doneIdsForMetrics, [System.StringComparer]::Ordinal)
         foreach ($id in $doneIdsForMetrics) {
-            Write-GateMetric -Cwd $cwd -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision 'allow'
+            Write-GateMetric -Root $projectRoot -Config $config -SpecId $id -Phase 'done' -Gate 'verify' -Decision 'allow'
         }
-        Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
-        Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath $indexAbs -HookInput $hookInput
+        Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'allow'
+        Write-ComplexitySplitMetrics -Root $projectRoot -Config $config -Transitions $transitions -IndexPath $indexAbs -HookInput $hookInput -FeaturePrefix $featurePrefix
+        exit 0
+    }
+}
+
+# Rule 0b: legal status transitions on the spec index (SW-75). Every workflow
+# (/sd:feature, /sd:bug, /sd:refactor, /sd:perf, /sd:rca, /sd:port, /sd:spec,
+# /sd:release) registers its row and moves its Status by editing index.md with
+# the Edit tool; Rule 1 alone would deny all of that under a permission mode
+# that honors hook decisions. This rule lets through an edit whose NET effect
+# is only new rows registered at draft/approved and/or existing rows whose
+# Status cell - and nothing else - moves along a workflow edge. Anything else
+# (title/date change, deleted or reordered row, header change, illegal jump)
+# falls through to Rule 1. The post-edit file is rebuilt and compared with
+# each row's Status cell masked, so a bundled change cannot ride along. A FEAT-
+# row moving to done is not an edge here: Rule 0 owns it, and with verifyGate
+# off it stays blocked by Rule 1 as before. Mirrors spec-gate.sh Rule 0b.
+if ([string]::Equals($rel, $indexRel, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $indexChanges = Test-IndexTransitionEdit -HookInput $hookInput -IndexPath (Join-Path $projectRoot $indexRel) -Prefixes $specPrefixes
+    if ($indexChanges.Count -gt 0) {
+        # Record the transitions from Rule 0b's own diff, not the fragment
+        # scan: a workflow edit that rewrites only the Status cell (old
+        # "| draft |" -> new "| approved |") carries no full row in
+        # new_string, so Get-SpecStatusTransitions would miss it entirely.
+        $ruleTransitions = @($indexChanges | ForEach-Object { [pscustomobject]@{ Id = $_.Id; Phase = $_.To; From = $_.From } })
+        Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $ruleTransitions -Decision 'allow'
+        Write-ComplexitySplitMetrics -Root $projectRoot -Config $config -Transitions $ruleTransitions -IndexPath (Join-Path $projectRoot $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
         exit 0
     }
 }
@@ -762,8 +1210,8 @@ $protected = @()
 try { if ($config.paths.protected) { $protected = @($config.paths.protected) } } catch { }
 if (Test-IsProtected -RelPath $rel -Protected $protected) {
     Write-BlockDecision "spec-gate: '$rel' is listed under paths.protected in .claude/project-config.json. Update via /sd:refactor or an ADR; never edit directly."
-    Write-GateMetric -Cwd $cwd -Config $config -SpecId '-' -Phase '-' -Gate 'protected' -Decision 'block'
-    Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'block'
+    Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'protected' -Decision 'block'
+    Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'block'
     # No Write-ComplexitySplitMetrics here: the edit is denied, so a detected
     # parent-archive-plus-child pattern in it never reached disk.
     exit 0
@@ -771,36 +1219,36 @@ if (Test-IsProtected -RelPath $rel -Protected $protected) {
 
 # Rule 2: allow-listed paths -> always allow
 if (Test-IsAllowListed -RelPath $rel) {
-    Write-TransitionMetrics -Cwd $cwd -Config $config -Transitions $transitions -Decision 'allow'
-    Write-ComplexitySplitMetrics -Cwd $cwd -Config $config -Transitions $transitions -IndexPath (Join-Path $cwd $indexRel) -HookInput $hookInput
+    Write-TransitionMetrics -Root $projectRoot -Config $config -Transitions $transitions -Decision 'allow'
+    Write-ComplexitySplitMetrics -Root $projectRoot -Config $config -Transitions $transitions -IndexPath (Join-Path $projectRoot $indexRel) -HookInput $hookInput -FeaturePrefix $featurePrefix
     exit 0
 }
 
 # Rule 3: code file -> require in-progress spec
 if (Test-IsCodeFile -RelPath $rel) {
     $ext = [System.IO.Path]::GetExtension($rel).ToLowerInvariant()
-    $indexFile = if ($config.spec.indexFile) { Join-Path $cwd $config.spec.indexFile } else { Join-Path $cwd '.specs/index.md' }
+    $indexFile = if ($config.spec.indexFile) { Join-Path $projectRoot $config.spec.indexFile } else { Join-Path $projectRoot '.specs/index.md' }
     # @() forces a real array even when exactly one in-progress spec is
     # found - PowerShell's pipeline otherwise unwraps a single-element
     # List[string] into a bare string, which would make $inProgress[0]
     # below silently index a CHARACTER of the id instead of the id itself.
-    $inProgress = @(Get-InProgressSpecs -IndexPath $indexFile)
+    $inProgress = @(Get-InProgressSpecs -IndexPath $indexFile -Prefixes $specPrefixes)
     if ($inProgress.Count -eq 0) {
         $msg = "spec-gate: editing code file '$rel' but no in-progress spec is recorded in .specs/index.md. Run /sd:feature, /sd:bug, /sd:refactor, or /sd:perf first to create a spec, or set hooks.specGate.mode='off' in .claude/project-config.json to disable."
         if ($mode -eq 'block') {
             Write-BlockDecision $msg
-            Write-GateMetric -Cwd $cwd -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'block' -Ext $ext
+            Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'block' -Ext $ext
             exit 0
         } else {
             [Console]::Error.WriteLine("[WARN] $msg")
-            Write-GateMetric -Cwd $cwd -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'warn' -Ext $ext
+            Write-GateMetric -Root $projectRoot -Config $config -SpecId '-' -Phase '-' -Gate 'code-edit' -Decision 'warn' -Ext $ext
             exit 0
         }
     } else {
         # An in-progress spec exists - the edit is allowed. Recording the
         # allow (not just the block/warn paths) is the point: the ratio of
         # allow to warn/block is what the retro loop measures.
-        Write-GateMetric -Cwd $cwd -Config $config -SpecId $inProgress[0] -Phase 'in-progress' -Gate 'code-edit' -Decision 'allow' -Ext $ext
+        Write-GateMetric -Root $projectRoot -Config $config -SpecId $inProgress[0] -Phase 'in-progress' -Gate 'code-edit' -Decision 'allow' -Ext $ext
     }
 }
 

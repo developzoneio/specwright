@@ -91,7 +91,12 @@ If `/sd:*` commands work but `<context-router>` blocks never appear, run through
 cat .claude/settings.json
 ```
 
-The file should contain `hooks` entries for `UserPromptSubmit`, `PreToolUse`, and `SubagentStop`. If empty or missing, re-run `/sd:setup`.
+The file should contain `hooks` entries for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `SubagentStop`, `PreCompact`, and `Stop`. If empty or missing, re-run `/sd:setup`.
+
+In-progress specs no longer appear on each prompt? Since SW-67 they come from the `SessionStart`
+hook (`session-context`), once per session start, resume, fork, compact or clear - not from
+`prompt-router`. A project set up before SW-67 has no `SessionStart` entry; re-run `/sd:setup`,
+whose drift check adds it.
 
 ### Check 2: Hook scripts are executable (Unix)
 
@@ -99,7 +104,7 @@ The file should contain `hooks` entries for `UserPromptSubmit`, `PreToolUse`, an
 ls -l ~/.claude/hooks/sd/
 ```
 
-All three should have `-rwxr-xr-x`. If not:
+Every `.sh` hook should have `-rwxr-xr-x`. If not:
 ```bash
 chmod +x ~/.claude/hooks/sd/*.sh
 ```
@@ -113,6 +118,7 @@ cat .claude/project-config.json
 Look at the `hooks` section:
 ```json
 "hooks": {
+  "sessionContext":   { "enabled": true },
   "userPromptRouter": { "enabled": true },
   "specGate":         { "enabled": true, "mode": "warn" },
   "subagentRetro":    { "enabled": true, "retroStaleMinutes": 30, "debounceMinutes": 10 }
@@ -226,18 +232,6 @@ The aging report flags specs in `in-progress` > 7 days and `draft` > 14 days (de
 
 ## Porting issues
 
-### spec-gate ignores my `PORT-` spec while it's in-progress
-
-**Cause**: the in-progress-spec scan in `spec-gate`, `prompt-router`, and `subagent-retro` matches
-a hardcoded `(FEAT|BUG|REF|PERF|RCA)` prefix set; it does not read `spec.prefixes` from
-`project-config.json`, so a `PORT-` row is invisible to it. `/sd:port` registers `port` in the
-prompt-router keyword map so a prompt like "backport the order-intake endpoint" still routes to
-the command, but the prefix-blindness itself is unchanged.
-
-**Fix**: set `hooks.specGate.mode: "warn"` for the duration of the port, or track the work under an
-accompanying FEAT spec. The same cause explains why `prompt-router` injects no context for an
-in-progress `PORT-` spec and why `subagent-retro` selects no `port`-scoped lessons.
-
 ### The host build or lint now fails on files under `.specs/<PORT-ID>/04-artifacts/source/`
 
 **Cause**: the frozen snapshot is a real subtree of the repo, so a build or lint step that globs
@@ -312,7 +306,8 @@ If a path is there by mistake, remove it. If it should stay protected, update th
 ```
 /sd:spec validate --all
 ```
-If the index row is missing or has the wrong status, fix it via `/sd:spec status <ID> in-progress` or by editing `.specs/index.md` directly to add the row.
+If the index row is missing or has the wrong status, fix it via `/sd:spec status <ID> in-progress` or by editing `.specs/index.md` directly with the Edit tool to add the row. A shell write to it
+(`sed -i`, `>`, `Set-Content`) is denied by design (SW-79).
 
 ### I want to disable spec-gate temporarily
 

@@ -1,0 +1,1 @@
+{"exitCode":0,"emitted":true,"source":"startup","constitution":null,"inProgress":[{"id":"FEAT-A-1","status":"draft","title":"Alpha thing"},{"id":"BUG-B-2","status":null,"title":"Beta bug"},{"id":"REF-C-3","status":null,"title":"Gamma cleanup"},{"id":"PERF-D-4","status":null,"title":"Delta speed"},{"id":"RCA-E-5","status":null,"title":null}],"stderr":"","events":[]}

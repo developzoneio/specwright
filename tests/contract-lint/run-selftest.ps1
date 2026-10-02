@@ -115,12 +115,12 @@ Write-Host "  Repo root: $repoRoot"
 $bashExe = Find-WorkingBash
 if ($null -eq $bashExe) {
     Write-FailMsg 'no working bash found - this harness runs BOTH implementations and cannot skip one'
-    exit 1
+    exit 2
 }
 & $bashExe -c 'command -v jq >/dev/null 2>&1' 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-FailMsg 'jq not found on the bash PATH - contract-lint.sh cannot parse the manifest'
-    exit 1
+    exit 2
 }
 foreach ($p in @($lintPs1, ($lintSh -replace '/', '\'), $baseRoot)) {
     if (-not (Test-Path -LiteralPath $p)) {

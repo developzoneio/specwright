@@ -66,24 +66,42 @@ is generic, so future renames and newly-introduced template fields are caught th
 1. **Hook command paths (HIGH).** Each hook command's script path must use the namespace dir of
    the loaded `settings.template.json` (currently `.../hooks/sd/`). Flag any `/.claude/hooks/<other>/` <!-- contract-lint: allow CL402 - describes a settings.json path PATTERN to detect drift in the TARGET project's config, not a filesystem path on this machine -->
    segment (e.g. `.../hooks/ck/`) and record the old -> new rewrite per hook
-   (UserPromptSubmit/prompt-router, PreToolUse/spec-gate, SubagentStop/subagent-retro).
+   (SessionStart/session-context, UserPromptSubmit/prompt-router, PreToolUse/spec-gate,
+   PostToolUse/handoff-integrity, SubagentStop/subagent-retro, PreCompact/precompact-state,
+   Stop/stop-gate).
 2. **Missing top-level blocks.** Flag any template top-level key absent from the file - currently
    `_bash_adaptation` and `_schema_notes`. These are `_`-prefixed documentation keys; adding them
    verbatim from the template is non-destructive.
 3. **Stale `_comment_top`.** If it names a previous engine ("ck-spec-system" / any value differing
    from the template's), flag replacement with the template's value.
+4. **Narrow `spec-gate` matcher (HIGH).** The `PreToolUse` entry whose command runs `spec-gate` must
+   carry the template's matcher (currently `Edit|Write|MultiEdit|Bash|PowerShell`). Flag a matcher
+   that lacks `Bash` or `PowerShell` (e.g. the pre-SW-79 `Edit|Write|MultiEdit`) and record the
+   old -> new matcher. Without it, a shell command can rewrite `.specs/index.md` or a protected
+   file unseen. Rewrite only the `matcher` string; keep the entry's command and timeout.
+5. **Missing `SessionStart` hook (HIGH).** If no `SessionStart` entry runs `session-context`,
+   flag adding the template's `SessionStart` entry (SW-67). Since SW-67, `prompt-router` no longer
+   lists in-progress specs, so without this entry a project set up earlier loses them. Match
+   the form the file already uses: the template's PowerShell command line when the other hooks
+   run `powershell ...`, the `bash <path>.sh` form (as in Phase 6 step 3) when they run bash, and
+   both when both are present. Add the one event entry only; do not touch other entries.
+   Apply the same rule to a missing `PreCompact` entry running `precompact-state` (SW-68). Without
+   it, a compaction loses which spec the session was driving. Apply it again to a missing `Stop`
+   entry running `stop-gate` (SW-69); the hook stays inert until `hooks.stopGate.enabled` is set.
+   And to a missing `PostToolUse` entry running `handoff-integrity` (SW-70), with the template's
+   `Edit|Write|MultiEdit` matcher; it stays inert until `hooks.handoffIntegrity.enabled` is set.
 
 **B. `.claude/project-config.json`**
 
-4. **Stale `$schema` key (MEDIUM).** The current template publishes no `$schema` - no schema file
+6. **Stale `$schema` key (MEDIUM).** The current template publishes no `$schema` - no schema file
    is published for it. If the file still has a `$schema` key (leftover from an older template,
    e.g. the old `.../NXTK/ck-spec-system/...` host or the later dead `.../Developzone/specwright/...`
    URL), flag it for removal.
-5. **Command/agent names in `_use` doc strings.** Scan every `_use` / `_*_use` string under
+7. **Command/agent names in `_use` doc strings.** Scan every `_use` / `_*_use` string under
    `mcp.*`, `ticket.*`, `hooks.*`, `paths.*`. Flag old-namespace tokens: `/ck:*` -> `/sd:*` and
    `ck:<role>` / `ck-<role>` -> `sd-<role>`. Rewrite only the token, preserving the rest of the
    wording.
-6. **Version gap and missing newly-introduced fields.** Two related sub-findings:
+8. **Version gap and missing newly-introduced fields.** Two related sub-findings:
    - **Version gap.** Compare the file's `version` against the "installed engine version" read in
      Phase 0. If the installed engine is newer (or the file's version is missing/unrecognized),
      record `version: <old> -> <new>`. Skip this sub-finding if the installed engine version is
@@ -95,7 +113,7 @@ is generic, so future renames and newly-introduced template fields are caught th
      any template key genuinely absent from the file, adding each from the template's default;
      `paths.layers` defaults to `[]` (never invent a layer map here - that is Phase 2.5's job on a
      real scaffold).
-7. **Pinned model IDs -> aliases.** Under `models.*`, flag any dated/versioned ID
+9. **Pinned model IDs -> aliases.** Under `models.*`, flag any dated/versioned ID
    (`claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, ...) and map to the family alias
    (`claude-sonnet-*` -> `sonnet`, `claude-haiku-*` -> `haiku`, `claude-opus-*` -> `opus`). Leave
    values that are already aliases, and leave unrecognized custom strings untouched (flag nothing
@@ -103,7 +121,7 @@ is generic, so future renames and newly-introduced template fields are caught th
 
 **C. `.claude/settings.local.json` (if present)**
 
-8. **Stale permission entries.** Scan `permissions.allow[]` / `deny[]` for paths referencing a
+10. **Stale permission entries.** Scan `permissions.allow[]` / `deny[]` for paths referencing a
    previous engine namespace under `.claude/{templates,hooks,commands}/<other>/` and flag the
    rewrite to the current namespace (`...\templates\ck\` -> `...\templates\sd\`), matching the
    path segment regardless of slash direction. Do NOT add, remove, or reorder any other permission.
@@ -147,7 +165,7 @@ This is a confirmation of a batch, not a 4th interrogation question - the 3-ques
    untouched content, reorder keys, drop `_`-prefixed comment keys, or change any project-specific
    value (project name, ticket settings, detected commands/paths, filled layers, MCP `enabled`
    flags, `specGate.mode`). Preserve unfilled `<<placeholder>>` tokens. Exception: `version` is
-   engine-tracked, not project-specific - when the item-6 version-gap sub-finding is approved,
+   engine-tracked, not project-specific - when the item-8 version-gap sub-finding is approved,
    overwrite the file's `version` with the installed engine version from Phase 0.
 3. Validate each patched file still parses as JSON (mirrors Phase 7) and re-run the
    hook-resolution check; report backups written, change counts per file, and post-migration hook
@@ -338,14 +356,14 @@ Setup complete. Generated:
   - .specs/constitution.md (N placeholders to fill)
   - .specs/index.md (empty registry)
   - .claude/project-config.json (M MCP servers disabled)
-  - .claude/settings.json (hooks: prompt-router, spec-gate, subagent-retro)
+  - .claude/settings.json (hooks: session-context, prompt-router, spec-gate, handoff-integrity, subagent-retro, precompact-state, stop-gate)
 
 Installed engine paths:
   - ~/.claude/commands/sd/     (14 workflow commands)
   - ~/.claude/agents/sd/       (6 specialist agents)
-  - ~/.claude/hooks/sd/        (3 hooks)
+  - ~/.claude/hooks/sd/        (7 hooks)
   - ~/.claude/templates/sd/    (templates)
-  - ~/.claude/skills/sd/       (9 skills: severity-taxonomy, hypothesis-tree, atomic-task-format, evidence-citation, spec-templates, pattern-discipline, retro-lessons, replan-loop, port-fidelity)
+  - ~/.claude/skills/sd/       (11 skills: severity-taxonomy, hypothesis-tree, atomic-task-format, evidence-citation, spec-templates, pattern-discipline, retro-lessons, replan-loop, port-fidelity, bootstrap-guard, model-escalation)
 
 Next steps:
   1. Fill placeholders in CLAUDE.md and .specs/constitution.md (open them in your editor).

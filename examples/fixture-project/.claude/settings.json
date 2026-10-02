@@ -2,6 +2,18 @@
   "_comment_top": "Claude Code project settings - hook wiring for specwright. PowerShell version (Windows). For bash adaptation, see _bash_adaptation at bottom.",
 
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/session-context.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "*",
@@ -16,11 +28,23 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Edit|Write|MultiEdit|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/spec-gate.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/handoff-integrity.ps1",
             "timeout": 5
           }
         ]
@@ -37,27 +61,56 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/precompact-state.ps1",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ${HOME}/.claude/hooks/sd/stop-gate.ps1",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
 
   "_bash_adaptation": {
     "_comment": "On macOS/Linux replace PowerShell command lines with bash invocations. Make hooks executable (chmod +x) and adjust file extension.",
+    "SessionStart_command_example": "bash ${HOME}/.claude/hooks/sd/session-context.sh",
     "UserPromptSubmit_command_example": "bash ${HOME}/.claude/hooks/sd/prompt-router.sh",
     "PreToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/spec-gate.sh",
+    "PostToolUse_command_example": "bash ${HOME}/.claude/hooks/sd/handoff-integrity.sh",
     "SubagentStop_command_example": "bash ${HOME}/.claude/hooks/sd/subagent-retro.sh",
+    "PreCompact_command_example": "bash ${HOME}/.claude/hooks/sd/precompact-state.sh",
+    "Stop_command_example": "bash ${HOME}/.claude/hooks/sd/stop-gate.sh",
     "_note_powershell_on_unix": "PowerShell 7+ is available on Unix; if installed, the PowerShell command above works as-is. Otherwise switch to the bash variants."
   },
 
   "_schema_notes": {
     "_hook_output_format": "spec-gate emits dual-format JSON for forward and backward CLI compatibility.",
-    "_new_schema": "hookSpecificOutput.permissionDecision = 'deny'  (Claude Code CLI >= schema v2)",
+    "_new_schema": "hookSpecificOutput.permissionDecision = 'deny' with hookEventName = 'PreToolUse' (required - without it the CLI drops the block and an allow rule wins)  (Claude Code CLI >= schema v2)",
     "_legacy_schema": "decision = 'block'  (Claude Code CLI < schema v2)",
     "_both_emitted": "Both fields are present in the same JSON object. The CLI reads whichever it understands; the other field is ignored harmlessly.",
-    "_example_block_output": "{\"decision\":\"block\",\"reason\":\"...\",\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"reason\":\"...\"}}"
+    "_example_block_output": "{\"decision\":\"block\",\"reason\":\"...\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"...\"}}"
   },
 
   "_timeout_notes": {
-    "userPromptSubmit": "5s - inject routing hints and spec context",
+    "sessionStart": "5s - inject in-progress specs and the constitution pointer once per session",
+    "userPromptSubmit": "5s - inject per-prompt routing hints",
     "preToolUse": "5s - check spec-gate before code edits",
     "subagentStop": "3s - debounced retro reminder"
   }

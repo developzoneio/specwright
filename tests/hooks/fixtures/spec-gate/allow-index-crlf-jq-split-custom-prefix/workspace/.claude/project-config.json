@@ -1,0 +1,7 @@
+{
+  "spec": {
+    "dir": ".specs",
+    "indexFile": ".specs/index.md",
+    "prefixes": { "feature": "FEAT", "story": "STORY" }
+  }
+}

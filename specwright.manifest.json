@@ -1,7 +1,8 @@
 {
   "$comment": [
     "Canonical inventory contract for specwright. Read by scripts/validate.ps1 and",
-    "scripts/validate.sh (Check 7: docs consistency).",
+    "scripts/validate.sh (Check 7: docs consistency; Check 9 also reads adHocNotesGuard",
+    "and Check 10 reads bashStrictMode below).",
     "",
     "This file stores NO counts. Counts are derived from the globs below at runtime, so",
     "adding a command/agent/skill means adding the file and nothing else. A manifest that",
@@ -344,6 +345,7 @@
       { "id": "CL006", "severity": "BLOCK", "wave": 1, "summary": "/sd:<name> reference with no matching command file" },
       { "id": "CL007", "severity": "WARN",  "wave": 1, "summary": "agent mentioned by no command body" },
       { "id": "CL008", "severity": "BLOCK", "wave": 1, "summary": "numbered .specs artifact filename absent from specArtifacts" },
+      { "id": "CL009", "severity": "BLOCK", "wave": 1, "summary": "command ## Phase 0 section restates a phrase sd-bootstrap-guard owns (contractLint.bootstrapGuardPhrases)" },
 
       { "id": "CL100", "severity": "BLOCK", "wave": 2, "summary": "invocation sets TASK/WORKFLOW_TYPE/TASK_TYPE to a mode the target agent does not declare" },
       { "id": "CL101", "severity": "WARN",  "wave": 2, "summary": "agent declares a mode no command ever invokes" },
@@ -354,7 +356,10 @@
       { "id": "CL200", "severity": "BLOCK", "wave": 3, "summary": "agent with no write tool is instructed to write, append or create" },
       { "id": "CL201", "severity": "BLOCK", "wave": 3, "summary": "agent listed in contractLint.readOnlyAgents declares a write tool" },
       { "id": "CL202", "severity": "WARN",  "wave": 3, "summary": "mcp__* name absent from contractLint.knownMcpTools" },
-      { "id": "CL203", "severity": "WARN",  "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body" },
+      { "id": "CL203", "severity": "WARN",  "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body, on an agent with no write tool of its own" },
+      { "id": "CL204", "severity": "BLOCK", "wave": 3, "summary": "agent frontmatter declares a tool never mentioned in its own body, on a write-capable agent (Write/Edit/MultiEdit present) - CL203's BLOCK sibling" },
+      { "id": "CL205", "severity": "BLOCK", "wave": 3, "summary": "command step asserts a spec-artifact write inside a read-only agent's invocation block and names no main-thread writer" },
+      { "id": "CL206", "severity": "BLOCK", "wave": 3, "summary": "command listed in contractLint.editToolOnly never says to change the spec index / a spec status with the Edit tool only" },
 
       { "id": "CL300", "severity": "BLOCK", "wave": 1, "summary": "gate block containing no literal STOP" },
       { "id": "CL301", "severity": "BLOCK", "wave": 1, "summary": "gate block offering no option set" },
@@ -368,7 +373,11 @@
       { "id": "CL401", "severity": "WARN",  "wave": 3, "summary": "hardcoded language/framework name in the same contexts (stays WARN permanently - often legitimate in prose)" },
       { "id": "CL402", "severity": "BLOCK", "wave": 3, "summary": "hardcoded absolute filesystem path (Windows drive letter or POSIX multi-segment) in scan scope" },
 
-      { "id": "CL500", "severity": "WARN",  "wave": 4, "summary": "file exceeds contractLint.budgets.<area>Bytes (stays WARN permanently - a ratchet, not a build gate)" },
+      { "id": "CL601", "severity": "BLOCK", "wave": 5, "summary": "command invokes an agent with no escalationTriggers row and no allow comment, has rows but never references sd-model-escalation, or never names one of its rows" },
+      { "id": "CL602", "severity": "BLOCK", "wave": 5, "summary": "escalationTriggers and the sd-model-escalation trigger table disagree (id set or row fields), or a file cites an ESC- id no row declares" },
+      { "id": "CL603", "severity": "BLOCK", "wave": 5, "summary": "escalationTriggers from/to value is not in escalationPolicy.aliases" },
+      { "id": "CL604", "severity": "BLOCK", "wave": 5, "summary": "escalationPolicy.ladder differs from the skill's ladder, or a row is not exactly one rung up it" },
+      { "id": "CL605", "severity": "BLOCK", "wave": 5, "summary": "command restates the ladder, a precedence rule or the retro line format (escalationPolicy.restatePhrases)" },
 
       { "id": "CL900", "severity": "BLOCK", "wave": 1, "summary": "suppression comment carrying no usable reason" },
       { "id": "CL901", "severity": "BLOCK", "wave": 1, "summary": "suppression naming a rule id absent from this registry" },
@@ -422,6 +431,92 @@
       "phrases needs a '<!-- contract-lint: allow CL306 - <reason> -->' comment, the same",
       "suppression convention CL305 already uses on commands/perf.md - there is no separate",
       "per-gate declared-exception surface, on purpose."
+    ],
+
+    "bootstrapGuardPhrases": ["No `CLAUDE.md` found", "stack conventions may be incomplete", "binding Layer-2 contract", "No `.specs/` found", "failed to parse"],
+
+    "$bootstrapGuardPhrasesComment": [
+      "CL009's vocabulary. Hand-maintained, same category as gateProseEscapeTokens: distinctive",
+      "fragments of the messages skills/sd-bootstrap-guard/SKILL.md owns. Scanned only inside a",
+      "command's '## Phase 0' section, case-sensitive literal match, with a two-line wrap window.",
+      "'run `/sd:setup` first' is excluded on purpose: release, review, spec and verify say it for",
+      "their own preconditions, which are not the guard. The guard's half of that sentence is",
+      "'No `.specs/` found', which always travels with it. Added by SW-54."
+    ],
+
+    "editToolOnly": {
+      "phrase": "with the Edit tool only - never a shell command",
+      "files": [
+        "commands/bug.md",
+        "commands/feature.md",
+        "commands/perf.md",
+        "commands/port.md",
+        "commands/rca.md",
+        "commands/refactor.md",
+        "commands/release.md",
+        "commands/spec.md"
+      ]
+    },
+
+    "$editToolOnlyComment": [
+      "CL206's contract (SW-79). Every workflow that writes .specs/index.md or a spec's status:",
+      "field must say, in its own text, to do it with the Edit tool only. A shell write (sed -i,",
+      "'>', tee, Set-Content) sidesteps spec-gate's Rules 0, 0b and 1 and records no",
+      "spec_transition event - that is how scenario 02 lost two transitions. Declared, not",
+      "inferred: add a command here when it starts writing the index or a status. verify is",
+      "absent on purpose - it writes only 06-verify.md. Case-sensitive literal match with a",
+      "two-line wrap window; a listed file that does not exist exits 2, like gates."
+    ],
+
+    "escalationTriggers": [
+      { "id": "ESC-FEAT-02",  "command": "feature",  "phase": "2",  "agent": "sd-code-explorer",  "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-FEAT-03",  "command": "feature",  "phase": "3",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
+      { "id": "ESC-FEAT-03b", "command": "feature",  "phase": "3",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
+      { "id": "ESC-FEAT-04",  "command": "feature",  "phase": "4",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-FEAT-04b", "command": "feature",  "phase": "4",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-BUG-03",   "command": "bug",      "phase": "3",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-BUG-03b",  "command": "bug",      "phase": "3",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-BUG-05",   "command": "bug",      "phase": "5",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-RCA-02",   "command": "rca",      "phase": "2",  "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-REF-02",   "command": "refactor", "phase": "2",  "agent": "sd-code-explorer",  "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-REF-04",   "command": "refactor", "phase": "4",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" },
+      { "id": "ESC-REF-05",   "command": "refactor", "phase": "5",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-REF-05b",  "command": "refactor", "phase": "5",  "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-PERF-04",  "command": "perf",     "phase": "4a", "agent": "sd-debugger",       "from": "sonnet", "to": "opus" },
+      { "id": "ESC-PERF-04b", "command": "perf",     "phase": "4b", "agent": "sd-implementer",    "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-PORT-01",  "command": "port",     "phase": "1",  "agent": "sd-code-explorer",  "from": "haiku",  "to": "sonnet" },
+      { "id": "ESC-PORT-06",  "command": "port",     "phase": "6",  "agent": "sd-spec-architect", "from": "sonnet", "to": "opus" }
+    ],
+
+    "$escalationTriggersComment": [
+      "The assertable copy of skills/sd-model-escalation/SKILL.md's trigger table (SW-63). The",
+      "skill stays the single owner of the policy; this list exists so a check can fail when the",
+      "two drift. CL602 compares them both ways (id set, and command/agent/from/to per id), CL603",
+      "and CL604 check the tiers, and CL601 checks each row's command names its id - a row is",
+      "live only when its command references it. 'phase' is the phase the escalated invocation",
+      "runs in, so ESC-FEAT-03b (reached at Gate 2, re-running Phase 3) reads 3; its leading",
+      "digits must equal the id's. Declared, not derived: the skill's table is prose a model",
+      "reads, and deriving this from it would compare the table against itself.",
+      "The band is switched on by the skill existing on disk, never by these keys: removing",
+      "them fails CL602 instead of silently disabling the checks."
+    ],
+
+    "escalationPolicy": {
+      "ladder": ["haiku", "sonnet", "opus"],
+      "aliases": ["haiku", "sonnet", "opus", "inherit"],
+      "restatePhrases": ["haiku -> sonnet", "sonnet -> opus", "haiku -> opus", "<from> -> <to>", "escalation: <", "escalation: sd-", "(trigger: ", "enabled == false", "ceiling caps"]
+    },
+
+    "$escalationPolicyComment": [
+      "ladder must equal the skill's '## Ladder' line, joined with ' -> ' (CL604). aliases is",
+      "the model alias set of CLAUDE.md hard rule 3 - the same set validate's Check 4 enforces on",
+      "agent frontmatter; CL603 enforces it on escalation rows, so a full model ID entering",
+      "through the escalation path is caught too. 'inherit' is an alias but not a rung, so a",
+      "row naming it passes CL603 and fails CL604.",
+      "restatePhrases is CL605's vocabulary: distinctive fragments of the ladder, the retro",
+      "line format and the precedence rules. Scanned in commands/*.md only, fenced lines",
+      "included, case-sensitive, with a two-line wrap window. Hand-maintained, same category",
+      "as bootstrapGuardPhrases."
     ],
 
     "stackTokens": {
@@ -482,31 +577,113 @@
       "explain why not', never as 'suppress and move on'."
     ],
 
-    "budgets": {
-      "commandsBytes": 32677,
-      "agentsBytes": 15232,
-      "skillsBytes": 12412
-    },
+    "warnBudget": 0,
 
-    "$budgetsComment": [
-      "CL500's vocabulary. A RATCHET, not a design target: each ceiling is set at today's",
-      "largest file in that area, so the repo is green by construction on day one and every",
-      "later WARN is real growth, never a paragraph someone happened to write. CL500 stays",
-      "WARN forever (see contractLint.rules above) - promoting it to BLOCK would turn a",
-      "judgement call into a build failure, and the judgement is the valuable part. Raising",
-      "a number here is a real decision that belongs in a PR description, never a reflex to",
-      "a red CI run.",
+    "$warnBudgetComment": [
+      "scripts/validate.{sh,ps1} Check 8's ceiling: the max standing WARN count across every",
+      "rule EXCEPT CL202, which stays WARN permanently by design (see its comment above) and",
+      "never counts against this budget - otherwise a legitimate new MCP tool name would fail",
+      "the build through a rule explicitly meant not to. (CL500, the byte-budget ratchet, was",
+      "the other exemption until SW-57 retired it - see docs/adr/0011-retire-cl500-byte-ratchet.md.)",
       "",
-      "The byte count is NORMALIZED, never a raw disk read: the sum of each line's UTF-8",
-      "byte length plus one separator per line boundary, computed off the same per-line",
-      "cache every other rule already reads. A raw ReadAllBytes().Length / `wc -c` would",
-      "make this rule disagree with itself between platforms for byte-identical content -",
-      "contractLint.scanScope is 'text=auto' (see .gitattributes), so *.md checks out LF on",
-      "a Linux CI runner and CRLF on Windows. Confirmed on this repo: commands/spec.md is",
-      "25979 bytes as a git blob (LF) but 26521 bytes on a native Windows checkout - a 542",
-      "byte, ~2% difference for identical content. Line count was rejected for the same",
-      "reason CLAUDE.md rejects it elsewhere: it is not a measure both implementations can",
-      "agree on without arguing about line endings."
+      "A RATCHET, not a ceiling to raise on demand: 0 because SW-48 drove every standing",
+      "warning at the time to zero (fixed, removed, or suppressed with a one-line reason - see",
+      "CHANGELOG). Lowering the actual count below this number requires lowering this number",
+      "in the SAME commit. Raising it to make a new warning pass quietly defeats the entire",
+      "point - a 13th warning next release must be as visible as the first."
     ]
+  },
+
+  "promptSizeReport": {
+    "flagGrowthPercent": 15,
+    "$comment": [
+      "scripts/prompt-size-report.{sh,ps1}: the release-time replacement for CL500 (retired by",
+      "SW-57 - see docs/adr/0011-retire-cl500-byte-ratchet.md). Scope is contractLint.scanScope.",
+      "ADVISORY, never a build gate: the report flags a file that grew more than this percentage",
+      "since the compared ref, and a flagged file needs a trim-or-justify line in that release's",
+      "notes. There is no number to bump - the threshold is a rate, so it does not drift upward",
+      "with the files it measures. Cadence and failure signals: docs/contract-lint.md."
+    ]
+  },
+
+  "adHocNotesGuard": {
+    "patterns": ["REVIEW-TODO.md", "TODO.md", "FIXME.md", "NOTES.md", "*-FINDINGS.md"]
+  },
+  "bashStrictMode": {
+    "$comment": "validate Check 10: every *.sh must open with set -euo pipefail. Each exception carries its reason; a path that no longer exists fails the check.",
+    "exceptions": [
+      { "path": "hooks/bash/handoff-integrity.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits. It flags only through its JSON decision on stdout (ADR 0017); PostToolUse cannot undo the edit either way (ADR 0015)." },
+      { "path": "hooks/bash/precompact-state.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits. A non-zero exit here is worse still: exit 2 on PreCompact blocks the compaction (ADR 0015)." },
+      { "path": "hooks/bash/prompt-router.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
+      { "path": "hooks/bash/session-context.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
+      { "path": "hooks/bash/spec-gate.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." },
+      { "path": "hooks/bash/stop-gate.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits. A non-zero exit here is worse still: exit 2 on Stop keeps the turn running (ADR 0015); the hook blocks only through its JSON decision (ADR 0016)." },
+      { "path": "hooks/bash/subagent-retro.sh", "reason": "Hooks must exit 0 on every failure path so they never block a user on their own bugs; set -e would turn those bugs into non-zero exits." }
+    ]
+  },
+
+  "$adHocNotesGuardComment": [
+    "Check 9's vocabulary (root-level ad-hoc review-findings guard, SW-47). Matched against",
+    "ROOT-LEVEL FILES ONLY (non-recursive), case-insensitively (NTFS/APFS are case-insensitive,",
+    "so a case-sensitive guard would let 'todo.md' through on most contributors' machines).",
+    "One flat list, not split into literal-names vs glob-patterns - both bash 'case' and",
+    "PowerShell '-like' already treat a wildcard-free string as an exact match, and this",
+    "ticket asks to keep the list explicit and short rather than clever.",
+    "ROADMAP.md matches none of these on purpose - it is a maintained project document, not",
+    "an ad-hoc findings snapshot; see CONTRIBUTING.md."
+  ],
+
+  "$hookLatencyBudgetsComment": [
+    "SW-50's per-invocation latency floor, enforced in CI by",
+    "tests/hooks/measure-latency.ps1 -CheckBudget (every OS measures pwsh; windows-latest also",
+    "measures Windows PowerShell 5.1 as 'powershell'). Milliseconds, nearest-rank percentiles",
+    "pooled over the cases in tests/hooks/fixtures/latency-selection.json.",
+    "",
+    "Raising a number here is a real decision that belongs in the SAME commit as the change",
+    "that needs it, with the reason in its CHANGELOG line - never a reflex to a red CI run.",
+    "Unlike the retired CL500 byte ratchet (ADR 0011), budgets are NOT set at today's exact",
+    "measurement: each is about 2x the worst CI p95 seen for that (hook, flavor), rounded up",
+    "to 100 ms (SW-50 measurements and rationale: docs/architecture.md 'Hook invocation",
+    "latency', ADR 0012), so shared-runner noise does not force a raise. They also have an",
+    "external anchor: every p95 is capped at half the",
+    "hook's 'timeout' in templates/settings.template.json (SW-50 AC-5): measure-latency.ps1",
+    "refuses a budget above that ceiling before it measures anything, so the only way past it",
+    "is to raise the timeout too, in the same commit, and say why.",
+    "",
+    "Every measured (hook, flavor) must have an entry; a missing one fails -CheckBudget rather",
+    "than being skipped. A new hook or flavor declares its budget when it starts being measured."
+  ],
+
+  "hookLatencyBudgets": {
+    "budgets": {
+      "spec-gate": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1100 }
+      },
+      "prompt-router": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
+      },
+      "subagent-retro": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1100 }
+      },
+      "session-context": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
+      },
+      "precompact-state": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
+      },
+      "stop-gate": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1000 }
+      },
+      "handoff-integrity": {
+        "pwsh": { "p95": 1300 },
+        "powershell": { "p95": 1200 }
+      }
+    }
   }
 }

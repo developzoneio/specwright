@@ -19,3 +19,4 @@ Active specs (auto-updated by /sd:spec status transitions):
 | REF-BROKEN-013 | refactor | done | 2026-07-12 | Split InvoiceHandler |
 | FEAT-BROKEN-014 | feature | in-progress | 2026-07-13 | Add bulk tag assignment |
 | FEAT-BROKEN-015 | feature | done | 2026-07-14 | Add saved-view sharing |
+| PORT-BROKEN-016 | port | in-progress | 2026-07-20 | Port cart-totals validation and discount rules to checkout (broken) |

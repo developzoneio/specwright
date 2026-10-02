@@ -27,13 +27,14 @@ Drives an incident analysis from raw signals to a documented root cause, recorde
 
 ## Phase 0 - Bootstrap
 
-1. Read `CLAUDE.md`. If missing, WARN and continue - print "No `CLAUDE.md` found; stack
-   conventions may be incomplete." (the constitution is the binding Layer-2 contract, not
-   `CLAUDE.md`).
-2. Read `.specs/constitution.md`, `.claude/project-config.json`, `.specs/index.md`. If `.specs/`
-   or any of these is missing, STOP: "No `.specs/` found - run `/sd:setup` first." If
-   `.claude/project-config.json` is present but fails to parse as JSON, STOP:
-   "`.claude/project-config.json` failed to parse - fix it or re-run `/sd:setup`."
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 2 step 0; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
 3. Compute current UTC date for the spec ID stamp.
 4. Detect state. Print resume plan.
 
@@ -53,7 +54,7 @@ This phase is conversational. The user has the raw evidence; the workflow turns 
    - **Symptoms observed** - specific error rates, status codes, queue depths, customer reports.
    - **Affected scope** - services / endpoints / users / revenue.
    - **Recent changes** - everything deployed or configured in the 72 hours before the incident.
-4. Evidence (logs, screenshots, query results, dashboards) is saved under `.specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/` with descriptive filenames. Each artifact referenced from the timeline.
+4. Main thread saves the evidence (logs, screenshots, query results, dashboards) under `.specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/` with descriptive filenames. Each artifact referenced from the timeline.
 
 ### ⛔ Gate 1 - Evidence gathered
 
@@ -68,14 +69,18 @@ STOP. Display the populated Timeline, Symptoms, Affected scope, Recent changes. 
 
 ## Phase 2 - Hypothesis enumeration
 
-1. Invoke `sd-debugger` with:
+0. **Model escalation check.** Apply rule `ESC-RCA-02` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the `severity` frontmatter field of
+   `.specs/RCA-<slug>-<YYYYMMDD>/00-spec.md`. The decision covers every `sd-debugger` call in
+   Phase 2 and Phase 3.
+1. Invoke `sd-debugger` (model: default, or as resolved by step 0) with:
    - `TASK = enumerate`
    - `SPEC_REF = .specs/RCA-<slug>-<YYYYMMDD>/00-spec.md`
    - `EVIDENCE_DIR = .specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/`
    - `MODE = incident`
 2. Debugger enumerates hypotheses per the **sd-hypothesis-tree** skill (5 mental models,
    `(Likelihood x Impact) / Cost-to-verify` ranking).
-3. Hypothesis tree written to `00-spec.md` "Hypothesis tree" section.
+3. Main thread appends the returned hypothesis tree to `00-spec.md` "Hypothesis tree" section (debugger has no write tool).
 
 ### ⛔ Gate 2 - Hypotheses enumerated
 
@@ -93,14 +98,14 @@ STOP. Display the ranked hypotheses. Ask:
 
 For each hypothesis in rank order:
 
-1. Invoke `sd-debugger` with:
+1. Invoke `sd-debugger` (model: default, or as resolved by Phase 2 step 0) with:
    - `TASK = verify`
    - `HYPOTHESIS = <H#>`
    - `EVIDENCE_DIR = .specs/RCA-<slug>-<YYYYMMDD>/04-artifacts/`
 2. Debugger gathers evidence (logs, queries, code reads). Database access (via the project's MCP
    tool or CLI) is **SELECT / EXPLAIN only** - never UPDATE / DELETE / INSERT.
 3. Result: `CONFIRMED` / `REJECTED` / `INCONCLUSIVE`. Main thread appends the result with evidence pointers to "Verification results (Phase 3)" (debugger has no write tool).
-4. Document REJECTED with FULL reasoning. This is knowledge preservation.
+4. Main thread documents each REJECTED result with FULL reasoning. This is knowledge preservation.
 5. Continue until one hypothesis is `CONFIRMED`.
 
 ### ⛔ Gate 3 - Root cause confirmed
@@ -156,10 +161,17 @@ No gate here - documentation-only phase.
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - **No code is changed in /sd:rca.** Period. If the user asks "while we're here, can you fix it?" -> redirect to `/sd:bug <ID>` after this workflow completes.
 - Reproduction is rarely possible for incidents (the incident is over). Verification relies on logs, traces, queries, and code reads from the relevant time window.
 - All evidence lives under `04-artifacts/` with descriptive filenames. Never reference "the dashboard" - save a screenshot or query.
 - Rejected hypotheses are documented in full. They are as valuable as the confirmed one for future incidents.
 - Database access (via the project's MCP tool or CLI) is SELECT / EXPLAIN only. Any UPDATE attempt is a constitution violation.
 - The Spawned specs section is a CONTRACT. Each reserved ID should be created within the agreed timeline; if not, log to retro.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-RCA-02` is applied at Phase 2
+  step 0; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
+  in the skill and are not restated here. The main thread writes its retro line - `sd-debugger`
+  stays without a write tool, escalated or not.
 - RCAs do not get a `revive` action. New incident -> new RCA.

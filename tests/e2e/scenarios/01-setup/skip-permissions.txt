@@ -1,2 +1,7 @@
-Phase 6 writes .claude/project-config.json and .claude/settings.json, which Claude Code
-treats as sensitive files requiring interactive approval that no headless run can give.
+Phase 6 writes .claude/project-config.json and .claude/settings.json. Claude Code treats both as
+protected paths, and in -p mode no grant lets a write to them through (SW-83,
+probe-permission-posture.ps1 -Probe claude-dir, claude 2.1.285, Windows): dontAsk with
+Edit,Write,MultiEdit, with Edit/Write(.claude/**) and (/.claude/**) added, and acceptEdits all
+refused both writes (in permission_denials, nothing on disk) while free.txt was written. Only
+bypassPermissions and --dangerously-skip-permissions wrote them. See tests/e2e/README.md
+"Permission mode".

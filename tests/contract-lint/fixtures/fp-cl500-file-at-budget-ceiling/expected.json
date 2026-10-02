@@ -1,4 +1,0 @@
-{
-  "note": "a file safely under contractLint.budgets.commandsBytes must not trip CL500",
-  "findings": []
-}

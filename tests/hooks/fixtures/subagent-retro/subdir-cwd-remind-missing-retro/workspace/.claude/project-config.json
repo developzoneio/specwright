@@ -1,0 +1,4 @@
+{
+  "spec": { "dir": ".specs", "indexFile": ".specs/index.md" },
+  "hooks": { "subagentRetro": { "enabled": true, "retroStaleMinutes": 30, "debounceMinutes": 10 } }
+}

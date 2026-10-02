@@ -1,0 +1,4 @@
+{
+  "note": "MUST STAY SILENT: bootstrap guard text inside the skill that owns it, inside a fenced example in a command's Phase 0, and in a command's later phase; plus a command whose Phase 0 reads the skill at runtime",
+  "findings": []
+}

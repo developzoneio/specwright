@@ -14,8 +14,12 @@ decision title for an ad-hoc ADR with no spec.
 
 ## Phase 0 - Bootstrap
 
-Read, in order: `CLAUDE.md`, `.specs/constitution.md`, `.claude/project-config.json`, `.specs/index.md`.
-If `.specs/` does not exist, abort: "No `.specs/` found - run `/sd:setup` first."
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. No state detection: unlike the workflow commands, `/sd:adr` has no resume state machine.
+   Phase 1 resolves the decision source directly.
 
 ## Phase 1 - Resolve the decision source
 
@@ -39,6 +43,7 @@ If `.specs/` does not exist, abort: "No `.specs/` found - run `/sd:setup` first.
 
 ## Phase 3 - Draft via sd-docs-writer
 
+<!-- contract-lint: allow CL601 - one drafting call per ADR, re-run only on user edit, and no spec frontmatter to read a trigger from (SW-63) -->
 Invoke the `sd-docs-writer` agent with `ADR_NUMBER`, `ADR_PATH`, `SPEC_REF`, `DECISION_SOURCE`,
 `SUPERSEDES`, and today's date as `DATE`. The agent drafts and writes the file, then returns its content.
 

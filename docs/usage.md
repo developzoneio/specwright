@@ -61,7 +61,7 @@ Spec-driven feature workflow.
 
 Phase 2 records the codebase's precedents and conventions (nearest similar implementations, naming patterns, existing utilities) alongside the impact map. Phase 3 tasks then carry `Pattern refs` - `file:line` citations of precedent code the implementer must read before writing, so new code mirrors the existing structure.
 
-The architect writes a spec-level `complexity` estimate (`S` | `M` | `L`) at Phase 1. Gate 2 then measures the actual plan: under the decompose thresholds (> 8 tasks, > 2 production layers excluding Tests/Config, > 8 impacted files, or an unresolved Open question) it is the normal plan approval with **zero added friction**; over them it becomes a HARD **Gate Complexity** that refuses one oversized plan and forces a split into medium child specs (`FEAT-<arg>-<slug>`, linked to the parent umbrella). A create-time `L` estimate also escalates the impact and planning models a tier (aliases only). Still 3 hard gates - complexity triage is a second face of Gate 2, not a fourth gate.
+The architect writes a spec-level `complexity` estimate (`S` | `M` | `L`) at Phase 1. Gate 2 then measures the actual plan: under the decompose thresholds (> 8 tasks, > 2 production layers excluding Tests/Config, > 8 impacted files, or an unresolved Open question) it is the normal plan approval with **zero added friction**; over them it becomes a HARD **Gate Complexity** that refuses one oversized plan and forces a split into medium child specs (`FEAT-<arg>-<slug>`, linked to the parent umbrella). A create-time `L` estimate also escalates the impact and planning models, per the `sd-model-escalation` skill (tunable or disabled via `models.escalation` in project-config). Still 3 hard gates - complexity triage is a second face of Gate 2, not a fourth gate.
 
 Example:
 ```
@@ -342,7 +342,8 @@ Proves criterion -> task -> test traceability for one spec and writes
 `.specs/<ID>/06-verify.md` with `result: pass|fail`. The spec-gate hook blocks a FEAT
 (feature-spec) `index.md` row from transitioning to `done` without a passing artifact
 (`hooks.specGate.verifyGate`, default on). Other spec types (bug, refactor, perf, rca, port) close
-out through the unconditional protected-path rule, same as before this gate existed.
+out like any other legal status transition: spec-gate allows an `index.md` edit whose only effect is
+Status-only moves along a workflow edge and/or new rows at `draft`/`approved`.
 
     /sd:verify FEAT-1042
 
@@ -453,6 +454,28 @@ The system surfaces; the human decides. The gates exist precisely so the decisio
 
 Hooks emit output inline during a session. Examples:
 
+**session-context** once at session start (and again on resume, fork, compact or clear):
+
+```
+<session-context>
+Spec context from specwright (SessionStart hook, source: startup):
+
+Constitution: .specs/constitution.md
+
+Specs currently in-progress (from .specs/index.md):
+  - FEAT-INV-2501 [status: approved] Stock reservation retry
+</session-context>
+```
+
+After a compaction (`source: compact`), the same block also names the spec the session was driving,
+as recorded by **precompact-state** just before the compaction:
+
+```
+Active spec before compaction (trigger: auto): FEAT-INV-2501 [status: in-progress]
+  Phase hint: executing - 3/7 tasks done, next T04
+  Resume: /sd:feature INV-2501 - its state machine re-derives the exact phase from .specs/
+```
+
 **prompt-router** on `"fix bug INV-2501 in stock service"`:
 
 ```
@@ -464,9 +487,6 @@ Workflow keyword matches:
 
 Ticket IDs detected: INV-2501
 Matching spec folders under .specs/:
-  - FEAT-INV-2501
-
-Specs currently in-progress (from .specs/index.md):
   - FEAT-INV-2501
 </context-router>
 ```
@@ -503,6 +523,18 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
 ```json
 {
   "hooks": {
+    "sessionContext": {
+      "enabled": true
+    },
+    "precompactState": {
+      "enabled": true
+    },
+    "stopGate": {
+      "enabled": false
+    },
+    "handoffIntegrity": {
+      "enabled": false
+    },
     "userPromptRouter": {
       "enabled": true
     },
@@ -522,10 +554,24 @@ Consider appending: decisions made, surprises encountered, follow-ups identified
 **Common adjustments:**
 
 - Tightening: change `specGate.mode` from `"warn"` to `"block"` once your team is used to the workflow.
+- Enforcing HARD gates at turn close-out: set `stopGate.enabled` to `true`. The Stop hook then
+  refuses to end a turn when the spec being driven is past a HARD gate without that gate's
+  evidence on disk (bug reproduction, perf baseline, rca hypothesis tree, port freeze / tables /
+  pinning / parity), and says which gate and what is missing. It blocks once; the next stop goes
+  through. Off by default - see `docs/adr/0016-stop-gate-detection-rules.md`.
+- Catching scope drift during execution: set `handoffIntegrity.enabled` to `true`. After every
+  Edit / Write / MultiEdit, the PostToolUse hook checks the file against the `Files` of the ready
+  tasks in the in-progress spec's `02-tasks.md` (open, with every `Depends on` task done) and, if
+  it is outside all of them, tells the model in the same turn. It reports, it does not undo:
+  PostToolUse runs after the write. Edits under the spec folder and outside the project are never
+  flagged. Off by default - see `docs/adr/0017-handoff-integrity-scope-check.md`.
 - Loosening: set `enabled: false` on any hook during noisy debug sessions. Don't forget to flip back.
 - Pace tuning: `retroStaleMinutes` and `debounceMinutes` control how often the retro reminder fires. Set both higher for long-form work; lower for tight iteration cycles.
 
-`paths.protected` controls which files trigger an unconditional `decision=block`:
+`paths.protected` controls which files trigger a `decision=block`. The one exception is the spec
+index: spec-gate still lets through an `index.md` edit that is purely a workflow status transition
+or a new `draft`/`approved` row (and a verified FEAT `done` close-out). Any other edit to it is
+blocked:
 
 ```json
 {

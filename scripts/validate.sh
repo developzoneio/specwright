@@ -15,6 +15,11 @@
 #   8. Cross-file contract lint: the relationships between commands, agents and
 #      skills, per the manifest's contractLint subtree. Delegated to
 #      scripts/contract-lint.sh as a child process.
+#   9. Root-level ad-hoc notes guard: no root-level file matches a declared
+#      ad-hoc-notes pattern (specwright.manifest.json's adHocNotesGuard), e.g.
+#      REVIEW-TODO.md, TODO.md, FIXME.md, NOTES.md, *-FINDINGS.md.
+#  10. Bash strict mode: every *.sh in the repo opens with `set -euo pipefail`
+#      unless declared in specwright.manifest.json's bashStrictMode.exceptions.
 #
 # Exit 0 = all checks passed; 1 = at least one failed.
 
@@ -70,12 +75,19 @@ warn()    { echo "  ${c_yellow}[WARN]${c_reset} $*"; }
 failures=()
 add_failure() { failures+=("$1"); }
 
+# One wording for "jq is missing" across every manifest-reading check, so a runner
+# without jq gets the same named cause from each of them - never a bare exit code.
+jq_missing() {
+    fail "jq is required to parse specwright.manifest.json - install jq"
+    add_failure "$1: jq not installed"
+}
+
 section "specwright validate"
 echo "  Repo root: $repo_root"
 
 # ---- Check 1: pure-ASCII scan ----------------------------------------------
 
-section "Check 1/8: Pure-ASCII scan (*.ps1)"
+section "Check 1/10: Pure-ASCII scan (*.ps1)"
 ascii_bad=0
 ps1_count=0
 while IFS= read -r -d '' f; do
@@ -92,7 +104,7 @@ if [[ $ascii_bad -eq 0 ]]; then ok "$ps1_count .ps1 file(s) are pure ASCII"; fi
 
 # ---- Check 2: bash -n syntax -----------------------------------------------
 
-section "Check 2/8: bash -n syntax (*.sh)"
+section "Check 2/10: bash -n syntax (*.sh)"
 syn_bad=0
 sh_count=0
 while IFS= read -r -d '' f; do
@@ -109,7 +121,7 @@ if [[ $syn_bad -eq 0 ]]; then ok "$sh_count .sh file(s) pass bash -n"; fi
 
 # ---- Check 3: hook-pair parity ---------------------------------------------
 
-section "Check 3/8: Hook-pair parity"
+section "Check 3/10: Hook-pair parity"
 parity_bad=0
 ps_count=0
 for psf in "$repo_root"/hooks/powershell/*.ps1; do
@@ -135,7 +147,7 @@ if [[ $parity_bad -eq 0 ]]; then ok "$ps_count hook pair(s) present on both plat
 
 # ---- Check 4: agent model aliases ------------------------------------------
 
-section "Check 4/8: Agent model aliases"
+section "Check 4/10: Agent model aliases"
 model_bad=0
 agent_count=0
 for af in "$repo_root"/agents/*.md; do
@@ -163,7 +175,7 @@ if [[ $model_bad -eq 0 ]]; then ok "$agent_count agent(s) use a model alias"; fi
 
 # ---- Check 5: install-target counts ----------------------------------------
 
-section "Check 5/8: Install-target counts"
+section "Check 5/10: Install-target counts"
 install_sh="$repo_root/install/install.sh"
 tmp="${TMPDIR:-/tmp}/sd-validate-$$"
 tmp_nc_src="${TMPDIR:-/tmp}/sd-validate-nc-src-$$"
@@ -336,7 +348,7 @@ trap - EXIT
 
 # ---- Check 6: CHANGELOG [Unreleased] non-empty -----------------------------
 
-section "Check 6/8: CHANGELOG [Unreleased] gate"
+section "Check 6/10: CHANGELOG [Unreleased] gate"
 changelog="$repo_root/CHANGELOG.md"
 block="$(awk '
     /^##[[:space:]]+\[Unreleased\]/ { f=1; next }
@@ -361,7 +373,7 @@ fi
 
 # ---- Check 7: docs consistency ---------------------------------------------
 
-section "Check 7/8: Docs consistency (published numbers vs disk)"
+section "Check 7/10: Docs consistency (published numbers vs disk)"
 manifest="$repo_root/specwright.manifest.json"
 if [[ ! -f "$manifest" ]]; then
     fail "specwright.manifest.json not found at repo root"
@@ -370,8 +382,7 @@ elif ! command -v jq >/dev/null 2>&1; then
     # Hooks exit 0 silently when jq is absent so they never block a user on their own
     # bugs. A validator must do the opposite: a missing jq that passed would turn CI
     # green while checking nothing.
-    fail "jq is required to parse specwright.manifest.json - install jq"
-    add_failure "docs: jq not installed"
+    jq_missing "docs"
 else
     docs_bad=0
     # Plain (non-associative) arrays + linear-scan lookup functions, not `declare -A`:
@@ -639,11 +650,15 @@ fi
 
 # ---- Check 8: cross-file contract lint -------------------------------------
 
-section "Check 8/8: Cross-file contract lint (commands / agents / skills)"
+section "Check 8/10: Cross-file contract lint (commands / agents / skills)"
 lint_sh="$script_dir/contract-lint.sh"
 if [[ ! -f "$lint_sh" ]]; then
     fail "scripts/contract-lint.sh not found"
     add_failure "contract-lint: script missing"
+elif ! command -v jq >/dev/null 2>&1; then
+    # The linter would exit 2 for this too, but its reason goes to stderr, which
+    # is discarded below - name the cause here instead of a bare "exit 2".
+    jq_missing "contract-lint"
 else
     # Spawned as a CHILD PROCESS so its `exit` cannot terminate this validator,
     # and so its stdout stays a clean machine-readable stream. All human
@@ -655,6 +670,7 @@ else
 
     cl_blocks=0
     cl_warns=0
+    cl_warns_budgeted=0
     if [[ -n "$lint_out" ]]; then
         while IFS=$'\t' read -r cl_rule cl_sev cl_file cl_line cl_msg; do
             [[ -z "$cl_rule" ]] && continue
@@ -665,6 +681,14 @@ else
             else
                 warn "$cl_file:$cl_line $cl_rule - $cl_msg"
                 cl_warns=$((cl_warns + 1))
+                # CL202 is a permanent-WARN ratchet by design (unrecognized
+                # MCP tool names) - never counted against the standing-warning
+                # budget below, or a legitimate new tool name would fail the
+                # build through a rule explicitly meant not to.
+                case "$cl_rule" in
+                    CL202) : ;;
+                    *) cl_warns_budgeted=$((cl_warns_budgeted + 1)) ;;
+                esac
             fi
         done <<< "$lint_out"
     fi
@@ -674,12 +698,158 @@ else
         # is the failure mode this whole check exists to prevent.
         fail "contract-lint could not run (exit $lint_exit)"
         add_failure "contract-lint: exit $lint_exit"
-    elif [[ $cl_blocks -eq 0 ]]; then
-        if [[ $cl_warns -eq 0 ]]; then
-            ok "no contract violations"
-        else
-            ok "no BLOCK violations ($cl_warns warning(s) above)"
+    else
+        # Ratchet, not a ceiling: contractLint.warnBudget is the max standing
+        # WARN count (excluding CL202). Lowering it below actual requires
+        # lowering it in the SAME commit that resolves the warnings - never
+        # raise it to make a new warning pass quietly.
+        warn_budget=0
+        if command -v jq >/dev/null 2>&1; then
+            _wb="$(jq -r '.contractLint.warnBudget // 0' "$manifest" 2>/dev/null)"
+            [[ "$_wb" =~ ^[0-9]+$ ]] && warn_budget="$_wb"
         fi
+        if [[ $cl_blocks -eq 0 && $cl_warns_budgeted -le $warn_budget ]]; then
+            if [[ $cl_warns -eq 0 ]]; then
+                ok "no contract violations"
+            else
+                ok "no BLOCK violations ($cl_warns warning(s) above, $cl_warns_budgeted/$warn_budget standing-warning budget)"
+            fi
+        elif [[ $cl_blocks -eq 0 ]]; then
+            fail "standing-warning budget exceeded: $cl_warns_budgeted budgeted warning(s) > contractLint.warnBudget ($warn_budget)"
+            add_failure "contract-lint: warn budget $cl_warns_budgeted > $warn_budget"
+        fi
+    fi
+fi
+
+# ---- Check 9: root-level ad-hoc notes guard --------------------------------
+
+section "Check 9/10: Root-level ad-hoc notes guard"
+if [[ ! -f "$manifest" ]]; then
+    fail "specwright.manifest.json not found at repo root"
+    add_failure "root-guard: manifest missing"
+elif ! command -v jq >/dev/null 2>&1; then
+    jq_missing "root-guard"
+else
+    guard_patterns=()
+    while IFS= read -r pat; do
+        [[ -z "$pat" ]] && continue
+        guard_patterns+=("$pat")
+    done < <(jq -r '.adHocNotesGuard.patterns[]' "$manifest" | tr -d '\r')
+
+    shopt -s nocasematch
+    guard_bad=0
+    for f in "$repo_root"/*; do
+        [[ -f "$f" ]] || continue
+        base="$(basename "$f")"
+        for pat in "${guard_patterns[@]}"; do
+            case "$base" in
+                $pat)
+                    fail "$base : matches ad-hoc notes pattern '$pat' - file review findings as a Jira issue instead (see CONTRIBUTING.md), then delete this file"
+                    add_failure "root-guard: $base matches $pat"
+                    guard_bad=$((guard_bad + 1))
+                    break
+                    ;;
+            esac
+        done
+    done
+    shopt -u nocasematch
+    if [[ $guard_bad -eq 0 ]]; then
+        ok "no ad-hoc review-findings files at repo root (${#guard_patterns[@]} pattern(s) checked)"
+    fi
+fi
+
+# ---- Check 10: bash strict mode --------------------------------------------
+
+section "Check 10/10: Bash strict mode (*.sh)"
+if [[ ! -f "$manifest" ]]; then
+    fail "specwright.manifest.json not found at repo root"
+    add_failure "strict-mode: manifest missing"
+elif ! command -v jq >/dev/null 2>&1; then
+    jq_missing "strict-mode"
+else
+    strict_exceptions=()
+    while IFS= read -r exc; do
+        [[ -z "$exc" ]] && continue
+        strict_exceptions+=("$exc")
+    done < <(jq -r '.bashStrictMode.exceptions[]?.path' "$manifest" | tr -d '\r')
+
+    strict_bad=0
+    # A declared exception that no longer exists is a stale entry - fail it, or the
+    # list quietly grows into a blanket waiver.
+    for exc in ${strict_exceptions[@]+"${strict_exceptions[@]}"}; do
+        if [[ ! -f "$repo_root/$exc" ]]; then
+            fail "$exc : listed in bashStrictMode.exceptions but does not exist - remove the entry"
+            add_failure "strict-mode: stale exception $exc"
+            strict_bad=$((strict_bad + 1))
+        fi
+    done
+
+    # Scan only what git would track: tracked files plus untracked-but-not-ignored
+    # ones (--others --exclude-standard), so a gitignored tree such as
+    # node_modules/ cannot fail the check with a third-party script. Without git
+    # (not installed, or a tarball with no .git) fall back to a filesystem walk
+    # that prunes .git and node_modules. Mirrors Get-StrictModeCandidates in
+    # validate.ps1. Output: repo-relative paths, NUL-separated.
+    if command -v git >/dev/null 2>&1 &&
+       git -C "$repo_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        strict_scope="git ls-files"
+    else
+        strict_scope="filesystem walk, git unavailable"
+    fi
+    list_strict_candidates() {
+        if [[ "$strict_scope" == "git ls-files" ]]; then
+            git -C "$repo_root" ls-files -z --cached --others --exclude-standard -- '*.sh' 2>/dev/null
+        else
+            local p
+            while IFS= read -r -d '' p; do
+                printf '%s\0' "${p#"$repo_root"/}"
+            done < <(find "$repo_root" \( -name .git -o -name node_modules \) -prune -o -type f -name '*.sh' -print0 2>/dev/null)
+        fi
+    }
+
+    strict_count=0
+    while IFS= read -r -d '' rel; do
+        f="$repo_root/$rel"
+        # A tracked file deleted from the working tree is still listed by
+        # --cached; there is nothing on disk to check.
+        [[ -f "$f" ]] || continue
+        is_exception=0
+        for exc in ${strict_exceptions[@]+"${strict_exceptions[@]}"}; do
+            if [[ "$rel" == "$exc" ]]; then is_exception=1; break; fi
+        done
+        [[ $is_exception -eq 1 ]] && continue
+        strict_count=$((strict_count + 1))
+
+        # First statement = first line that is not blank, a comment, or the shebang.
+        first_stmt=""
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%$'\r'}"
+            [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+            first_stmt="$line"
+            break
+        done < "$f"
+        # Accepts any flag cluster carrying e, u and o (e.g. install.sh's -Eeuo).
+        flags=""
+        if [[ "$first_stmt" =~ ^set[[:space:]]+-([A-Za-z]+)[[:space:]]+pipefail[[:space:]]*$ ]]; then
+            flags="${BASH_REMATCH[1]}"
+        fi
+        if [[ -z "$flags" || "$flags" != *e* || "$flags" != *u* || "$flags" != *o* ]]; then
+            fail "$rel : first statement is not 'set -euo pipefail' (got: ${first_stmt:-<none>}) - add it, or declare an exception with a reason in specwright.manifest.json bashStrictMode"
+            add_failure "strict-mode: $rel"
+            strict_bad=$((strict_bad + 1))
+        fi
+    done < <(list_strict_candidates)
+
+    # The repo always ships .sh files (hooks/bash, install, scripts), so an empty
+    # candidate list means the listing itself failed - never a vacuous pass.
+    if [[ $strict_count -eq 0 && $strict_bad -eq 0 ]]; then
+        fail "no .sh files found to check (scope: $strict_scope) - the candidate listing failed"
+        add_failure "strict-mode: empty candidate list"
+        strict_bad=1
+    fi
+
+    if [[ $strict_bad -eq 0 ]]; then
+        ok "$strict_count .sh file(s) use set -euo pipefail (${#strict_exceptions[@]} declared exception(s); scope: $strict_scope)"
     fi
 fi
 

@@ -1,0 +1,14 @@
+/sd:feature e2e-escalation-demo
+
+FEAT-e2e-escalation-demo is a synthetic fixture spec seeded by this e2e scenario. It is already
+`in-progress` with an approved plan, so the workflow resumes at Phase 4. Its `Estimated complexity`
+and `Reversibility` values were set by the fixture author on purpose; use them exactly as written
+and do not edit `02-tasks.md` other than checking tasks off.
+
+This is a headless, scripted test run with no human available to reply mid-workflow. Do not stop
+and wait for a real person. If Gate Re-plan fires, treat "approve" as the standing reply and
+continue within this single turn.
+
+Execute Phase 4 for every task, following each step as written, including the model escalation
+check. Stop once both tasks are checked off and their Phase 4 lines are in `05-retro.md`. Do not
+start Phase 5. Report which tasks ran and at which model in your last message.

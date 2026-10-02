@@ -1,0 +1,18 @@
+{
+  "_comment": "SW-53 shared prefix table. Every case is asserted against install.sh, uninstall.sh, install.ps1 and uninstall.ps1 by run-prefix-parity.ps1; all four must land on 'expect'. Control characters are JSON escapes so this file stays pure ASCII.",
+  "cases": [
+    { "name": "valid-default",     "prefix": "sd",          "expect": "accept" },
+    { "name": "valid-custom",      "prefix": "my-ns",       "expect": "accept" },
+    { "name": "valid-inner-space", "prefix": "a b",         "expect": "accept" },
+    { "name": "empty",             "prefix": "",            "expect": "reject" },
+    { "name": "spaces-only",       "prefix": "   ",         "expect": "reject" },
+    { "name": "tab-only",          "prefix": "\t",          "expect": "reject" },
+    { "name": "newline-only",      "prefix": "\n",          "expect": "reject" },
+    { "name": "cr-only",           "prefix": "\r",          "expect": "reject" },
+    { "name": "mixed-whitespace",  "prefix": " \t\n ",      "expect": "reject" },
+    { "name": "dotdot",            "prefix": "..",          "expect": "reject" },
+    { "name": "dotdot-embedded",   "prefix": "a..b",        "expect": "reject" },
+    { "name": "forward-slash",     "prefix": "a/b",         "expect": "reject" },
+    { "name": "backslash",         "prefix": "a\\b",        "expect": "reject" }
+  ]
+}

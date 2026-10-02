@@ -1,0 +1,19 @@
+{
+  "note": "a command's Phase 0 restates bootstrap guard text instead of reading the skill that owns it - once wrapped across two lines, once on a single line",
+  "findings": [
+    {
+      "rule": "CL009",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "wrapped-restatement"
+    },
+    {
+      "rule": "CL009",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "single-line-restatement"
+    }
+  ]
+}

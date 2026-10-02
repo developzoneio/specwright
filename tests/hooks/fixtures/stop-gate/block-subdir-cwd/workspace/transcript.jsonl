@@ -1,0 +1,2 @@
+{"type": "user", "message": {"content": "Continue BUG-TEST-100 - see .specs/BUG-TEST-100/00-spec.md"}}
+{"type": "assistant", "message": {"content": "Working on BUG-TEST-100 now."}}

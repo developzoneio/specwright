@@ -1,0 +1,6 @@
+{
+  "note": "sd-keeper carries Write in tools: (write-capable) but its body never mentions it - BLOCK, not WARN",
+  "findings": [
+    { "rule": "CL204", "severity": "BLOCK", "file": "agents/keeper.md", "anchor": "seed", "seed": "write-capable-unused-tool" }
+  ]
+}

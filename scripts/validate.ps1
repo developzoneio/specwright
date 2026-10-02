@@ -18,6 +18,12 @@
       8. Cross-file contract lint: the relationships between commands, agents
          and skills, per specwright.manifest.json's contractLint subtree.
          Delegated to scripts/contract-lint.ps1 as a child process.
+      9. Root-level ad-hoc notes guard: no root-level file matches a declared
+         ad-hoc-notes pattern (specwright.manifest.json's adHocNotesGuard),
+         e.g. REVIEW-TODO.md, TODO.md, FIXME.md, NOTES.md, *-FINDINGS.md.
+     10. Bash strict mode: every *.sh in the repo opens with
+         `set -euo pipefail` unless declared in specwright.manifest.json's
+         bashStrictMode.exceptions.
 
     Exit code 0 = all checks passed; 1 = at least one check failed.
 
@@ -148,7 +154,7 @@ Write-Host "  Repo root: $repoRoot"
 
 # ---- Check 1: pure-ASCII scan ----------------------------------------------
 
-Write-Section 'Check 1/8: Pure-ASCII scan (*.ps1)'
+Write-Section 'Check 1/10: Pure-ASCII scan (*.ps1)'
 $ps1Files = Get-ChildItem -Path $repoRoot -Recurse -Filter *.ps1 -File |
     Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' }
 $asciiBad = 0
@@ -165,7 +171,7 @@ if ($asciiBad -eq 0) { Write-Ok "$($ps1Files.Count) .ps1 file(s) are pure ASCII"
 
 # ---- Check 2: bash -n syntax -----------------------------------------------
 
-Write-Section 'Check 2/8: bash -n syntax (*.sh)'
+Write-Section 'Check 2/10: bash -n syntax (*.sh)'
 $shFiles = @()
 foreach ($sub in @('hooks\bash', 'install', 'scripts')) {
     $dir = Join-Path $repoRoot $sub
@@ -193,7 +199,7 @@ if ($null -eq $bashExe) {
 
 # ---- Check 3: hook-pair parity ---------------------------------------------
 
-Write-Section 'Check 3/8: Hook-pair parity'
+Write-Section 'Check 3/10: Hook-pair parity'
 $psHooks = Get-ChildItem (Join-Path $repoRoot 'hooks\powershell') -Filter *.ps1 -File |
     ForEach-Object { $_.BaseName }
 $shHooks = Get-ChildItem (Join-Path $repoRoot 'hooks\bash') -Filter *.sh -File |
@@ -217,7 +223,7 @@ if ($parityBad -eq 0) { Write-Ok "$($psHooks.Count) hook pair(s) present on both
 
 # ---- Check 4: agent model aliases ------------------------------------------
 
-Write-Section 'Check 4/8: Agent model aliases'
+Write-Section 'Check 4/10: Agent model aliases'
 $agentFiles = Get-ChildItem (Join-Path $repoRoot 'agents') -Filter *.md -File
 $modelBad = 0
 foreach ($f in $agentFiles) {
@@ -240,7 +246,7 @@ if ($modelBad -eq 0) { Write-Ok "$($agentFiles.Count) agent(s) use a model alias
 
 # ---- Check 5: install-target counts ----------------------------------------
 
-Write-Section 'Check 5/8: Install-target counts'
+Write-Section 'Check 5/10: Install-target counts'
 $installPs1 = Join-Path $repoRoot 'install\install.ps1'
 $tmp = Join-Path $env:TEMP "sd-validate-$PID"
 $tmpNc = Join-Path $env:TEMP "sd-validate-nc-$PID"
@@ -401,7 +407,7 @@ try {
 
 # ---- Check 6: CHANGELOG [Unreleased] non-empty -----------------------------
 
-Write-Section 'Check 6/8: CHANGELOG [Unreleased] gate'
+Write-Section 'Check 6/10: CHANGELOG [Unreleased] gate'
 $changelog = Join-Path $repoRoot 'CHANGELOG.md'
 $lines = Get-Content -LiteralPath $changelog
 $start = -1
@@ -434,7 +440,7 @@ if ($start -lt 0) {
 
 # ---- Check 7: docs consistency ---------------------------------------------
 
-Write-Section 'Check 7/8: Docs consistency (published numbers vs disk)'
+Write-Section 'Check 7/10: Docs consistency (published numbers vs disk)'
 $manifestPath = Join-Path $repoRoot 'specwright.manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath)) {
     Write-FailMsg 'specwright.manifest.json not found at repo root'
@@ -650,7 +656,7 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
 
 # ---- Check 8: cross-file contract lint --------------------------------------
 
-Write-Section 'Check 8/8: Cross-file contract lint (commands / agents / skills)'
+Write-Section 'Check 8/10: Cross-file contract lint (commands / agents / skills)'
 $lintPs1 = Join-Path $scriptDir 'contract-lint.ps1'
 if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
     Write-FailMsg 'scripts/contract-lint.ps1 not found'
@@ -670,6 +676,7 @@ if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
     # both twins stay identical and neither learns about colours or [OK] tags.
     $clBlocks = 0
     $clWarns = 0
+    $clWarnsBudgeted = 0
     foreach ($row in @($lintOut)) {
         if ([string]::IsNullOrWhiteSpace($row)) { continue }
         $parts = $row.Split([char]9)
@@ -682,6 +689,11 @@ if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
         } else {
             Write-WarnMsg $text
             $clWarns++
+            # CL202 is a permanent-WARN ratchet by design (unrecognized MCP
+            # tool names) - never counted against the standing-warning budget
+            # below, or a legitimate new tool name would fail the build
+            # through a rule explicitly meant not to.
+            if ($parts[0] -cne 'CL202') { $clWarnsBudgeted++ }
         }
     }
     if ($lintExit -ge 2) {
@@ -689,12 +701,151 @@ if (-not (Test-Path -LiteralPath $lintPs1 -PathType Leaf)) {
         # is the failure mode this whole check exists to prevent.
         Write-FailMsg "contract-lint could not run (exit $lintExit)"
         Add-Failure "contract-lint: exit $lintExit"
-    } elseif ($clBlocks -eq 0) {
-        if ($clWarns -eq 0) {
-            Write-Ok 'no contract violations'
-        } else {
-            Write-Ok "no BLOCK violations ($clWarns warning(s) above)"
+    } else {
+        # Ratchet, not a ceiling: contractLint.warnBudget is the max standing
+        # WARN count (excluding CL202). Lowering it below actual requires
+        # lowering it in the SAME commit that resolves the warnings - never
+        # raise it to make a new warning pass quietly.
+        $warnBudget = 0
+        try {
+            $budgetManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            if ($null -ne $budgetManifest.contractLint.warnBudget) {
+                $warnBudget = [int]$budgetManifest.contractLint.warnBudget
+            }
+        } catch {}
+        if ($clBlocks -eq 0 -and $clWarnsBudgeted -le $warnBudget) {
+            if ($clWarns -eq 0) {
+                Write-Ok 'no contract violations'
+            } else {
+                Write-Ok "no BLOCK violations ($clWarns warning(s) above, $clWarnsBudgeted/$warnBudget standing-warning budget)"
+            }
+        } elseif ($clBlocks -eq 0) {
+            Write-FailMsg "standing-warning budget exceeded: $clWarnsBudgeted budgeted warning(s) > contractLint.warnBudget ($warnBudget)"
+            Add-Failure "contract-lint: warn budget $clWarnsBudgeted > $warnBudget"
         }
+    }
+}
+
+# ---- Check 9: root-level ad-hoc notes guard ---------------------------------
+
+Write-Section 'Check 9/10: Root-level ad-hoc notes guard'
+if (-not (Test-Path -LiteralPath $manifestPath)) {
+    Write-FailMsg 'specwright.manifest.json not found at repo root'
+    Add-Failure 'root-guard: manifest missing'
+} else {
+    $guardManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $guardPatterns = @($guardManifest.adHocNotesGuard.patterns)
+    $guardBad = 0
+    foreach ($item in (Get-ChildItem -LiteralPath $repoRoot -File)) {
+        foreach ($pat in $guardPatterns) {
+            if ($item.Name -like $pat) {
+                Write-FailMsg "$($item.Name) : matches ad-hoc notes pattern '$pat' - file review findings as a Jira issue instead (see CONTRIBUTING.md), then delete this file"
+                Add-Failure "root-guard: $($item.Name) matches $pat"
+                $guardBad++
+                break
+            }
+        }
+    }
+    if ($guardBad -eq 0) {
+        Write-Ok "no ad-hoc review-findings files at repo root ($($guardPatterns.Count) pattern(s) checked)"
+    }
+}
+
+# ---- Check 10: bash strict mode --------------------------------------------
+
+Write-Section 'Check 10/10: Bash strict mode (*.sh)'
+if (-not (Test-Path -LiteralPath $manifestPath)) {
+    Write-FailMsg 'specwright.manifest.json not found at repo root'
+    Add-Failure 'strict-mode: manifest missing'
+} else {
+    $strictManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $strictExceptions = @()
+    if ($strictManifest.bashStrictMode -and $strictManifest.bashStrictMode.exceptions) {
+        $strictExceptions = @($strictManifest.bashStrictMode.exceptions | ForEach-Object { $_.path })
+    }
+
+    $strictBad = 0
+    # A declared exception that no longer exists is a stale entry - fail it, or the
+    # list quietly grows into a blanket waiver.
+    foreach ($exc in $strictExceptions) {
+        if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $exc) -PathType Leaf)) {
+            Write-FailMsg "$exc : listed in bashStrictMode.exceptions but does not exist - remove the entry"
+            Add-Failure "strict-mode: stale exception $exc"
+            $strictBad++
+        }
+    }
+
+    # Scan only what git would track: tracked files plus untracked-but-not-ignored
+    # ones (--others --exclude-standard), so a gitignored tree such as
+    # node_modules/ cannot fail the check with a third-party script. Without git
+    # (not installed, or a tarball with no .git) fall back to a filesystem walk
+    # that prunes .git and node_modules. Mirrors list_strict_candidates in
+    # validate.sh. Returns repo-relative paths with forward slashes.
+    # git runs under a local 'Continue': with the script-wide 'Stop', Windows
+    # PowerShell 5.1 turns git's redirected stderr ("not a git repository") into
+    # a terminating error instead of a non-zero exit code.
+    $strictScope = 'filesystem walk, git unavailable'
+    $strictRels = @()
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & git -C $repoRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $strictScope = 'git ls-files'
+                $raw = (& git -C $repoRoot ls-files -z --cached --others --exclude-standard -- '*.sh' 2>$null) -join ''
+                $strictRels = @($raw -split "`0" | Where-Object { $_ })
+            }
+        } catch {
+            $strictScope = 'filesystem walk, git unavailable'
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+    }
+    if ($strictScope -ne 'git ls-files') {
+        $strictRels = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter '*.sh' -ErrorAction SilentlyContinue |
+            ForEach-Object { (Get-RelPath $_.FullName) -replace '\\', '/' } |
+            Where-Object { ('/' + $_) -notmatch '/(\.git|node_modules)/' })
+    }
+
+    $strictCount = 0
+    foreach ($rel in $strictRels) {
+        $shPath = Join-Path $repoRoot $rel
+        # A tracked file deleted from the working tree is still listed by
+        # --cached; there is nothing on disk to check.
+        if (-not (Test-Path -LiteralPath $shPath -PathType Leaf)) { continue }
+        if ($strictExceptions -contains $rel) { continue }
+        $strictCount++
+
+        # First statement = first line that is not blank, a comment, or the shebang.
+        $firstStmt = ''
+        foreach ($line in (Get-Content -LiteralPath $shPath)) {
+            if ($line -match '^\s*(#|$)') { continue }
+            $firstStmt = $line.TrimEnd("`r")
+            break
+        }
+        # Accepts any flag cluster carrying e, u and o (e.g. install.sh's -Eeuo).
+        # -cmatch: set flags are case-sensitive (-E is not -e).
+        $flags = ''
+        if ($firstStmt -cmatch '^set\s+-([A-Za-z]+)\s+pipefail\s*$') { $flags = $Matches[1] }
+        if (-not ($flags.Contains('e') -and $flags.Contains('u') -and $flags.Contains('o'))) {
+            $got = if ($firstStmt) { $firstStmt } else { '<none>' }
+            Write-FailMsg "$rel : first statement is not 'set -euo pipefail' (got: $got) - add it, or declare an exception with a reason in specwright.manifest.json bashStrictMode"
+            Add-Failure "strict-mode: $rel"
+            $strictBad++
+        }
+    }
+
+    # The repo always ships .sh files (hooks/bash, install, scripts), so an empty
+    # candidate list means the listing itself failed - never a vacuous pass.
+    if ($strictCount -eq 0 -and $strictBad -eq 0) {
+        Write-FailMsg "no .sh files found to check (scope: $strictScope) - the candidate listing failed"
+        Add-Failure 'strict-mode: empty candidate list'
+        $strictBad = 1
+    }
+
+    if ($strictBad -eq 0) {
+        Write-Ok "$strictCount .sh file(s) use set -euo pipefail ($($strictExceptions.Count) declared exception(s); scope: $strictScope)"
     }
 }
 

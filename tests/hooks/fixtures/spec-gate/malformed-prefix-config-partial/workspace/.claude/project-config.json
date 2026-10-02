@@ -1,0 +1,9 @@
+{
+  "spec": {
+    "dir": ".specs",
+    "indexFile": ".specs/index.md",
+    "prefixes": { "feature": "FEAT", "bug": "bug-lower!", "weird": "1START" }
+  },
+  "paths": { "protected": [".specs/constitution.md"] },
+  "hooks": { "specGate": { "enabled": true, "mode": "block" } }
+}

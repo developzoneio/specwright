@@ -19,28 +19,34 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
 |---|---|---|
 | No `.specs/FEAT-<arg>/` dir | `not-found` | Start Phase 1 |
 | `00-spec.md` exists, status=`draft` | `draft` | Present spec for Gate 1 |
-| status=`approved`, no `02-tasks.md` | `approved` | Start Phase 3 |
+| status=`approved`, no `02-tasks.md`, no `## Impact analysis (sd-code-explorer)` in `03-decisions.md` | `approved` | Start Phase 2 |
+| status=`approved`, no `02-tasks.md`, impact analysis present | `impact-mapped` | Start Phase 3 |
+| status=`approved`, `02-tasks.md` exists | `plan-drafted` | Present plan for Gate 2 |
 | `02-tasks.md` exists, unchecked tasks remain | `in-progress` | Resume Phase 4 at next unchecked task |
 | All tasks checked, no integration pass | `tasks-complete` | Start Phase 5 |
 | status=`done` | `done` | Print summary, exit |
 | status=`archived`, spawned children (has `spawns` links) | `umbrella` | Print the child IDs + `/sd:feature <child-arg>` for each, in dependency order; exit |
 | status=`archived` | `archived` | Print archived notice, exit |
 
+"Checked" and "unchecked" mean the task's check-off marker as defined in the "Check-off marker"
+section of the **sd-atomic-task-format** skill - the one definition; do not invent a marker. Task
+rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
+frontmatter first and is never resumed from its task markers.
+
 ---
 
 ## Phase 0 - Bootstrap (always runs)
 
-1. Read `CLAUDE.md` at project root. If missing, WARN and continue - print "No `CLAUDE.md` found;
-   stack conventions may be incomplete." (the constitution is the binding Layer-2 contract, not
-   `CLAUDE.md`).
-2. Read `.specs/constitution.md`. If `.specs/` or this file is missing, STOP: "No `.specs/` found -
-   run `/sd:setup` first."
-3. Read `.claude/project-config.json` (for `commands.*`, `spec.*`, `ticket.*`, `workflow.*`). If
-   missing, STOP with the same message. If present but fails to parse as JSON, STOP:
-   "`.claude/project-config.json` failed to parse - fix it or re-run `/sd:setup`."
-4. Read `.specs/index.md` for existing spec states. If missing, STOP with the same
-   "run `/sd:setup` first" message.
-5. Determine state from table above.
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. Determine state from table above.
+3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 2 step 0, Phase 3 step 0, Gate 2 `no-split` and Phase 4 step 2; this file
+   names only rule IDs and trigger inputs. If that file is unreadable, STOP: "specwright install
+   incomplete - model escalation skill not found under `~/.claude/skills/sd/`. Re-run the
+   installer."
 
 ---
 
@@ -70,12 +76,9 @@ STOP. Present the spec to the user. Ask:
 
 ## Phase 2 - Impact analysis
 
-0. **Complexity escalation check.** Read the `complexity` frontmatter field of
-   `.specs/FEAT-<arg>/00-spec.md`. If it is `L`, invoke the explorer in step 1 with a model
-   override to `sonnet` (overriding its `haiku` default) - a create-time `L` estimate is exactly
-   the multi-subsystem case where the shallow haiku impact map degrades. For `S` / `M`, use the
-   default model. Aliases only - never a full model ID.
-1. Invoke `sd-code-explorer` (model: default, or `sonnet` per step 0) with:
+0. **Model escalation check.** Apply rule `ESC-FEAT-02` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
+1. Invoke `sd-code-explorer` (model: default, or as resolved by step 0) with:
    - `TASK = impact-map`
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
    - `OUTPUT_TARGET = .specs/FEAT-<arg>/03-decisions.md`
@@ -90,11 +93,9 @@ No gate here - impact analysis is informational. User reviews it in Phase 3.
 
 ## Phase 3 - Plan + tasks
 
-0. **Complexity escalation check.** Read the `complexity` frontmatter field of
-   `.specs/FEAT-<arg>/00-spec.md`. If it is `L`, invoke the architect in step 1 with a model
-   override to `opus` (overriding its `sonnet` default) - single-pass planning is where large scope
-   degrades non-linearly. For `S` / `M`, use the default model. Aliases only - never a full model ID.
-1. Invoke `sd-spec-architect` (model: default, or `opus` per step 0) with:
+0. **Model escalation check.** Apply rule `ESC-FEAT-03` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
+1. Invoke `sd-spec-architect` (model: default, or as resolved by step 0) with:
    - `TASK = plan`
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT = .specs/FEAT-<arg>/03-decisions.md`
@@ -150,11 +151,10 @@ If the architect returned a **decompose proposal**, ask:
   never edited to match the split**. Print the child IDs and tell the user to run `/sd:feature
   <child-arg>` on each, respecting the dependency order. Exit this workflow.
 - `no-split <reason>` -> the user judges the work legitimately atomic (large but cohesive, no clean
-  partition). Apply the **sanctioned model escalation** if not already applied: the plan was written
-  by the escalated `opus` architect (Phase 3 step 0) only if `complexity` was `L`; if the estimate
-  under-called it, re-invoke Phase 3 once with the architect overridden to `opus`. Then treat as
-  Face A `yes`: set status=`in-progress`, proceed to Phase 4. Log the no-split decision and its
-  reason to `05-retro.md`.
+  partition). Apply rule `ESC-FEAT-03b` of **sd-model-escalation** - trigger input: whether
+  `ESC-FEAT-03` fired for this plan in Phase 3 step 0. Then treat as Face A `yes`: set
+  status=`in-progress`, proceed to Phase 4. Log the no-split decision and its reason to
+  `05-retro.md`.
 - `refine` -> `sd-spec-architect` `TASK = refine`; loop back through the self-assessment.
 - `abort` -> set status=`archived`, exit.
 
@@ -171,7 +171,11 @@ Process tasks from `02-tasks.md` in dependency order.
 For each unchecked task:
 
 1. **Pre-flight**: re-read `00-spec.md`, the specific task block, and the constitution sections cited under the spec's "Constitution check".
-2. **Invoke `sd-implementer`** with:
+2. **Model escalation check, then the implementer.** Before this task's first implementer call,
+   apply rules `ESC-FEAT-04` and `ESC-FEAT-04b` of **sd-model-escalation** (read in Phase 0).
+   Trigger inputs: the task block's `Estimated complexity` and `Reversibility` fields. The decision
+   also covers this task's re-invocations in step 5; its retro line precedes the task's step 7 line.
+   **Invoke `sd-implementer`** (model: default, or as resolved above) with:
    - `TASK_DETAILS = <full task block>`
    - `SPEC_REF = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT_REF = .specs/FEAT-<arg>/03-decisions.md`
@@ -188,7 +192,8 @@ For each unchecked task:
      NOT hack-edit `02-tasks.md`. Enter **Gate Re-plan** below. This is distinct from an ordinary
      in-task adjustment, which the implementer handles within its own scope (see `sd-replan-loop` for
      the boundary).
-6. **Check off** the task in `02-tasks.md`.
+6. **Check off** the task in `02-tasks.md`: set its `Status` line to `done`, per the "Check-off
+   marker" section of the **sd-atomic-task-format** skill. Change nothing else in the block.
 7. Log a one-line summary to `.specs/FEAT-<arg>/05-retro.md`: `T<NN>: <status> - <note>`.
 
 > **Why no per-task reviewer?** Each reviewer invocation spawns a sonnet-class subagent that reloads the full context (CLAUDE.md + constitution + spec + changed files). For N tasks, that is N expensive calls. The main thread self-check catches scope violations and test failures. Constitution compliance and cross-task issues are caught more efficiently by the batch review in Phase 5.
@@ -300,6 +305,9 @@ Treat findings:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Phase 0 always runs. No exceptions, even on resume.
 - Gates 1-3 are HARD. The workflow refuses to proceed without explicit approval.
 - **Gate Complexity is a face of Gate 2, not a fourth gate.** It fires ONLY when the plan is over
@@ -312,9 +320,10 @@ Treat findings:
   `sd-replan-loop` skill; `02-tasks.md` is re-planned only through it - never by a silent hand-edit.
   Any revision is recorded append-only in `01-plan.md`'s `## Revisions` log with the original plan
   prose left intact.
-- **Model escalation is aliases only.** A create-time `complexity: L` bumps the explorer to
-  `sonnet` (Phase 2) and the architect to `opus` (Phase 3). Never introduce a full model ID; never
-  edit an agent's `model:` frontmatter - the override is per-invocation, from the main thread.
+- **Model escalation follows `sd-model-escalation` only.** Rules `ESC-FEAT-02`, `ESC-FEAT-03`,
+  `ESC-FEAT-03b`, `ESC-FEAT-04` and `ESC-FEAT-04b` are applied where named above; the ladder,
+  precedence, `models.escalation` config and the `05-retro.md` line format live in the skill and
+  are not restated here.
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.

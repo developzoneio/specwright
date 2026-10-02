@@ -65,7 +65,7 @@ Run these from the project root against `<metrics.path>` (Bash form; use `Select
 | Well-formed lines | lines matching `^\{"ts":".*","event":"` and ending in `}` |
 | Skipped lines | total minus well-formed |
 | Events by kind | `grep -c '"event":"gate"'`, `'"event":"spec_transition"'`, `'"event":"subagent_stop"'` |
-| Gate decisions by kind | `grep -c '"gate":"verify"'`, `'"gate":"protected"'`, `'"gate":"code-edit"'` |
+| Gate decisions by kind | `grep -c '"gate":"verify"'`, `'"gate":"protected"'`, `'"gate":"code-edit"'`, `'"gate":"shell-write"'` |
 | Decision ratio | `grep -c '"decision":"allow"'`, `'"decision":"warn"'`, `'"decision":"block"'` |
 | Extensions | `grep -o '"ext":"[^"]*"' | sort | uniq -c | sort -rn` |
 | Per-spec | `grep -o '"spec_id":"[^"]*"' | sort | uniq -c | sort -rn` |
@@ -78,6 +78,9 @@ Field notes that change how a number must be read:
   extension. Extension counts therefore do not sum to the `code-edit` total; never present them as
   if they do.
 - `stale` is a per-event flag, `0` or `1` - not a count of retros. See Friction below.
+- `shell-write` (SW-79) is a `block` recorded when a Bash / PowerShell command visibly wrote a
+  protected path or the spec index - the model reached for a shell instead of the Edit tool. Its
+  `spec_id` and `phase` are always `-`. List the row only when the count is non-zero.
 - `spec_id` and `phase` are `-` when no spec is in scope. Treat `-` as its own bucket; do not drop it
   and do not rank it as a spec.
 
@@ -167,6 +170,7 @@ summary covers the live log only.
 | verify | ... |
 | protected | ... |
 | code-edit | ... |
+| shell-write | ... |   (only when non-zero)
 
 Extensions seen on code-edit gates: .cs (12), .ts (4)
 

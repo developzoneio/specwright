@@ -1,0 +1,18 @@
+{
+  "note": "the skill table carries ESC-ALPHA-01b that the manifest does not, and the manifest carries ESC-ALPHA-01c that the skill does not - neither artifact may hold a rule the other lacks",
+  "findings": [
+    {
+      "rule": "CL602",
+      "severity": "BLOCK",
+      "file": "skills/sd-model-escalation/SKILL.md",
+      "anchor": "seed",
+      "seed": "skill-only-row"
+    },
+    {
+      "rule": "CL602",
+      "severity": "BLOCK",
+      "file": "specwright.manifest.json",
+      "anchor": "file"
+    }
+  ]
+}

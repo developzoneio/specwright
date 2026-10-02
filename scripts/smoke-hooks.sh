@@ -6,7 +6,10 @@
 # "did not crash". Mirror of scripts/smoke-hooks.ps1 (runs the PowerShell
 # hook twins). Both must agree on the routed workflow for prompt-router.
 #
-# Exit 0 = all cases passed; 1 = at least one failed.
+# Exit 0 = all cases passed; 1 = at least one failed; 2 = cannot run (missing
+# dependency on the runner - reported as such, never blamed on a hook).
+
+set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
@@ -42,6 +45,17 @@ assert_empty() {
     local desc="$1" haystack="$2"
     if [[ -z "$haystack" ]]; then ok "$desc : empty output"; else bad "$desc : expected empty, got: ${haystack:0:200}"; fi
 }
+
+# ---- preflight --------------------------------------------------------------
+# Hooks exit 0 silently without jq so they never block a user. That same silence
+# would make every assertion below fail and blame the hooks for a dependency the
+# RUNNER is missing - so refuse to start instead, and say which dependency.
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${c_red}[FAIL]${c_reset} jq is required to run the hook smoke suite - install jq." >&2
+    echo "         This is a missing runner dependency, not a hook failure." >&2
+    exit 2
+fi
 
 # ---- fixture repo -----------------------------------------------------------
 
@@ -92,8 +106,10 @@ run_hook() {
     local hook="$1" payload="$2"
     local out_file err_file
     out_file="$(mktemp)"; err_file="$(mktemp)"
-    printf '%s' "$payload" | bash "$hook" >"$out_file" 2>"$err_file"
-    CODE=$?
+    # Capture the exit code explicitly: under set -e a non-zero hook exit would
+    # otherwise abort the suite instead of being reported by assert_exit0.
+    CODE=0
+    printf '%s' "$payload" | bash "$hook" >"$out_file" 2>"$err_file" || CODE=$?
     STDOUT="$(cat "$out_file")"
     STDERR="$(cat "$err_file")"
     rm -f "$out_file" "$err_file"
@@ -107,6 +123,15 @@ run_hook "$repo_root/hooks/bash/prompt-router.sh" "$payload"
 assert_exit0 "prompt-router keyword match" "$CODE"
 assert_contains "prompt-router keyword match" "$STDOUT" "<context-router>"
 assert_contains "prompt-router keyword match" "$STDOUT" "/sd:bug"
+
+# ---- session-context: in-progress spec surfaced at session start ------------
+
+section "session-context (bash): startup surfaces the in-progress spec"
+payload="$(printf '{"source":"startup","cwd":"%s"}' "$fixture")"
+run_hook "$repo_root/hooks/bash/session-context.sh" "$payload"
+assert_exit0 "session-context startup" "$CODE"
+assert_contains "session-context startup" "$STDOUT" "<session-context>"
+assert_contains "session-context startup" "$STDOUT" "FEAT-TEST-001"
 BASH_ROUTER_OUT="$STDOUT"
 
 # ---- spec-gate: (a) code edit with in-progress spec -> allow ----------------
@@ -129,6 +154,7 @@ run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
 assert_exit0 "spec-gate (b) header-only, mode=block" "$CODE"
 assert_contains "spec-gate (b) header-only, mode=block" "$STDOUT" '"decision":"block"'
 assert_contains "spec-gate (b) header-only, mode=block" "$STDOUT" '"permissionDecision":"deny"'
+assert_contains "spec-gate (b) header-only, mode=block" "$STDOUT" '"hookEventName":"PreToolUse"'
 
 section "spec-gate (bash): (b) header-only in-progress text -> warn (mode=warn)"
 python_free_sed() { sed -i.bak 's/"mode": "block"/"mode": "warn"/' "$config_block" && rm -f "$config_block.bak"; }
@@ -176,33 +202,29 @@ new_content='| ID | Type | Status | Created | Title |
 | FEAT-big | feature | archived | 2026-08-01 | Big oversized thing |
 | FEAT-big-partA | feature | draft | 2026-08-09 | Part A |'
 payload="$(jq -n --arg cwd "$split_fixture" --arg fp ".specs/index.md" --arg newc "$new_content" \
-    '{tool_name:"Write",cwd:$cwd,tool_input:{file_path:$fp,content:$newc}}' 2>/dev/null)"
+    '{tool_name:"Write",cwd:$cwd,tool_input:{file_path:$fp,content:$newc}}')"
 
-if [[ -n "$payload" ]]; then
-    section "spec-gate (bash): (e) allowed edit with archived parent + registered child -> complexity split metric"
-    cat > "$split_fixture/.claude/project-config.json" <<'JSON'
+section "spec-gate (bash): (e) allowed edit with archived parent + registered child -> complexity split metric"
+cat > "$split_fixture/.claude/project-config.json" <<'JSON'
 {"spec":{"dir":".specs","indexFile":".specs/index.md"},"paths":{"protected":[]}}
 JSON
-    run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
-    assert_exit0 "spec-gate (e) complexity split, allowed" "$CODE"
-    events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null)"
-    assert_contains "spec-gate (e) complexity split, allowed" "$events" '"gate":"complexity","decision":"split"'
-    assert_contains "spec-gate (e) complexity split, allowed" "$events" '"spec_id":"FEAT-big"'
+run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
+assert_exit0 "spec-gate (e) complexity split, allowed" "$CODE"
+events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null || true)"
+assert_contains "spec-gate (e) complexity split, allowed" "$events" '"gate":"complexity","decision":"split"'
+assert_contains "spec-gate (e) complexity split, allowed" "$events" '"spec_id":"FEAT-big"'
 
-    section "spec-gate (bash): (f) blocked edit (default protected index.md) -> no complexity split metric"
-    rm -f "$split_fixture/.specs/_metrics/events.jsonl"
-    rm -f "$split_fixture/.claude/project-config.json"
-    run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
-    assert_exit0 "spec-gate (f) complexity split, blocked" "$CODE"
-    assert_contains "spec-gate (f) complexity split, blocked" "$STDOUT" '"decision":"block"'
-    events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null)"
-    if [[ "$events" == *'"gate":"complexity"'* ]]; then
-        bad "spec-gate (f) complexity split, blocked : split metric wrongly recorded for a denied edit"
-    else
-        ok "spec-gate (f) complexity split, blocked : no split metric recorded"
-    fi
+section "spec-gate (bash): (f) blocked edit (default protected index.md) -> no complexity split metric"
+rm -f "$split_fixture/.specs/_metrics/events.jsonl"
+rm -f "$split_fixture/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/spec-gate.sh" "$payload"
+assert_exit0 "spec-gate (f) complexity split, blocked" "$CODE"
+assert_contains "spec-gate (f) complexity split, blocked" "$STDOUT" '"decision":"block"'
+events="$(cat "$split_fixture/.specs/_metrics/events.jsonl" 2>/dev/null || true)"
+if [[ "$events" == *'"gate":"complexity"'* ]]; then
+    bad "spec-gate (f) complexity split, blocked : split metric wrongly recorded for a denied edit"
 else
-    echo "  [SKIP] jq not available - cannot build (e)/(f) payload"
+    ok "spec-gate (f) complexity split, blocked : no split metric recorded"
 fi
 rm -rf "$split_fixture"
 
@@ -219,6 +241,100 @@ section "subagent-retro (bash): second run within debounce window is silent"
 run_hook "$repo_root/hooks/bash/subagent-retro.sh" "$payload"
 assert_exit0 "subagent-retro second run (debounced)" "$CODE"
 assert_empty "subagent-retro second run (debounced)" "$STDOUT"
+
+# ---- precompact-state -> session-context: state survives a compaction -------
+
+section "precompact-state (bash): records the spec named in the transcript"
+printf -- '---\nid: FEAT-TEST-001\ntype: feature\nstatus: in-progress\n---\n' \
+    > "$fixture/.specs/FEAT-TEST-001/00-spec.md"
+printf '%s\n' '{"type":"user","message":{"content":"resume FEAT-TEST-001"}}' > "$fixture/transcript.jsonl"
+payload="$(printf '{"session_id":"smoke-compact","trigger":"manual","cwd":"%s","transcript_path":"%s/transcript.jsonl"}' "$fixture" "$fixture")"
+run_hook "$repo_root/hooks/bash/precompact-state.sh" "$payload"
+assert_exit0 "precompact-state manual" "$CODE"
+assert_empty "precompact-state manual" "$STDOUT"
+pointer="$fixture/.claude/.hookstate/precompact-smoke-compact.json"
+assert_contains "precompact-state manual: pointer" "$(cat "$pointer" 2>/dev/null)" "FEAT-TEST-001"
+
+section "session-context (bash): compact re-injects the active spec"
+payload="$(printf '{"session_id":"smoke-compact","source":"compact","cwd":"%s"}' "$fixture")"
+run_hook "$repo_root/hooks/bash/session-context.sh" "$payload"
+assert_exit0 "session-context compact" "$CODE"
+assert_contains "session-context compact" "$STDOUT" "Active spec before compaction (trigger: manual): FEAT-TEST-001"
+assert_contains "session-context compact" "$STDOUT" "/sd:feature TEST-001"
+
+# ---- stop-gate: a skipped HARD gate blocks the stop, once (SW-69) -----------
+
+# Its own workspace: the hook is opt-in. The project root must come from cwd,
+# not from a CLAUDE_PROJECT_DIR the runner inherited.
+saved_project_dir="${CLAUDE_PROJECT_DIR-}"
+unset CLAUDE_PROJECT_DIR
+sg="$fixture/stop-gate-ws"
+mkdir -p "$sg/.claude" "$sg/.specs/BUG-SMOKE-1"
+printf -- '---
+id: BUG-SMOKE-1
+type: bug
+status: approved
+---
+
+## Reproduction
+
+1. <<step 1>>
+'     > "$sg/.specs/BUG-SMOKE-1/00-spec.md"
+printf '# Decisions
+' > "$sg/.specs/BUG-SMOKE-1/03-decisions.md"
+printf '%s
+' '{"type":"user","message":{"content":"continue BUG-SMOKE-1"}}' > "$sg/transcript.jsonl"
+payload="$(printf '{"session_id":"smoke-stop","cwd":"%s","transcript_path":"%s/transcript.jsonl","stop_hook_active":false}' "$sg" "$sg")"
+
+section "stop-gate (bash): off by default - silent"
+printf '%s
+' '{"spec":{"dir":".specs"}}' > "$sg/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "$payload"
+assert_exit0 "stop-gate default off" "$CODE"
+assert_empty "stop-gate default off" "$STDOUT"
+
+section "stop-gate (bash): enabled, skipped Gate 2 - blocks"
+printf '%s
+' '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}' > "$sg/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "$payload"
+assert_exit0 "stop-gate skipped gate" "$CODE"
+assert_contains "stop-gate skipped gate" "$STDOUT" '"decision":"block"'
+assert_contains "stop-gate skipped gate" "$STDOUT" "Gate 2 (Reproduction confirmed)"
+
+section "stop-gate (bash): re-fire with stop_hook_active - silent"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "${payload/\"stop_hook_active\":false/\"stop_hook_active\":true}"
+assert_exit0 "stop-gate re-fire" "$CODE"
+assert_empty "stop-gate re-fire" "$STDOUT"
+
+# ---- handoff-integrity: an edit outside the ready task's Files is flagged (SW-70)
+
+# Its own workspace, for the same reason as stop-gate: the hook is opt-in.
+hi="$fixture/handoff-ws"
+mkdir -p "$hi/.claude" "$hi/.specs/FEAT-SMOKE-1"
+printf -- '---\nid: FEAT-SMOKE-1\ntype: feature\nstatus: in-progress\n---\n' > "$hi/.specs/FEAT-SMOKE-1/00-spec.md"
+printf -- '### T01 - Add service\n\n- **Files**: src/service.ts\n- **Depends on**: none\n- **Status**: open\n' \
+    > "$hi/.specs/FEAT-SMOKE-1/02-tasks.md"
+printf '%s\n' '{"type":"user","message":{"content":"/sd:feature SMOKE-1 (FEAT-SMOKE-1)"}}' > "$hi/transcript.jsonl"
+payload="$(printf '{"session_id":"smoke-ptu","cwd":"%s","transcript_path":"%s/transcript.jsonl","tool_name":"Edit","tool_input":{"file_path":"%s/src/other.ts"}}' "$hi" "$hi" "$hi")"
+
+section "handoff-integrity (bash): off by default - silent"
+printf '%s\n' '{"spec":{"dir":".specs"}}' > "$hi/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/handoff-integrity.sh" "$payload"
+assert_exit0 "handoff-integrity default off" "$CODE"
+assert_empty "handoff-integrity default off" "$STDOUT"
+
+section "handoff-integrity (bash): enabled, out-of-scope edit - flagged"
+printf '%s\n' '{"spec":{"dir":".specs"},"hooks":{"handoffIntegrity":{"enabled":true}}}' > "$hi/.claude/project-config.json"
+run_hook "$repo_root/hooks/bash/handoff-integrity.sh" "$payload"
+assert_exit0 "handoff-integrity out of scope" "$CODE"
+assert_contains "handoff-integrity out of scope" "$STDOUT" '"decision":"block"'
+assert_contains "handoff-integrity out of scope" "$STDOUT" "src/other.ts is outside the declared Files"
+
+section "handoff-integrity (bash): in-scope edit - silent"
+run_hook "$repo_root/hooks/bash/handoff-integrity.sh" "${payload/other.ts/service.ts}"
+assert_exit0 "handoff-integrity in scope" "$CODE"
+assert_empty "handoff-integrity in scope" "$STDOUT"
+[[ -n "$saved_project_dir" ]] && export CLAUDE_PROJECT_DIR="$saved_project_dir"
 
 # ---- summary -----------------------------------------------------------------
 

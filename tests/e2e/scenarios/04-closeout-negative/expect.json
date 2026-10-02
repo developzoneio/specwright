@@ -1,4 +1,5 @@
 [
+  { "type": "permission-denied", "tool": "Edit|MultiEdit|Write", "path": ".specs/index.md" },
   { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-closeout-demo\\s*\\|\\s*feature\\s*\\|\\s*in-progress" },
   { "type": "file-not-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-closeout-demo\\s*\\|\\s*feature\\s*\\|\\s*done" },
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"verify\",\"decision\":\"block\"" }

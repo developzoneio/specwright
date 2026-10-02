@@ -1,0 +1,1 @@
+{"exitCode":0,"emitted":true,"stale":[{"id":"FEAT-TEST-001","reason":"missing","ageMinutes":null,"thresholdMinutes":null}],"lessons":[],"stderr":"","events":[{"ts":"<TS>","spec_id":"FEAT-TEST-001","phase":"in-progress","event":"subagent_stop","stale":1}]}

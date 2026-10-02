@@ -8,10 +8,16 @@
       1. Create a fresh temp workspace PER IMPLEMENTATION and copy the
          case's workspace/ tree into it (fresh copy means hook state such
          as the subagent-retro debounce file cannot leak across runs).
-      2. Apply setup.json actions (currently: backdating file mtimes).
-      3. Substitute {{CWD}} in input.json with the workspace path
-         (forward slashes; both implementations accept them) and pipe the
-         payload into the implementation on stdin.
+      2. Apply setup.json actions (backdating file mtimes, planting files).
+      3. Substitute {{ROOT}} in input.json with the workspace path and
+         {{CWD}} with the session cwd (forward slashes; both implementations
+         accept them) and pipe the payload into the implementation on stdin.
+         The session cwd is the workspace unless setup.json names a `cwd`
+         subdirectory (SW-78). The child environment never inherits
+         CLAUDE_PROJECT_DIR; setup.json `env` sets it (or any other variable)
+         per case, with {{ROOT}} substituted. setup.json `crlfJq: true` runs
+         the bash side with a jq shim that writes CRLF, as a native Windows
+         jq.exe does (see New-CrlfJqShim).
       4. Normalize what the hook did into a small decision object.
       5. Assert bash decision == pwsh decision == expected.json golden.
 
@@ -119,15 +125,31 @@ function New-CaseWorkspace {
     return $ws
 }
 
+function Get-CaseSetup {
+    param([string]$CaseDir)
+    $setupPath = Join-Path $CaseDir 'setup.json'
+    if (-not (Test-Path -LiteralPath $setupPath)) { return $null }
+    return (Get-Content -LiteralPath $setupPath -Raw | ConvertFrom-Json)
+}
+
+# Variables the hooks read from the environment. Stripped from every child so
+# a runner started inside a Claude Code session (which exports
+# CLAUDE_PROJECT_DIR) cannot point the hooks at the real repo; a case that
+# wants one sets it through setup.json `env`.
+$script:scrubbedEnv = @('CLAUDE_PROJECT_DIR')
+
 function Invoke-HookProcess {
     param(
         [string]$Exe,
         [string[]]$ProcArgs,
-        [string]$Payload
+        [string]$Payload,
+        [hashtable]$Env = @{}
     )
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = $Exe
     foreach ($a in $ProcArgs) { $psi.ArgumentList.Add($a) }
+    foreach ($name in $script:scrubbedEnv) { [void]$psi.Environment.Remove($name) }
+    foreach ($name in $Env.Keys) { $psi.Environment[$name] = [string]$Env[$name] }
     $psi.RedirectStandardInput  = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
@@ -212,6 +234,39 @@ function Read-NormalizedEventLines {
     return , @($events)
 }
 
+# SW-78: a hook that trusted an off-root cwd created .specs/ or .claude/ state
+# directories inside it. Lists whichever of the two exist under the session
+# cwd; the caller diffs before/after so fixture-planted ones do not count.
+function Get-NestedStateDirs {
+    param([string]$CwdPath)
+    $found = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in @('.specs', '.claude')) {
+        if (Test-Path -LiteralPath (Join-Path $CwdPath $name) -PathType Container) { $found.Add($name) }
+    }
+    return $found.ToArray()
+}
+
+# SW-68: the PreCompact pointers left in .claude/.hookstate/, read BEFORE the
+# caller deletes the workspace. Sorted by file name so the decision object is
+# stable; an unparseable file keeps its name and is flagged, never dropped.
+function Get-PrecompactPointers {
+    param([string]$Ws)
+    $dir = Join-Path $Ws '.claude/.hookstate'
+    $found = [System.Collections.Generic.List[object]]::new()
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { return , @() }
+    foreach ($f in (Get-ChildItem -LiteralPath $dir -File -Filter 'precompact-*.json' | Sort-Object Name)) {
+        $specId = '<UNPARSEABLE>'
+        $trigger = '<UNPARSEABLE>'
+        try {
+            $obj = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $specId = [string]$obj.specId
+            $trigger = [string]$obj.trigger
+        } catch { }
+        $found.Add([pscustomobject][ordered]@{ file = $f.Name; specId = $specId; trigger = $trigger })
+    }
+    return , @($found)
+}
+
 function Get-CaseEvents {
     param([string]$Ws)
     return Read-NormalizedEventLines -Path (Get-MetricsEventsPath -Ws $Ws)
@@ -233,28 +288,88 @@ function Invoke-HookImpl {
         [string]$CaseDir
     )
     $ws = New-CaseWorkspace -CaseDir $CaseDir
+    $jqShimDir = $null
     try {
         $wsForward = $ws.Replace('\', '/')
+        $setup = Get-CaseSetup -CaseDir $CaseDir
+
+        # Session cwd (SW-78): the workspace root unless the case names a
+        # subdirectory. The subdirectory must come from the fixture's own
+        # workspace/ tree - the runner never creates it, so the nested-state
+        # check below can tell fixture content from hook output.
+        $cwdForward = $wsForward
+        $nestedBefore = @()
+        if ($null -ne $setup -and -not [string]::IsNullOrWhiteSpace([string]$setup.cwd)) {
+            $cwdForward = $wsForward + '/' + ([string]$setup.cwd).Trim('/')
+            $nestedBefore = @(Get-NestedStateDirs -CwdPath $cwdForward)
+        }
+
+        $envMap = @{}
+        if ($null -ne $setup -and $null -ne $setup.env) {
+            foreach ($prop in $setup.env.PSObject.Properties) {
+                $envMap[$prop.Name] = ([string]$prop.Value).Replace('{{ROOT}}', $wsForward)
+            }
+        }
+
         $inputPath = Join-Path $CaseDir 'input.json'
-        $payload = (Get-Content -LiteralPath $inputPath -Raw).Replace('{{CWD}}', $wsForward)
+        $payload = (Get-Content -LiteralPath $inputPath -Raw).Replace('{{ROOT}}', $wsForward).Replace('{{CWD}}', $cwdForward)
         if ($Impl -eq 'bash') {
-            $run = Invoke-HookProcess -Exe $script:bashExe -ProcArgs @($HookScript) -Payload $payload
+            if ($null -ne $setup -and $setup.crlfJq -eq $true) {
+                $jqShimDir = New-CrlfJqShim
+                $envMap['PATH'] = $jqShimDir + [System.IO.Path]::PathSeparator + $env:PATH
+            }
+            $run = Invoke-HookProcess -Exe $script:bashExe -ProcArgs @($HookScript) -Payload $payload -Env $envMap
         } else {
-            $run = Invoke-HookProcess -Exe 'pwsh' -ProcArgs @('-NoProfile', '-File', $HookScript) -Payload $payload
+            $run = Invoke-HookProcess -Exe 'pwsh' -ProcArgs @('-NoProfile', '-File', $HookScript) -Payload $payload -Env $envMap
         }
         $events = Get-CaseEvents -Ws $ws
         $rotated = Get-CaseRotatedEvents -Ws $ws
+        $pointers = Get-PrecompactPointers -Ws $ws
+        $nestedCreated = @()
+        if ($cwdForward -ne $wsForward) {
+            $nestedCreated = @(Get-NestedStateDirs -CwdPath $cwdForward | Where-Object { $nestedBefore -notcontains $_ })
+        }
         return [pscustomobject]@{
             ExitCode      = $run.ExitCode
             Stdout        = $run.Stdout
             Stderr        = $run.Stderr
             Events        = $events
             RotatedEvents = $rotated
+            Pointers      = $pointers
+            NestedCreated = $nestedCreated
             Workspace     = $ws
         }
     } finally {
         Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue
+        if ($jqShimDir) { Remove-Item -LiteralPath $jqShimDir -Recurse -Force -ErrorAction SilentlyContinue }
     }
+}
+
+# setup.json `crlfJq: true` puts this shim first on the bash child's PATH. It
+# reproduces what a bash hook sees from a native Windows jq.exe under Git Bash:
+# every output line ends in CRLF except the last, whose CR Git Bash's $(...)
+# drops. The CI runners' jq writes LF, so without the shim a hook that trusts
+# jq's line endings passes everywhere but a user's Windows machine. The shim
+# normalizes first (a local jq.exe may already write CRLF), and uses awk, not
+# sed, because BSD sed (macOS) has no \r escape. pipefail keeps jq's exit
+# status, which `jq -e` callers test.
+function New-CrlfJqShim {
+    # The shim drops ITS OWN directory from PATH before calling jq, not "the
+    # first entry": the Git Bash launcher may put its own dirs ahead of ours,
+    # and dropping the wrong one would make the shim call itself forever.
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ('sd-jqshim-' + [System.Guid]::NewGuid().ToString('N').Substring(0, 12))
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    $shim = @(
+        '#!/usr/bin/env bash'
+        'set -o pipefail'
+        'self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
+        'p=":${PATH}:"; p="${p//:${self}:/:}"; p="${p#:}"; PATH="${p%:}"'
+        'jq "$@" | awk ''{ sub(/\r$/, "") } NR > 1 { printf "%s\r\n", prev } { prev = $0 } END { if (NR > 0) print prev }'''
+    ) -join "`n"
+    $shimPath = Join-Path $dir 'jq'
+    [System.IO.File]::WriteAllText($shimPath, $shim + "`n")
+    if (-not $IsWindows) { & chmod +x $shimPath }
+    return $dir
 }
 
 function Test-EventsLeakNoPath {
@@ -298,13 +413,19 @@ function ConvertTo-SpecGateDecision {
             if ($obj.decision) { $decision = [string]$obj.decision }
             if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.permissionDecision) {
                 $permission = [string]$obj.hookSpecificOutput.permissionDecision
+                # Without hookEventName the CLI drops the whole block, and the
+                # deny stops overriding an allow rule (SW-80). No golden carries
+                # this value, so a hook that omits the field fails every case.
+                if ($obj.hookSpecificOutput.hookEventName -ne 'PreToolUse') {
+                    $permission = 'MISSING-HOOK-EVENT-NAME'
+                }
             }
             # The human-readable reason is duplicated into both schema halves by
             # both implementations; if the two copies ever disagree the object
             # must not silently keep one of them.
             $topReason = if ($obj.reason) { [string]$obj.reason } else { $null }
-            $nestedReason = if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.reason) {
-                [string]$obj.hookSpecificOutput.reason
+            $nestedReason = if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.permissionDecisionReason) {
+                [string]$obj.hookSpecificOutput.permissionDecisionReason
             } else { $null }
             if ($topReason -ne $nestedReason) {
                 $reason = 'REASON-MISMATCH-BETWEEN-SCHEMA-HALVES'
@@ -414,10 +535,115 @@ function ConvertTo-SubagentRetroDecision {
     }
 }
 
+function ConvertTo-SessionContextDecision {
+    param($Run)
+    $source = $null
+    $constitution = $null
+    # In-progress specs are kept in EMISSION ORDER, not sorted: both
+    # implementations list index rows in file order, and a divergence in that
+    # order is a real parity failure (same reasoning as subagent-retro lessons).
+    $inProgress = [System.Collections.Generic.List[object]]::new()
+    # The active-spec section (SW-68) is only emitted on `compact` with a live
+    # PreCompact pointer. It is added to the decision only when present, so
+    # every golden written before it stays valid unchanged.
+    $active = $null
+    $section = ''
+    foreach ($line in ($Run.Stdout -split "`n")) {
+        $l = $line.TrimEnd("`r")
+        if ($l -cmatch '^Spec context from specwright \(SessionStart hook, source: ([^)]*)\):$') {
+            $source = $Matches[1]; continue
+        }
+        if ($l -cmatch '^Active spec before compaction \(trigger: ([^)]*)\): (\S+)( \[status: ([^\]]+)\])?$') {
+            $section = 'active'
+            $active = [pscustomobject][ordered]@{
+                id        = $Matches[2]
+                trigger   = $Matches[1]
+                status    = if ($Matches[4]) { $Matches[4] } else { $null }
+                phaseHint = $null
+                resume    = $null
+            }
+            continue
+        }
+        if ($section -eq 'active' -and $l -cmatch '^  Phase hint: (.+)$') { $active.phaseHint = $Matches[1]; continue }
+        if ($section -eq 'active' -and $l -cmatch '^  Resume: (.+)$') { $active.resume = $Matches[1]; continue }
+        if ($l -cmatch '^Constitution: (.+)$') { $constitution = $Matches[1]; $section = ''; continue }
+        if ($l -cmatch '^Specs currently in-progress') { $section = 'inprogress'; continue }
+        if ($section -eq 'inprogress' -and
+            $l -cmatch '^  - (\S+)( \[status: ([^\]]+)\])?( (.+))?$') {
+            $inProgress.Add([pscustomobject][ordered]@{
+                id     = $Matches[1]
+                status = if ($Matches[3]) { $Matches[3] } else { $null }
+                title  = if ($Matches[5]) { $Matches[5] } else { $null }
+            })
+        }
+    }
+    $decision = [ordered]@{
+        exitCode     = $Run.ExitCode
+        emitted      = $Run.Stdout.Contains('<session-context>')
+        source       = $source
+        constitution = $constitution
+        inProgress   = @($inProgress)
+    }
+    if ($null -ne $active) { $decision['active'] = $active }
+    $decision['stderr'] = $Run.Stderr.Trim()
+    $decision['events'] = @($Run.Events)
+    return [pscustomobject]$decision
+}
+
+# precompact-state (SW-68) must print nothing - PreCompact stdout has no
+# documented effect - so its whole decision is the pointer files it left.
+# Planted pointers show up too, which is how the pruning case proves a stale
+# one was removed and a fresh one kept.
+function ConvertTo-PrecompactStateDecision {
+    param($Run)
+    return [pscustomobject][ordered]@{
+        exitCode = $Run.ExitCode
+        stdout   = $Run.Stdout.Trim()
+        pointers = @($Run.Pointers)
+        stderr   = $Run.Stderr.Trim()
+        events   = @($Run.Events)
+    }
+}
+
+# stop-gate (SW-69) blocks a Stop with stdout {"decision":"block","reason"}
+# and exit 0 (ADR 0016), or prints nothing. The full reason is part of the
+# decision: both implementations build it from the same fixed phrases, so any
+# drift in a rule's wording or ordering fails the case.
+function ConvertTo-StopGateDecision {
+    param($Run)
+    $decision = 'allow'
+    $reason = $null
+    $stdoutTrim = $Run.Stdout.Trim()
+    if ($stdoutTrim.Length -gt 0) {
+        try {
+            $obj = $stdoutTrim | ConvertFrom-Json -ErrorAction Stop
+            $decision = if ($obj.decision) { [string]$obj.decision } else { 'no-decision' }
+            if ($obj.reason) { $reason = [string]$obj.reason }
+        } catch {
+            $decision = 'unparseable-stdout'
+        }
+    }
+    return [pscustomobject][ordered]@{
+        exitCode = $Run.ExitCode
+        decision = $decision
+        reason   = $reason
+        stderr   = $Run.Stderr.Trim()
+        events   = @($Run.Events)
+    }
+}
+
+# handoff-integrity (SW-70) flags an out-of-scope edit with the same output
+# shape: stdout {"decision":"block","reason"} and exit 0 (ADR 0017), or
+# nothing. On PostToolUse the edit is already on disk; "block" only routes the
+# reason to the model. The stop-gate normalizer reads it unchanged.
 $hookNormalizers = @{
-    'spec-gate'      = ${function:ConvertTo-SpecGateDecision}
-    'prompt-router'  = ${function:ConvertTo-PromptRouterDecision}
-    'subagent-retro' = ${function:ConvertTo-SubagentRetroDecision}
+    'handoff-integrity' = ${function:ConvertTo-StopGateDecision}
+    'spec-gate'       = ${function:ConvertTo-SpecGateDecision}
+    'prompt-router'   = ${function:ConvertTo-PromptRouterDecision}
+    'subagent-retro'  = ${function:ConvertTo-SubagentRetroDecision}
+    'session-context' = ${function:ConvertTo-SessionContextDecision}
+    'precompact-state' = ${function:ConvertTo-PrecompactStateDecision}
+    'stop-gate'       = ${function:ConvertTo-StopGateDecision}
 }
 
 function Get-CanonicalJson {
@@ -512,8 +738,16 @@ function Invoke-ConformanceCase {
         }
     }
 
+    # SW-78: no hook may create state directories under an off-root cwd.
+    $nestedNote = $null
+    if (@($bashRun.NestedCreated).Count -gt 0 -or @($pwshRun.NestedCreated).Count -gt 0) {
+        $match = $false
+        $nestedNote = "hook created state dirs under the session cwd (bash=$(@($bashRun.NestedCreated) -join ','), pwsh=$(@($pwshRun.NestedCreated) -join ','))"
+    }
+
     return [pscustomobject]@{
         CaseName     = $caseName
+        NestedNote   = $nestedNote
         Bash         = $bashJson
         Pwsh         = $pwshJson
         Expected     = $expectedJson
@@ -534,6 +768,9 @@ function Write-CaseDiff {
     if ($Result.RotationNote) {
         Write-Host "         rotation : $($Result.RotationNote)"
     }
+    if ($Result.NestedNote) {
+        Write-Host "         nested   : $($Result.NestedNote)"
+    }
 }
 
 # ---- preconditions ----------------------------------------------------------
@@ -541,13 +778,13 @@ function Write-CaseDiff {
 $script:bashExe = Resolve-BashPath
 if ($null -eq $script:bashExe) {
     Write-Host '[FAIL] bash not found; conformance requires both implementations.'
-    exit 1
+    exit 2
 }
 if ($null -eq (Get-Command jq -ErrorAction SilentlyContinue)) {
     # Without jq the bash hooks exit 0 silently, which would make every
     # bash decision look like "allow" and the comparison meaningless.
     Write-Host '[FAIL] jq not found; the bash hooks would silently no-op.'
-    exit 1
+    exit 2
 }
 
 # ---- self-test mode ---------------------------------------------------------

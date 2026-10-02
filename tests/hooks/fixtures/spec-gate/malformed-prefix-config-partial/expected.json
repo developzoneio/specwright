@@ -1,0 +1,1 @@
+{"exitCode":0,"decision":"allow","permissionDecision":null,"reason":null,"stderr":"","events":[{"ts":"<TS>","spec_id":"FEAT-TEST-001","phase":"in-progress","event":"gate","gate":"code-edit","decision":"allow","ext":".py"}]}

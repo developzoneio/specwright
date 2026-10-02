@@ -3,7 +3,7 @@ name: sd-docs-writer
 color: cyan
 description: Authors a single Architecture Decision Record (ADR) from a spec's decision artifacts. Reads 03-decisions.md plus spec context and drafts a MADR-style ADR under .specs/_adr/. Never edits the constitution, never modifies code, never invents decisions.
 model: sonnet
-tools: Read, Write, Glob, Grep
+tools: Read, Write
 skills:
   - sd-evidence-citation
 ---

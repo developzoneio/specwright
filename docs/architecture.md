@@ -12,9 +12,9 @@ specwright is a thin layer on top of Claude Code that enforces spec-driven devel
 |                                                                    |
 |    commands/sd/    14 workflow definitions                         |
 |    agents/sd/      6 subagent prompt files                         |
-|    hooks/sd/       3 cross-platform hook scripts                   |
+|    hooks/sd/       7 cross-platform hook scripts                   |
 |    templates/sd/   4 setup + 6 spec templates                      |
-|    skills/sd/      9 reusable rule packs (referenced by agents)    |
+|    skills/sd/      11 reusable rule packs (agents + commands)      |
 |                                                                    |
 |  Generic engine. Never changes per project. Updated by re-running  |
 |  the installer.                                                    |
@@ -58,7 +58,7 @@ The split exists so the **engine is generic** (one install handles every project
 Each command is a markdown file with YAML frontmatter and a phased plan. The plan is read by Claude Code's main thread; it is not executable code. Phases follow a pattern:
 
 ```
-Phase 0 - Bootstrap         (always: read CLAUDE.md + constitution + config)
+Phase 0 - Bootstrap         (always: apply sd-bootstrap-guard - CLAUDE.md + constitution + config + index)
 Phase 1 - <first concern>   [Gate 1]
 Phase 2 - <second concern>  [Gate 2]
 ...
@@ -148,7 +148,7 @@ deterministic.
 
 ## Agent skills
 
-Skills are markdown rule packs that agents reference from their frontmatter. They live in `~/.claude/skills/sd/<skill-name>/SKILL.md`. The rule body is loaded into the agent's context at runtime alongside the agent prompt itself.
+Skills are markdown rule packs that agents reference from their frontmatter. They live in `~/.claude/skills/sd/<skill-name>/SKILL.md`. The rule body is loaded into the agent's context at runtime alongside the agent prompt itself. Commands cannot load skills via frontmatter, so a command that needs one reads its `SKILL.md` at runtime (marked "runtime read" below).
 
 The split exists for three reasons:
 
@@ -166,6 +166,8 @@ The split exists for three reasons:
 | `sd-pattern-discipline` | `sd-spec-architect`, `sd-implementer`, `sd-reviewer` | Pattern discovery and adherence: precedent sampling, `Pattern refs` authoring/following, conformance review. |
 | `sd-replan-loop` | `sd-spec-architect`; `/sd:feature`, `/sd:refactor`, `/sd:spec validate` (runtime read) | Mid-execution re-plan protocol: HARD Gate Re-plan, append-only `## Revisions` log in `01-plan.md`, `Revised-by` task marker. Shared by the two plan+tasks workflows so the revision format is defined once. |
 | `sd-retro-lessons` | `scripts/validate-lessons.*`, `scripts/aggregate-lessons.*` (runtime read) | The `lesson` line format, tag vocabulary, and reusability bar for retro lessons. The one skill with no agent consumer - declared in `contractLint.skillConsumers`. |
+| `sd-bootstrap-guard` | `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port`, `/sd:adr` (runtime read) | Phase 0 Layer-2 reads (`CLAUDE.md`, constitution, project-config, index) and their WARN/STOP messages. Single owner; contract-lint `CL009` blocks a command whose Phase 0 restates them. |
+| `sd-model-escalation` | `sd-spec-architect`, `sd-implementer`, `sd-debugger`; `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port` (runtime read) | Model escalation policy: `haiku -> sonnet -> opus` ladder, invariants, trigger table with stable rule IDs (`ESC-FEAT-02`, `ESC-BUG-03`, ...), precedence over `models.escalation` in project-config, and the `escalation:` line each fired decision appends to `05-retro.md`. Single owner; commands name a rule ID and its trigger inputs only. Contract-lint `CL601`-`CL605` hold the table, the ladder and each command's wiring to `contractLint.escalationTriggers` (SW-63). |
 | `sd-port-fidelity` | `sd-spec-architect`, `sd-reviewer` | Cross-project port fidelity: structural mirror default, four-group deviation allowlist, anti-simplification rules, three gate table schemas, parity artifact layout, closed five-class hunk vocabulary plus the two whole-artifact checks. |
 
 Agents declare the skills they apply via a `skills:` list in YAML frontmatter:
@@ -186,30 +188,79 @@ A skill is **not** an agent. It cannot be invoked directly, has no tools of its 
 
 ## Hooks as context injection, guardrails, and recording
 
-3 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
-`prompt-router` injects context, `spec-gate` guards edits (and records), `subagent-retro`
-reminds about stale retros (and records).
+7 hooks ship in cross-platform pairs (PowerShell + bash). Each plays one of three roles:
+`session-context` and `prompt-router` inject context, `spec-gate` guards edits (and records),
+`handoff-integrity` (opt-in) flags an edit outside the executing task's declared files,
+`subagent-retro` reminds about stale retros (and records), `precompact-state` records which
+spec a session was driving so `session-context` can re-inject it after a compaction, and
+`stop-gate` (opt-in) guards turn close-out against a skipped HARD gate.
+
+### `session-context` (`SessionStart`)
+
+Runs once per session entry point: `startup`, `resume` (which also covers `--continue`), `fork`,
+`compact` and `clear` (ADR 0015). Every source gets the same `<session-context>` block:
+- The constitution pointer (`spec.constitutionFile`), when the file exists.
+- Every spec marked in-progress in `.specs/index.md`, with the row's title and the `status:` from
+  that spec's `00-spec.md` frontmatter.
+
+This is the part of the spec context that does not change within a session, so it is paid for
+once, not on every prompt. Re-firing on `resume` and `compact` re-primes a session whose earlier
+context is stale or was summarized away. The hook is silent when there is neither a constitution,
+an in-progress spec, nor an active-spec pointer, so a project with no `.specs/` tree sees nothing.
+It never writes and records no metrics. Opt out with `hooks.sessionContext.enabled: false`.
+
+On `compact` only, it adds one more section (SW-68): the spec the session was working on before
+the compaction, read from the pointer `precompact-state` left for this `session_id`. The pointer
+is ignored when it is older than 30 minutes or names a spec with no `00-spec.md`. Everything else
+in that section is derived from disk, not stored:
+
+```text
+Active spec before compaction (trigger: manual): FEAT-x [status: in-progress]
+  Phase hint: executing - 3/7 tasks done, next T04
+  Resume: /sd:feature x - its state machine re-derives the exact phase from .specs/
+```
+
+The phase hint is type-agnostic: `draft` is the spec-approval gate; `approved` with a
+`02-tasks.md` is the plan-approval gate; `in-progress` counts the `- **Status**:` check-off
+markers. Workflows with no task list (bug, perf, rca) get `in progress - no task list`. It is a
+hint only: the workflow command's state machine is the authority, which is why the section names
+the command to re-invoke.
 
 ### `prompt-router` (`UserPromptSubmit`)
 
 Runs on every user prompt. Reads the prompt and the project config, then emits a `<context-router>` block when it detects:
-- Workflow keywords (`bug`, `feature`, `refactor`, `perf`, `rca`).
-- Ticket IDs matching the configured pattern.
-- Specs currently in-progress (from `.specs/index.md`).
+- Workflow keywords (`bug`, `feature`, `refactor`, `perf`, `rca`, `port`).
+- Ticket IDs matching the configured pattern (plus any spec folder whose name contains one).
 
-The block is injected into the prompt as additional context, so Claude knows there's an active spec or a likely workflow without the user having to remind it.
+The block is injected into the prompt as additional context, so Claude knows the likely workflow
+without the user having to name it. Until SW-67 it also re-listed the in-progress specs on every
+prompt; that moved to `session-context`. On a workspace with two in-progress specs the payload
+went from 254 to 154 bytes for a keyword prompt and from 289 to 189 bytes for a ticket prompt,
+and a prompt with neither keywords nor tickets went from 191 bytes to no output at all (PS and
+bash identical).
 
-### `spec-gate` (`PreToolUse`, Edit / Write / MultiEdit)
+### `spec-gate` (`PreToolUse`, Edit / Write / MultiEdit / Bash / PowerShell)
 
 Runs before any code-editing tool. Decides:
+- Editing the spec index (`.specs/index.md`)? -> a FEAT row moving to `done` needs a passing
+  `/sd:verify` artifact (Rule 0). An edit whose only effect is new rows at `draft`/`approved`
+  and/or Status-only moves along a workflow edge is allowed (Rule 0b) - this is how every
+  workflow records its own gates. Anything else falls through to the protected-path block.
 - Editing a path in `paths.protected`? -> block (constitution, index, license).
 - Editing an allow-listed path (.specs/, .claude/, tests/, *.md, *.json, etc.)? -> allow.
 - Editing a code file (cs/ts/py/rs/go/etc.) with no in-progress spec? -> block or warn (configurable).
+- A `Bash` / `PowerShell` command that visibly writes a protected path or the spec index
+  (`sed -i`, `perl -i`, `>` / `>>`, `tee`, `Set-Content`, `Add-Content`, `Out-File`)? -> block in
+  every mode (SW-79). Without this, a shell write would sidestep Rules 0, 0b and 1 and leave no
+  `spec_transition` event. It reads the command text only, so it is a **heuristic, not a
+  guarantee**: `cd .specs && sed -i ... index.md`, an interpreter one-liner or a path held in a
+  variable gets through. The primary control is each workflow's own "Edit tool only" rule, kept
+  in place by contract-lint `CL206`.
 
 This catches the common failure mode where the user (or Claude) jumps straight to editing code without creating a spec first.
 
 Alongside guarding, `spec-gate` also **records**: every gate decision (verify / protected /
-code-edit), every inferred Gate Complexity split, and every `.specs/index.md` lifecycle transition
+code-edit / shell-write), every inferred Gate Complexity split, and every `.specs/index.md` lifecycle transition
 it observes is appended as one JSON line to `.specs/_metrics/events.jsonl`. Recording is purely
 observational - it never alters a gate decision, only measures it after the fact. See the event
 log section below for the schema.
@@ -221,15 +272,39 @@ log section below for the schema.
   "decision": "block",
   "reason": "spec-gate: editing code file 'src/foo.cs' but no in-progress spec is recorded ...",
   "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "reason": "spec-gate: editing code file 'src/foo.cs' but no in-progress spec is recorded ..."
+    "permissionDecisionReason": "spec-gate: editing code file 'src/foo.cs' but no in-progress spec is recorded ..."
   }
 }
 ```
 
 - New schema (`hookSpecificOutput.permissionDecision = "deny"`) is read by recent CLI builds.
+  `hookEventName` is required: without it the CLI drops the whole block, and the legacy field
+  alone does not override a permission rule that already allows the tool (`--allowedTools`,
+  `permissions.allow`). The edit then goes through with no denial recorded (SW-80).
 - Legacy schema (`decision = "block"`) is read by older CLI builds.
 - Both are harmless to the other reader. No version probing required.
+
+### `handoff-integrity` (`PostToolUse`, Edit / Write / MultiEdit)
+
+Opt-in: it does nothing unless `hooks.handoffIntegrity.enabled` is the literal JSON `true`
+(ADR 0017). After a write tool succeeds, it checks the file against the task being executed:
+
+1. **Spec.** The newest spec ID in the last 256 KB of `transcript_path` whose folder has a
+   `00-spec.md` with status `in-progress` and a `02-tasks.md`. There is no fallback.
+2. **Active task = the ready set.** Every unchecked task whose `Depends on` tasks are all checked,
+   read with `sd-atomic-task-format`'s check-off rules and field label grammar. Nothing on disk
+   names the one task being executed, and a refactor batch runs several at once. The declared
+   files are the union of the ready tasks' `Files`.
+3. **Match.** An exact path, a directory entry ending in `/`, or a `*`/`?` wildcard,
+   case-insensitive. Files under the spec directory (check-offs, retro lines) and files outside
+   the project root are never flagged.
+
+A miss prints `{"decision":"block","reason":"..."}` and exits 0. PostToolUse runs after the write,
+so the edit stays (ADR 0015). The reason tells the model in the same turn which file, spec and
+ready tasks are involved. It then says to revert the edit or to surface a scope mismatch for a
+re-plan. `/sd:bug` and `/sd:perf` have no `02-tasks.md`, so their edits are out of its reach.
 
 ### `subagent-retro` (`SubagentStop`)
 
@@ -239,6 +314,50 @@ Runs after every subagent invocation. If any in-progress spec has a `05-retro.md
 `.specs/_metrics/events.jsonl`, carrying the same stale/missing-retro count the reminder is based
 on. Recording happens regardless of debounce - debounce only suppresses the user-facing reminder,
 not the measurement.
+
+### `precompact-state` (`PreCompact`)
+
+Runs before every compaction, `manual` or `auto` (matcher `*`). Specs carry only a coarse
+`status:` on disk, so which spec a session was driving lives only in the conversation, and that is
+what compaction summarizes away. The hook reads the last 256 KB of `transcript_path`, walks the
+spec IDs in it from newest to oldest, and takes the first one that has a `00-spec.md` and is not
+`done` or `archived`. If none qualifies, it falls back to the in-progress index row when there is
+exactly one. It writes the pointer `{specId, trigger}` to
+`.claude/.hookstate/precompact-<session_id>.json` and prunes pointers older than 24 hours.
+
+It records a pointer and nothing else. `session-context` stays the one context builder and
+re-injects the spec on `SessionStart` `source: compact`, which fires after the compaction with the
+same `session_id` (ADR 0015). Context assembled in two places would drift. There is a second
+reason: nothing documents what the CLI does with PreCompact stdout, and the documented re-injection
+point is SessionStart. So the hook prints nothing.
+
+Exit 2 on PreCompact **blocks the compaction** (ADR 0015), so this hook exits 0 on every path,
+failures included. It is a no-op without a `.specs/` tree and index. Opt out with
+`hooks.precompactState.enabled: false`.
+
+### `stop-gate` (`Stop`)
+
+Opt-in: it does nothing unless `hooks.stopGate.enabled` is the literal JSON `true` (ADR 0016).
+When the main thread tries to end its turn, it picks the spec the session was driving the same
+way `precompact-state` does - the newest spec ID in the last 256 KB of `transcript_path` with a
+`00-spec.md`, not `done` or `archived` - but with no index fallback, so a turn that never touched
+a spec is never blocked. It then checks that spec against a fixed table of invariants keyed on its
+`type:`. Each rule pairs one HARD gate with *later-phase evidence on disk* and *the gate's own
+evidence missing*, and fires only when both hold:
+
+| Rule | Fires when |
+|---|---|
+| bug Gate 2 | status `approved`/`in-progress` or `03-decisions.md` exists, while `## Reproduction` still has `<<...>>` fields (unless the retro logs a constitution exception) |
+| perf Gate 2 | Phase 3+ evidence exists while the baseline artifact, Results log row 0 or the measured `Current observed` is missing |
+| rca Gate 2 (SW-51) | the root cause is written or the status moved on, while `## Hypothesis tree` still holds its `<<PHASE-2:` field |
+| port Gates 1, 2, 3, 6 | later-phase artifacts exist while `MANIFEST.md`/`Frozen: yes`, filled tables, `## Behavior pinning` or `parity/INDEX.md` is missing |
+
+A hit prints `{"decision":"block","reason":"..."}` and exits 0 - Stop's own schema, which blocks
+exactly like exit 2 (ADR 0015). The reason names the spec, the gate, what is missing and the
+later-phase evidence, and tells the model to return to the gate and STOP for the user. The re-fire
+carries `stop_hook_active: true` and is always allowed, so a gate the model cannot satisfy never
+loops. The table restates what the command files require at each gate: changing a HARD gate's
+evidence in `commands/` means changing both hook twins and their fixtures.
 
 ### Event log (`.specs/_metrics/events.jsonl`)
 
@@ -252,8 +371,8 @@ the PowerShell and bash implementations produce byte-comparable lines:
 | `spec_id` | always | `FEAT-x` / `BUG-x` / ... , or `-` when no spec is in scope |
 | `phase` | always | lifecycle status of `spec_id` (`draft` / `approved` / `in-progress` / `done`), or `-` |
 | `event` | always | `gate` \| `spec_transition` \| `subagent_stop` |
-| `gate` | when `event` is `gate` | `verify` \| `protected` \| `code-edit` \| `complexity` |
-| `decision` | when `event` is `gate` or `spec_transition` | `allow` \| `block` \| `warn` \| `split` (only on `gate:"complexity"`) - on a transition, whether the index edit was ultimately allowed through. Most direct index edits are blocked by `paths.protected`, so `block` is the common case; a verified `done` close-out is the path that yields `allow`. |
+| `gate` | when `event` is `gate` | `verify` \| `protected` \| `code-edit` \| `complexity` \| `shell-write` (a Bash / PowerShell command denied for writing a protected path or the spec index, SW-79) |
+| `decision` | when `event` is `gate` or `spec_transition` | `allow` \| `block` \| `warn` \| `split` (only on `gate:"complexity"`) - on a transition, whether the index edit was ultimately allowed through. Workflow status transitions and new-row registrations are allowed (Rule 0b), as is a verified FEAT `done` close-out; any other direct index edit is blocked by `paths.protected`. |
 | `from` | when `event` is `spec_transition` | previous lifecycle status, or `-` if not derivable |
 | `ext` | when `gate` is `code-edit` | lowercased file extension, e.g. `.ps1` - never a path |
 | `stale` | when `event` is `subagent_stop` | `0` or `1` - a flag, not a count. One event is emitted per in-progress spec per subagent stop; `1` means that spec's `05-retro.md` was stale or missing at that moment. Retro pressure is measured by counting `1`s over time, never by reading a single value as a quantity |
@@ -283,12 +402,11 @@ than closed by having the Gate 2 prose itself write a marker.
 It is emitted **only on an edit that was actually allowed through** - never on a `block` exit, at
 any of the four rules above. A blocked `index.md` edit never reaches disk, so a detected
 parent-archive-plus-child pattern inside a denied edit did not really happen; recording `split`
-there would be a false positive. Combined with the note on `decision` above (most direct
-`index.md` edits are blocked by `paths.protected` under the default config), this means the split
-count is expected to under-count real splits whenever a project leaves `index.md` protected -
-which is the default. A project that wants this signal to be reliable needs `index.md` reachable
-by whatever edit actually performs the split (see `commands/spec.md`'s existing `verifyGate`
-carve-out for the same tension on the `done` transition).
+there would be a false positive. The `/sd:feature` split itself (parent `approved -> archived`
+plus child rows registered at `draft`) is a legal Rule 0b transition, so it is allowed and
+recorded when the workflow makes it as one edit, or as a parent-archive edit after the child rows
+already exist. A split performed through an edit Rule 0b rejects (for example one that also
+rewrites a title) is blocked and therefore not counted.
 
 The log is metadata-only by design: no file paths, no code content, no commit messages - only spec
 IDs, lifecycle phases, decisions, and file extensions. Controlled by `hooks.metrics` in
@@ -391,6 +509,78 @@ Heavy reasoning (architecture, investigation, holistic review) uses `sonnet`. Me
 
 These are rough ballparks. Actual cost depends on file sizes, MCP usage, and conversation length. The point is that workflow design - not aggressive prompting alone - keeps cost predictable.
 
+## Hook invocation latency
+
+Model calls are the dollar cost; hooks are the wall-clock cost. `spec-gate` runs on every
+`Edit|Write|MultiEdit|Bash|PowerShell` (a shell command with no write marker exits before any
+disk read), `handoff-integrity` after every `Edit|Write|MultiEdit` (even when disabled), `prompt-router` on every prompt, `subagent-retro` after every subagent,
+`session-context` once per session entry point, `precompact-state` once per compaction,
+`stop-gate` once per turn end (even when disabled - the process starts before it reads the
+flag), and each
+one is a fresh process: interpreter start-up, script parse, then the hook's own work.
+The PowerShell twins pay far more start-up than the bash ones.
+
+**Method.** `tests/hooks/measure-latency.ps1` spawns each PowerShell hook as a fresh child process
+(`<flavor> -NoProfile -ExecutionPolicy Bypass -File <hook>.ps1`, the shipped wiring) against the
+cases in `tests/hooks/fixtures/latency-selection.json`: for each hook, one gate-irrelevant case
+(the common case) plus one or two that do real work. Each run gets a fresh copy of the case
+workspace; the stopwatch covers process start to exit only. Two warm-up runs per case are
+discarded. Every run, warm-up included, must match the case's `expected.json` outcome, or the
+script fails rather than timing a hook that died early. Percentiles are nearest-rank, pooled
+across a hook's cases. Reproduce with:
+
+```powershell
+./tests/hooks/measure-latency.ps1 -Iterations 30          # every flavor installed here
+./tests/hooks/measure-latency.ps1 -Flavors powershell     # Windows PowerShell 5.1 only
+```
+
+**Measured p95, milliseconds** (2026-09-24, SW-50; CI rows are 20 iterations per case, two runs
+each on commits `0ddb2b4` and `01cb099`; "powershell" is Windows PowerShell 5.1):
+
+| Where | Flavor | `spec-gate` | `prompt-router` | `subagent-retro` |
+|---|---|---|---|---|
+| windows-latest (CI) | powershell | 490 / 510 | 465 / 474 | 522 / 534 |
+| windows-latest (CI) | pwsh | 641 / 629 | 604 / 608 | 603 / 650 |
+| macos-latest (CI) | pwsh | 575 / 510 | 468 / 471 | 558 / 518 |
+| ubuntu-latest (CI) | pwsh | 360 / 509 | 316 / 425 | 375 / 536 |
+| Linux container, 4 vCPU | pwsh | 548 | 446 | 578 |
+
+`session-context` (SW-67) shipped after these runs, so it has no column. On one Windows
+workstation (2026-09-26, 10 iterations per case) it measured p95 399 ms under powershell and
+556 ms under pwsh, in line with `prompt-router`; its CI budget copies `prompt-router`'s.
+`precompact-state` (SW-68) came later still. On the same workstation (2026-09-26, 15 iterations
+per case) it measured p95 397 ms under powershell and 532 ms under pwsh, and it reuses
+`session-context`'s budget. `stop-gate` (SW-69) measured p95 546 ms under powershell and 660 ms under pwsh
+(2026-09-27, 15 iterations per case, same workstation) and reuses the same budget.
+`handoff-integrity` (SW-70) measured p95 575 ms under powershell and 635 ms under pwsh (2026-09-27,
+30 iterations per case, same workstation; `spec-gate` in the same run: 689 / 744 ms). Its 5.1
+budget is 1200 ms. Enabled, it runs after every write-tool call, in addition to `spec-gate`.
+
+For comparison, the bash `spec-gate` on the same Linux container measured p50 104 ms and p95
+119 ms on the `block-protected-path` case (a shell loop timing 30 runs; the bash twins are not
+covered by `measure-latency.ps1`).
+
+**What the numbers say.**
+
+- **No hook comes near its timeout.** The worst p95 anywhere is 650 ms, against 5 s
+  (`spec-gate`, `handoff-integrity`, `prompt-router`, `session-context`, `precompact-state`, `stop-gate`) and 3 s (`subagent-retro`). An implement phase touching 40 files
+  pays roughly 40 x 0.5 s = 20 s of `spec-gate` overhead, which is real but not a timeout risk.
+- **pwsh is not faster everywhere.** On windows-latest, Windows PowerShell 5.1 beat pwsh by about
+  20% on every hook. On a developer workstation measured earlier in SW-50, it was the reverse:
+  `spec-gate` p50 was 1217 ms on 5.1 and 532 ms on pwsh. Start-up cost depends on the machine
+  (native-image caches, antivirus scanning of the pwsh install, disk), so
+  `templates/settings.template.json`'s `_pwsh_recommended` wiring is an option to measure, not a
+  guaranteed win: run the script above with both flavors before switching.
+- **Run-to-run noise is large.** The same ubuntu-latest runner type moved `spec-gate` p95 from
+  360 to 509 ms between two consecutive runs. Budgets have to absorb that.
+
+**The CI floor.** `specwright.manifest.json`'s `hookLatencyBudgets` declares a p95 budget per
+hook and flavor, and the `Hook latency budget` CI step fails any run over it. Each budget is about
+twice the worst CI p95 seen for that pair, rounded up to 100 ms: loose enough that shared-runner
+noise never forces a raise, tight enough that a hook which doubles its cost fails. No budget may
+exceed half the hook's `timeout`; the script checks that before measuring anything. The timeout
+decision and its alternatives are in `docs/adr/0012-hook-latency-budget.md`.
+
 ---
 
 ## MCP integration
@@ -412,7 +602,7 @@ specwright is built around a small set of MCP servers most useful for spec-drive
 |---|---|---|
 | `atlassian` | Fetch JIRA tickets for `<ID>` arguments + snapshot ticket / related tickets / linked Confluence pages | spec-architect, commands |
 | `gitnexus` | Fast symbol search, callers, call graph | code-explorer, debugger, reviewer |
-| `database` (project-provided, e.g. `mssql`, `postgres`; SELECT/EXPLAIN only) | Inspect schema and query plans | debugger |
+| `database` (project-provided, e.g. `mssql`, `postgres`; SELECT/EXPLAIN only) | Inspect schema and query plans | main thread (debugger uses a read-only CLI client via `Bash`) |
 
 The split exists because user-scope servers are generic (any project benefits from `context7`), while project-scope servers carry project-specific connection strings or credentials.
 

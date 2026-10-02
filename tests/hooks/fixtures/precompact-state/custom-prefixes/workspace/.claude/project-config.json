@@ -1,0 +1,15 @@
+{
+  "spec": {
+    "dir": ".specs",
+    "indexFile": ".specs/index.md",
+    "constitutionFile": ".specs/constitution.md",
+    "prefixes": {
+      "feature": "STORY"
+    }
+  },
+  "hooks": {
+    "precompactState": {
+      "enabled": true
+    }
+  }
+}

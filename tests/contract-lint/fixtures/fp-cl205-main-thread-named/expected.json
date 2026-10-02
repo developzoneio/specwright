@@ -1,0 +1,4 @@
+{
+  "note": "MUST STAY SILENT: both artifact writes in sd-keeper's block name the main thread - once wrapped across a line break ('Main' / 'thread appends'), once in the step's opening parenthetical",
+  "findings": []
+}

@@ -1,0 +1,1 @@
+{"exitCode":0,"decision":"block","permissionDecision":"deny","reason":"spec-gate: '.specs/index.md' is listed under paths.protected in .claude/project-config.json. Update via /sd:refactor or an ADR; never edit directly.","stderr":"","events":[{"ts":"<TS>","spec_id":"-","phase":"-","event":"gate","gate":"protected","decision":"block"}]}

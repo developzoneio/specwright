@@ -1,0 +1,12 @@
+{
+  "note": "commands/beta.md invokes sd-keeper, but no escalationTriggers row targets it and it carries no allow CL601 comment - a forgotten workflow fails loudly instead of quietly having no policy",
+  "findings": [
+    {
+      "rule": "CL601",
+      "severity": "BLOCK",
+      "file": "commands/beta.md",
+      "anchor": "seed",
+      "seed": "invoke-without-escalation"
+    }
+  ]
+}

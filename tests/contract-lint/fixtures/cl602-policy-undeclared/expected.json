@@ -1,0 +1,11 @@
+{
+  "note": "skills/sd-model-escalation exists but the manifest declares no escalationTriggers - deleting the assertable copy fails loudly instead of switching the band off",
+  "findings": [
+    {
+      "rule": "CL602",
+      "severity": "BLOCK",
+      "file": "specwright.manifest.json",
+      "anchor": "file"
+    }
+  ]
+}

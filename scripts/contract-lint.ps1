@@ -17,6 +17,8 @@
       CL0xx  reference resolution
       CL3xx  gate integrity
       CL9xx  suppression hygiene
+    Later waves add CL1xx (invocation contract), CL2xx (role and tool
+    integrity), CL4xx (stack-agnostic prose) and CL6xx (escalation policy).
 
     Output is TSV on stdout, one finding per line, and nothing else:
       <RULE><TAB><SEVERITY><TAB><FILE><TAB><LINE><TAB><MESSAGE>
@@ -75,6 +77,10 @@ $RE_TPLPATH   = 'templates/[A-Za-z0-9_./-]+'
 # matches '07-cqrs-read-path.md' inside the ADR filename '0007-cqrs-read-path.md'
 # (agents/docs-writer.md), which is not a spec artifact at all.
 $RE_ARTIFACT  = '(^|[^0-9A-Za-z_.-])[0-9][0-9]-[a-z0-9-]+\.md'
+# CL009 - a command's Phase 0 section: opens at '## Phase 0' (not 'Phase 01'),
+# closes at the next H1/H2 heading outside a fence.
+$RE_PHASE0      = '^## Phase 0([^0-9]|$)'
+$RE_SECTION_END = '^#{1,2}[ \t]'
 $RE_SUPPRESS  = '<!--[ \t]*contract-lint:[ \t]*allow[ \t]+CL[0-9][0-9][0-9]'
 $RE_SUPPARTS  = 'allow[ \t]+(CL[0-9][0-9][0-9])(.*)$'
 # An option set: a slash-separated parenthetical carrying no nested parens.
@@ -132,6 +138,18 @@ $RE_MCPTOOL   = 'mcp__[A-Za-z0-9_-]+'
 # after a comma) all pass, with no exclusion list, the same way
 # Get-GateClassification needs none for '## Gate activity'.
 $RE_WRITEVERB = '^[ \t]*(-[ \t]+|[0-9]+\.[ \t]+)?(Write|Append|Create)[ \t]'
+# CL205's predicates. A spec artifact is a numbered NN-name.md file or the
+# 04-artifacts/ folder. The write form is word-bounded by hand (the bash twin's
+# ERE has no \b) and case-folded only on its first letter, never via a
+# culture-aware lowercase, so both twins agree byte-for-byte on non-ASCII
+# lines. The actor test is a 'main thread' mention - the phrase every sibling
+# step already uses - matched against the whole enclosing numbered step joined
+# with single spaces, never the one line: commands/port.md Phase 3 wraps
+# 'Main' / 'thread appends ...' across two lines, and names the actor in
+# step 3's opening parenthetical.
+$RE_SPECARTIFACT  = '[0-9]{2}-[a-z][a-z0-9-]*\.md|04-artifacts/'
+$RE_ARTIFACTWRITE = '(^|[^A-Za-z])([Ww]rit(e|es|ing|ten)|[Aa]ppend(s|ed|ing)?|[Ss]av(e|es|ed|ing)|[Rr]ecord(s|ed|ing)?|[Pp]ersist(s|ed|ing)?|[Ss]tor(e|es|ed|ing))([^A-Za-z]|$)'
+$RE_MAINTHREAD    = '[Mm]ain[ \t]+thread'
 # CL4xx stack-agnostic prose. A <<...>> placeholder span is scrubbed from a
 # copy of the line before vocabulary/path matching, so a token that only ever
 # appears inside a project-config-style placeholder never fires.
@@ -144,6 +162,14 @@ $RE_PLACEHOLDER    = '<<[^>]*>>'
 # their OWN interior '/', which is not what CL402 means to catch.
 $RE_ABSPATH_POSIX  = '(^|[ \t`"''(])(/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*)'
 $RE_ABSPATH_WIN     = '(^|[ \t`"''(])([A-Za-z]:\\[^ \t`]+)'
+# CL6xx escalation policy. A rule ID is ESC-<WORKFLOW>-<PHASE> with an
+# optional lowercase suffix (the skill's own "Rule IDs" section). The skill's
+# sections are H2 headings; '^##[ \t]' never matches an H3.
+$RE_ESCID      = 'ESC-[A-Z]+-[0-9][0-9][a-z]?'
+$RE_ESCID_FULL = '^ESC-[A-Z]+-([0-9][0-9])[a-z]?$'
+$RE_H2         = '^##[ \t]'
+$RE_LEADDIGITS = '^([0-9]+)'
+$RE_BACKTICKED = '^`([^`]+)`'
 
 function Write-Err([string]$Message) {
     [Console]::Error.WriteLine($Message)
@@ -212,12 +238,12 @@ foreach ($r in $cl.rules) {
 # below asserts this equals the manifest registry, so a wave-2 rule cannot land
 # in the manifest, the docs or the fixtures without landing here too.
 $dispatchIds = @(
-    'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008',
+    'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008', 'CL009',
     'CL100', 'CL101', 'CL102', 'CL103', 'CL104',
-    'CL200', 'CL201', 'CL202', 'CL203',
+    'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205', 'CL206',
     'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
     'CL400', 'CL401', 'CL402',
-    'CL500',
+    'CL601', 'CL602', 'CL603', 'CL604', 'CL605',
     'CL900', 'CL901', 'CL902'
 )
 $dispatchSet = New-OrdinalSet
@@ -261,6 +287,11 @@ if ($cl.PSObject.Properties.Name.Contains('gateProseEscapeTokens')) {
     foreach ($t in $cl.gateProseEscapeTokens) { [void]$gateProseEscapeTokens.Add([string]$t) }
 }
 
+$bootstrapGuardPhrases = New-Object 'System.Collections.Generic.List[string]'
+if ($cl.PSObject.Properties.Name.Contains('bootstrapGuardPhrases')) {
+    foreach ($t in $cl.bootstrapGuardPhrases) { [void]$bootstrapGuardPhrases.Add([string]$t) }
+}
+
 $stackCommands = New-Object 'System.Collections.Generic.List[string]'
 $stackLanguages = New-Object 'System.Collections.Generic.List[string]'
 if ($cl.PSObject.Properties.Name.Contains('stackTokens') -and $null -ne $cl.stackTokens) {
@@ -280,26 +311,6 @@ if ($cl.PSObject.Properties.Name.Contains('readOnlyAgents')) {
 $knownMcpTools = New-OrdinalSet
 if ($cl.PSObject.Properties.Name.Contains('knownMcpTools')) {
     foreach ($t in $cl.knownMcpTools) { [void]$knownMcpTools.Add([string]$t) }
-}
-
-# CL500's per-area byte ceilings. $null (not 0) when unconfigured, so a
-# manifest with no budgets subtree makes CL500 a structural no-op rather than
-# firing on every file with a phantom zero ceiling.
-$budgetCommands = $null
-$budgetAgents = $null
-$budgetSkills = $null
-if ($cl.PSObject.Properties.Name.Contains('budgets') -and $null -ne $cl.budgets) {
-    $b = $cl.budgets
-    if ($b.PSObject.Properties.Name.Contains('commandsBytes')) { $budgetCommands = [int]$b.commandsBytes }
-    if ($b.PSObject.Properties.Name.Contains('agentsBytes')) { $budgetAgents = [int]$b.agentsBytes }
-    if ($b.PSObject.Properties.Name.Contains('skillsBytes')) { $budgetSkills = [int]$b.skillsBytes }
-}
-
-function Get-BudgetForFile([string]$Rel) {
-    if ($Rel.StartsWith('commands/')) { return $budgetCommands }
-    if ($Rel.StartsWith('agents/')) { return $budgetAgents }
-    if ($Rel.StartsWith('skills/')) { return $budgetSkills }
-    return $null
 }
 
 # Write/Edit/MultiEdit, and nothing else - matches docs/architecture.md's own
@@ -325,6 +336,85 @@ if ($cl.PSObject.Properties.Name.Contains('gates') -and $null -ne $cl.gates) {
         if ($null -ne $p.Value.conditional) { $conds = @($p.Value.conditional | ForEach-Object { [string]$_ }) }
         $gateCond[$gf] = $conds
         [void]$gateFiles.Add($gf)
+    }
+}
+
+# editToolOnly (CL206, SW-79): the phrase every listed command must carry.
+# Optional key; a listed file that does not exist, or files with no phrase,
+# is a broken contract (exit 2), the same as gates.
+$editToolOnlyPhrase = ''
+$editToolOnlyFiles = New-OrdinalSet
+if ($cl.PSObject.Properties.Name.Contains('editToolOnly') -and $null -ne $cl.editToolOnly) {
+    if ($cl.editToolOnly.PSObject.Properties.Name.Contains('phrase') -and $null -ne $cl.editToolOnly.phrase) {
+        $editToolOnlyPhrase = [string]$cl.editToolOnly.phrase
+    }
+    if ($cl.editToolOnly.PSObject.Properties.Name.Contains('files')) {
+        foreach ($ef in @($cl.editToolOnly.files)) {
+            $ef = [string]$ef
+            if ($ef.Length -eq 0) { continue }
+            if (-not (Test-Path -LiteralPath (Join-Path $Root $ef) -PathType Leaf)) {
+                Write-Err "contract-lint: contractLint.editToolOnly names a file that does not exist: $ef"
+                exit 2
+            }
+            if ($editToolOnlyPhrase.Length -eq 0) {
+                Write-Err "contract-lint: contractLint.editToolOnly lists files but no phrase"
+                exit 2
+            }
+            [void]$editToolOnlyFiles.Add($ef)
+        }
+    }
+}
+
+# escalationTriggers / escalationPolicy (CL6xx, SW-63). The band switches on
+# when skills/sd-model-escalation/SKILL.md exists on disk, NOT when the
+# manifest keys exist: deleting the keys must fail loudly (CL602-CL605 each
+# report their own missing config) rather than turn the band off in silence -
+# the SW-20 lesson. The skill name is therefore a constant here, never read
+# from the manifest. A row naming a command with no file is a broken contract
+# (exit 2), the same as gates.
+function Get-OptionalString([object]$Obj, [string]$Name) {
+    if ($null -eq $Obj) { return '' }
+    if (-not $Obj.PSObject.Properties.Name.Contains($Name)) { return '' }
+    if ($null -eq $Obj.$Name) { return '' }
+    return [string]$Obj.$Name
+}
+
+$escSkillName = 'sd-model-escalation'
+$escSkillRel = 'skills/' + $escSkillName + '/SKILL.md'
+$escActive = Test-Path -LiteralPath (Join-Path $Root $escSkillRel.Replace('/', [System.IO.Path]::DirectorySeparatorChar)) -PathType Leaf
+$manifestRel = 'specwright.manifest.json'
+
+$escRows = New-Object 'System.Collections.Generic.List[object]'
+if ($cl.PSObject.Properties.Name.Contains('escalationTriggers') -and $null -ne $cl.escalationTriggers) {
+    foreach ($er in @($cl.escalationTriggers)) {
+        $row = [PSCustomObject]@{
+            Id = (Get-OptionalString $er 'id'); Command = (Get-OptionalString $er 'command')
+            Phase = (Get-OptionalString $er 'phase'); Agent = (Get-OptionalString $er 'agent')
+            From = (Get-OptionalString $er 'from'); To = (Get-OptionalString $er 'to')
+        }
+        if ($row.Id.Length -eq 0) { continue }
+        if ($row.Command.Length -gt 0 -and
+            -not (Test-Path -LiteralPath (Join-Path (Join-Path $Root 'commands') ($row.Command + '.md')) -PathType Leaf)) {
+            Write-Err "contract-lint: contractLint.escalationTriggers row $($row.Id) names a command with no file: commands/$($row.Command).md"
+            exit 2
+        }
+        [void]$escRows.Add($row)
+    }
+}
+
+$escLadder = New-Object 'System.Collections.Generic.List[string]'
+$escAliases = New-OrdinalSet
+$escRestatePhrases = New-Object 'System.Collections.Generic.List[string]'
+if ($cl.PSObject.Properties.Name.Contains('escalationPolicy') -and $null -ne $cl.escalationPolicy) {
+    $ep = $cl.escalationPolicy
+    if ($ep.PSObject.Properties.Name.Contains('ladder')) {
+        foreach ($t in @($ep.ladder)) { if ([string]$t -cne '') { [void]$escLadder.Add([string]$t) } }
+    }
+    if ($ep.PSObject.Properties.Name.Contains('aliases')) {
+        foreach ($t in @($ep.aliases)) { if ([string]$t -cne '') { [void]$escAliases.Add([string]$t) } }
+    }
+    if ($ep.PSObject.Properties.Name.Contains('restatePhrases')) {
+        foreach ($t in @($ep.restatePhrases)) { if ([string]$t -cne '') { [void]$escRestatePhrases.Add([string]$t) } }
     }
 }
 
@@ -559,6 +649,15 @@ foreach ($name in $agentOrder) {
         }
     }
     $agentBodyStart[$name] = $bodyStart
+}
+
+# writeCapableAgents - derived from disk (agentToolRefs), not declared. Mirrors
+# how CL200 itself decides write-capability: an agent whose own tools: line
+# carries Write/Edit/MultiEdit right now, regardless of whether anyone
+# remembers to list it anywhere. Used by CL203/CL204 to pick severity.
+$writeCapableAgents = New-OrdinalSet
+foreach ($t in $agentToolRefs) {
+    if ($writeTools.Contains($t.Tool)) { [void]$writeCapableAgents.Add($t.Agent) }
 }
 
 # ---- mode declaration index (CL1xx) -----------------------------------------
@@ -878,6 +977,48 @@ foreach ($r in $refs) {
     Add-Finding 'CL008' $r.File $r.Line "unknown spec artifact filename '$($r.Target)'"
 }
 
+# CL009 - a command's '## Phase 0' section restates text sd-bootstrap-guard
+# owns. Commands cannot load skills via frontmatter, so they read the skill at
+# runtime; a copy of its messages in Phase 0 is the drift SW-54 removed. A
+# phrase wrapped across two lines is caught by joining each line with the
+# next (trimmed, one space) - reported on the line where it starts, and only
+# when the next line alone does not already carry it, so one occurrence is one
+# finding. Ordinal .Contains, the same as CL306. Trim is space/tab ONLY: a bare
+# .Trim() also strips Unicode whitespace and would diverge from the bash twin.
+$blankChars = [char[]]@([char]32, [char]9)
+foreach ($rel in $scanFiles) {
+    if (-not $rel.StartsWith('commands/', [StringComparison]::Ordinal)) { continue }
+    $lines = $fileLines[$rel]
+    $fence = $fileFence[$rel]
+    $inPhase0 = $false
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        if ($fence[$i]) { continue }
+        if ([regex]::IsMatch($lines[$i], $RE_PHASE0)) { $inPhase0 = $true; continue }
+        if ($inPhase0 -and [regex]::IsMatch($lines[$i], $RE_SECTION_END)) { $inPhase0 = $false }
+        if (-not $inPhase0) { continue }
+        if ([regex]::IsMatch($lines[$i], $RE_SUPPRESS)) { continue }
+        $cur = $lines[$i].Trim($blankChars)
+        $nxt = ''
+        $j = $i + 1
+        if ($j -lt $lines.Length -and -not $fence[$j] -and
+            -not [regex]::IsMatch($lines[$j], $RE_SECTION_END) -and
+            -not [regex]::IsMatch($lines[$j], $RE_SUPPRESS)) {
+            $nxt = $lines[$j].Trim($blankChars)
+        }
+        foreach ($phrase in $bootstrapGuardPhrases) {
+            if ($phrase.Length -eq 0) { continue }
+            $hit = $cur.Contains($phrase)
+            if (-not $hit -and $nxt.Length -gt 0 -and -not $nxt.Contains($phrase)) {
+                $hit = ($cur + ' ' + $nxt).Contains($phrase)
+            }
+            if ($hit) {
+                Add-Finding 'CL009' $rel ($i + 1) "Phase 0 restates '$phrase', which sd-bootstrap-guard owns - read the skill instead of copying its text"
+                break
+            }
+        }
+    }
+}
+
 # CL100 / CL102 / CL103 - each invocation against the mode it names. A target
 # agent that CL001 already flagged as unresolved gets no CL100 pile-on.
 foreach ($inv in $invocations) {
@@ -958,8 +1099,14 @@ foreach ($r in $refs) {
     Add-Finding 'CL202' $r.File $r.Line "mcp tool name '$($r.Target)' is absent from contractLint.knownMcpTools"
 }
 
-# CL203 - a tool this agent's own frontmatter declares, that its own body
-# (everything after the closing ---) never mentions by name.
+# CL203/CL204 - a tool this agent's own frontmatter declares, that its own
+# body (everything after the closing ---) never mentions by name. WARN
+# (CL203) when the agent has no write tool of its own; BLOCK (CL204) when
+# the agent is write-capable - an unexplained unused Write/Edit/MultiEdit
+# sibling on the one class of agent that holds write power is the
+# highest-value thing this check can find. Severity is still looked up from
+# the manifest at emit time per rule id (never computed) - CL204 is a
+# distinct rule id precisely so that invariant holds.
 foreach ($t in $agentToolRefs) {
     $lines = $fileLines[$t.File]
     $start = $agentBodyStart[$t.Agent]
@@ -968,7 +1115,93 @@ foreach ($t in $agentToolRefs) {
         if ($lines[$i].IndexOf($t.Tool, [System.StringComparison]::Ordinal) -ge 0) { $used = $true; break }
     }
     if (-not $used) {
-        Add-Finding 'CL203' $t.File $t.Line "agent '$($t.Agent)' declares tool '$($t.Tool)' but its body never mentions it"
+        $rid = if ($writeCapableAgents.Contains($t.Agent)) { 'CL204' } else { 'CL203' }
+        Add-Finding $rid $t.File $t.Line "agent '$($t.Agent)' declares tool '$($t.Tool)' but its body never mentions it"
+    }
+}
+
+# CL205 - the command-side twin of CL200. An invocation of an agent with no
+# write tool (read off disk, $writeCapableAgents) opens a window that runs to
+# the next heading or the next anchor. Unlike the CL1xx token span it does NOT
+# stop at a numbered step: the defect this catches (SW-51, rca.md Phase 2) lives
+# in step 3, two steps after step 1's invocation. Inside the window, a line
+# that names a spec artifact and a write form, in a numbered step that never
+# says 'main thread', asserts a write nobody is told to perform - the agent
+# cannot, and the main thread was never asked. The step is [nearest numbered
+# step at or above the line (clamped to the anchor), next numbered step /
+# heading / anchor), fenced lines skipped. Unresolved targets are CL001's
+# problem, not this one.
+function Get-StepText([string]$Rel, [int]$Lo, [int]$Idx) {
+    $lines = $fileLines[$Rel]
+    $fence = $fileFence[$Rel]
+    $s = $Idx
+    while ($s -gt $Lo) {
+        if (-not $fence[$s] -and [regex]::IsMatch($lines[$s], $RE_NUMSTEP)) { break }
+        $s--
+    }
+    $sb = New-Object System.Text.StringBuilder
+    for ($k = $s; $k -lt $lines.Length; $k++) {
+        if ($fence[$k]) { continue }
+        if ($k -gt $s) {
+            if ([regex]::IsMatch($lines[$k], $RE_HEADING)) { break }
+            if ([regex]::IsMatch($lines[$k], $RE_NUMSTEP)) { break }
+            if ($anchorLines.Contains($Rel + ':' + ($k + 1))) { break }
+        }
+        [void]$sb.Append(' ').Append($lines[$k])
+    }
+    return $sb.ToString()
+}
+
+$cl205Seen = New-OrdinalSet
+foreach ($a in $anchors) {
+    if (-not $agentNames.Contains($a.Agent)) { continue }
+    if ($writeCapableAgents.Contains($a.Agent)) { continue }
+    $lines = $fileLines[$a.File]
+    $fence = $fileFence[$a.File]
+    $startIdx = $a.Line - 1
+    for ($j = $startIdx; $j -lt $lines.Length; $j++) {
+        if ($fence[$j]) { continue }
+        $txt = $lines[$j]
+        if ($j -gt $startIdx) {
+            if ([regex]::IsMatch($txt, $RE_HEADING)) { break }
+            if ($anchorLines.Contains($a.File + ':' + ($j + 1))) { break }
+        }
+        if (-not [regex]::IsMatch($txt, $RE_SPECARTIFACT)) { continue }
+        if (-not [regex]::IsMatch($txt, $RE_ARTIFACTWRITE)) { continue }
+        if ([regex]::IsMatch((Get-StepText $a.File $startIdx $j), $RE_MAINTHREAD)) { continue }
+        if (-not $cl205Seen.Add($a.File + ':' + ($j + 1))) { continue }
+        Add-Finding 'CL205' $a.File ($j + 1) "step asserts a spec-artifact write inside the block of '$($a.Agent)', which has no write tool, and names no main-thread writer"
+    }
+}
+
+# CL206 - a workflow that writes .specs/index.md or a spec's status: must tell
+# the model to do it with the Edit tool, never a shell command (SW-79): a
+# shell write sidesteps spec-gate's Rules 0, 0b and 1 and records no
+# spec_transition event. The files are DECLARED (contractLint.editToolOnly),
+# not inferred - "does this command write the index" is not decidable from
+# prose. The phrase must sit on a non-fenced line, or be wrapped across it and
+# the next non-fenced line (trimmed, joined with one space, as CL009 joins).
+# Ordinal .Contains. Reported on line 1: the defect is an absence.
+if ($editToolOnlyFiles.Count -gt 0) {
+    $cl206Blank = [char[]]@([char]32, [char]9)
+    foreach ($rel in $scanFiles) {
+        if (-not $editToolOnlyFiles.Contains($rel)) { continue }
+        $lines = $fileLines[$rel]
+        $fence = $fileFence[$rel]
+        $found = $false
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($fence[$i]) { continue }
+            $cur = $lines[$i].Trim($cl206Blank)
+            if ($cur.Contains($editToolOnlyPhrase)) { $found = $true; break }
+            $j = $i + 1
+            if ($j -lt $lines.Length -and -not $fence[$j]) {
+                $nxt = $lines[$j].Trim($cl206Blank)
+                if (($cur + ' ' + $nxt).Contains($editToolOnlyPhrase)) { $found = $true; break }
+            }
+        }
+        if (-not $found) {
+            Add-Finding 'CL206' $rel 1 "workflow writes the spec index or a spec status but never says to do it with the Edit tool only (contractLint.editToolOnly.phrase)"
+        }
     }
 }
 
@@ -1111,27 +1344,6 @@ foreach ($rel in $scanFiles) {
     }
 }
 
-# CL500 - file budgets. Byte count is NORMALIZED (sum of each line's UTF-8
-# byte length, plus one separator per line boundary), never a raw disk read:
-# this repo's *.md scanScope is 'text=auto', checking out LF on Linux CI and
-# CRLF on Windows, so [System.IO.File]::ReadAllBytes(...).Length would make
-# CL500 disagree with itself across platforms for byte-identical content -
-# see the manifest's $budgetsComment.
-foreach ($rel in $scanFiles) {
-    $budget = Get-BudgetForFile $rel
-    if ($null -eq $budget) { continue }
-    $lines = $fileLines[$rel]
-    $bytes = 0
-    for ($i = 0; $i -lt $lines.Length; $i++) {
-        $bytes += [System.Text.Encoding]::UTF8.GetByteCount($lines[$i])
-    }
-    if ($lines.Length -gt 1) { $bytes += ($lines.Length - 1) }
-    if ($bytes -gt $budget) {
-        $over = $bytes - $budget
-        Add-Finding 'CL500' $rel 1 "file is $bytes bytes, $over over the $budget-byte budget"
-    }
-}
-
 # CL302 / CL303 / CL304
 foreach ($rel in $scanFiles) {
     $count = 0
@@ -1191,6 +1403,237 @@ foreach ($rel in $scanFiles) {
         }
     }
 }
+
+# CL601-CL605 - the model escalation policy (SW-63). skills/sd-model-escalation
+# states it in prose; contractLint.escalationTriggers is its assertable copy.
+# These rules check that the policy is STATED consistently - never that a
+# subagent RAN on the escalated model (see docs/adr/0014).
+#   CL601  a command invokes an agent but has no escalation row, has rows but
+#          never reads the skill, or never names one of its own rows
+#   CL602  manifest rows vs the skill's trigger table, both directions, plus
+#          any ESC- id cited outside the skill that no row declares
+#   CL603  a row's from/to is not an alias
+#   CL604  the ladder differs from the skill's, or a row is not one rung up
+#   CL605  a command restates the ladder, a precedence rule or the retro line
+# Manifest-side findings land on specwright.manifest.json line 1: it is outside
+# scanScope, so no suppression can reach them - on purpose.
+function Invoke-EscalationRules {
+    $blank = [char[]]@([char]32, [char]9)
+    $sectionTrim = [char[]]@([char]32, [char]9, [char]35)
+
+    # -- skill side: the ladder line and the trigger table.
+    Read-FileLines $escSkillRel
+    $lines = $fileLines[$escSkillRel]
+    $fence = $fileFence[$escSkillRel]
+    $skillLadder = ''
+    $skillRows = New-Object 'System.Collections.Generic.List[object]'
+    $sec = ''
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        if ($fence[$i]) { continue }
+        $line = $lines[$i]
+        if ([regex]::IsMatch($line, $RE_H2)) {
+            $sec = $line.TrimStart($sectionTrim).TrimEnd($blank)
+            continue
+        }
+        if ($sec -ceq 'Ladder' -and $skillLadder.Length -eq 0) {
+            $m = [regex]::Match($line, $RE_BACKTICKED)
+            if ($m.Success) { $skillLadder = $m.Groups[1].Value }
+            continue
+        }
+        if ($sec -cne 'Trigger table') { continue }
+        $t = $line.Trim($blank)
+        if (-not $t.StartsWith('|', [StringComparison]::Ordinal)) { continue }
+        $row = $t.Substring(1)
+        if ($row.EndsWith('|', [StringComparison]::Ordinal)) { $row = $row.Substring(0, $row.Length - 1) }
+        $cells = $row.Split([char]'|')
+        for ($j = 0; $j -lt $cells.Length; $j++) {
+            $cells[$j] = $cells[$j].Replace('`', '').Trim($blank)
+        }
+        if ($cells[0] -ceq 'Rule ID') { continue }
+        if ($cells[0].StartsWith('-', [StringComparison]::Ordinal)) { continue }
+        if ($cells.Length -ne 7) {
+            Add-Finding 'CL602' $escSkillRel ($i + 1) "trigger-table row has $($cells.Length) cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
+            continue
+        }
+        $scmd = $cells[1]
+        if ($scmd.StartsWith('/sd:', [StringComparison]::Ordinal)) { $scmd = $scmd.Substring(4) }
+        [void]$skillRows.Add([PSCustomObject]@{
+            Id = $cells[0]; Command = $scmd; Agent = $cells[4]; From = $cells[5]; To = $cells[6]; Line = ($i + 1)
+        })
+    }
+
+    if ($escRows.Count -eq 0) {
+        # One error, not a pile-on: with no rows every downstream check would
+        # restate this same fact once per command and per cited id.
+        Add-Finding 'CL602' $manifestRel 1 "skills/$escSkillName exists but contractLint.escalationTriggers declares no rows - the policy has no assertable copy"
+        return
+    }
+    if ($skillRows.Count -eq 0) {
+        Add-Finding 'CL602' $escSkillRel 1 "no trigger table under '## Trigger table' - nothing to compare contractLint.escalationTriggers against"
+    }
+    if ($escAliases.Count -eq 0) {
+        Add-Finding 'CL603' $manifestRel 1 "contractLint.escalationPolicy.aliases is empty - no row tier can be checked"
+    }
+    if ($escRestatePhrases.Count -eq 0) {
+        Add-Finding 'CL605' $manifestRel 1 "contractLint.escalationPolicy.restatePhrases is empty - restatement cannot be detected"
+    }
+
+    # -- the ladder: manifest vs skill.
+    $mLadder = [string]::Join(' -> ', $escLadder.ToArray())
+    if ($mLadder.Length -eq 0) {
+        Add-Finding 'CL604' $manifestRel 1 "contractLint.escalationPolicy.ladder is empty - no row can be checked for one-rung movement"
+    } elseif ($skillLadder.Length -eq 0) {
+        Add-Finding 'CL604' $escSkillRel 1 "no backticked ladder line under '## Ladder' to compare contractLint.escalationPolicy.ladder against"
+    } elseif ($mLadder -cne $skillLadder) {
+        Add-Finding 'CL604' $manifestRel 1 "contractLint.escalationPolicy.ladder '$mLadder' differs from the skill's '$skillLadder'"
+        # Every row measured against a wrong ladder would restate this finding.
+        $mLadder = ''
+    }
+
+    # -- manifest rows: shape, skill parity, tiers.
+    $seenIds = New-OrdinalSet
+    foreach ($r in $escRows) {
+        $eid = $r.Id
+        if ($seenIds.Contains($eid)) {
+            Add-Finding 'CL602' $manifestRel 1 "escalationTriggers declares $eid twice"
+            continue
+        }
+        [void]$seenIds.Add($eid)
+        $mi = [regex]::Match($eid, $RE_ESCID_FULL)
+        if ($mi.Success) {
+            $nn = [int]$mi.Groups[1].Value
+            $pd = ''
+            $mp = [regex]::Match($r.Phase, $RE_LEADDIGITS)
+            if ($mp.Success) { $pd = [string]([int]$mp.Groups[1].Value) }
+            if ($pd -cne [string]$nn) {
+                Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid has phase '$($r.Phase)', but its id names phase $nn"
+            }
+        } else {
+            Add-Finding 'CL602' $manifestRel 1 "escalationTriggers id '$eid' is not ESC-<WORKFLOW>-<NN>[suffix]"
+        }
+        $found = $false
+        foreach ($s in $skillRows) {
+            if ($s.Id -cne $eid) { continue }
+            $found = $true
+            if ($s.Command -cne $r.Command) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid command '$($r.Command)' differs from the skill's '/sd:$($s.Command)'" }
+            if ($s.Agent -cne $r.Agent) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid agent '$($r.Agent)' differs from the skill's '$($s.Agent)'" }
+            if ($s.From -cne $r.From) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid from '$($r.From)' differs from the skill's '$($s.From)'" }
+            if ($s.To -cne $r.To) { Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid to '$($r.To)' differs from the skill's '$($s.To)'" }
+            break
+        }
+        if (-not $found -and $skillRows.Count -gt 0) {
+            Add-Finding 'CL602' $manifestRel 1 "escalationTriggers row $eid is absent from the skill's trigger table"
+        }
+        $nonAlias = $false
+        foreach ($tier in @($r.From, $r.To)) {
+            if ($escAliases.Count -gt 0 -and -not $escAliases.Contains($tier)) {
+                Add-Finding 'CL603' $manifestRel 1 "escalationTriggers row $eid tier '$tier' is not a model alias"
+                $nonAlias = $true
+            }
+        }
+        # A non-alias tier is CL603's; CL604 on the same value would report one
+        # problem twice.
+        if (-not $nonAlias -and $mLadder.Length -gt 0) {
+            $fi = $escLadder.IndexOf($r.From)
+            $ti = $escLadder.IndexOf($r.To)
+            if ($fi -lt 0) {
+                Add-Finding 'CL604' $manifestRel 1 "escalationTriggers row $eid from '$($r.From)' is not a rung of the ladder"
+            } elseif ($ti -lt 0) {
+                Add-Finding 'CL604' $manifestRel 1 "escalationTriggers row $eid to '$($r.To)' is not a rung of the ladder"
+            } elseif (($ti - $fi) -ne 1) {
+                Add-Finding 'CL604' $manifestRel 1 "escalationTriggers row $eid moves $($r.From) -> $($r.To), which is not exactly one rung up"
+            }
+        }
+    }
+
+    # -- skill rows the manifest does not carry.
+    foreach ($s in $skillRows) {
+        if ($seenIds.Contains($s.Id)) { continue }
+        Add-Finding 'CL602' $escSkillRel $s.Line "trigger-table row $($s.Id) is absent from contractLint.escalationTriggers"
+    }
+
+    # -- every ESC- id cited outside the skill, outside fences. The skill's own
+    # mentions are covered by the table comparison above.
+    $escRefs = New-OrdinalSet
+    foreach ($rel in $scanFiles) {
+        if ($rel -ceq $escSkillRel) { continue }
+        $lines = $fileLines[$rel]
+        $fence = $fileFence[$rel]
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($fence[$i]) { continue }
+            foreach ($m in [regex]::Matches($lines[$i], $RE_ESCID)) {
+                $tok = $m.Value
+                [void]$escRefs.Add($rel + ':' + $tok)
+                if ($seenIds.Contains($tok)) { continue }
+                Add-Finding 'CL602' $rel ($i + 1) "cites escalation rule $tok, which contractLint.escalationTriggers does not declare"
+            }
+        }
+    }
+
+    # -- CL601: every invoking command is covered.
+    foreach ($rel in $scanFiles) {
+        if (-not $rel.StartsWith('commands/', [StringComparison]::Ordinal)) { continue }
+        $name = $rel.Substring(9)
+        $name = $name.Substring(0, $name.Length - 3)
+        $hasRows = $false
+        foreach ($r in $escRows) {
+            if ($r.Command -cne $name) { continue }
+            $hasRows = $true
+            if (-not $escRefs.Contains($rel + ':' + $r.Id)) {
+                Add-Finding 'CL601' $rel 1 "escalationTriggers row $($r.Id) targets /sd:$name, but this command never names it - the row is not live"
+            }
+        }
+        if ($hasRows) {
+            $readsSkill = $false
+            foreach ($ref in $refs) {
+                if ($ref.Kind -ceq 'sdref' -and $ref.Target -ceq $escSkillName -and $ref.File -ceq $rel) { $readsSkill = $true; break }
+            }
+            if (-not $readsSkill) {
+                Add-Finding 'CL601' $rel 1 "command has escalationTriggers rows but never references $escSkillName - it cannot apply a policy it does not read"
+            }
+            continue
+        }
+        $first = 0
+        $agent = ''
+        foreach ($a in $anchors) {
+            if ($a.File -cne $rel) { continue }
+            if (-not $agentNames.Contains($a.Agent)) { continue }
+            if ($first -eq 0 -or $a.Line -lt $first) { $first = $a.Line; $agent = $a.Agent }
+        }
+        if ($first -gt 0) {
+            Add-Finding 'CL601' $rel $first "invokes '$agent' but no escalationTriggers row targets this command - wire an $escSkillName rule, or add an allow CL601 comment with the reason"
+        }
+    }
+
+    # -- CL605: a command restates policy text the skill owns. Fenced lines
+    # are NOT skipped - a fenced retro-line example is exactly the restatement.
+    # Two-line wrap window and one-finding-per-occurrence, as CL009.
+    foreach ($rel in $scanFiles) {
+        if (-not $rel.StartsWith('commands/', [StringComparison]::Ordinal)) { continue }
+        $lines = $fileLines[$rel]
+        for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ([regex]::IsMatch($lines[$i], $RE_SUPPRESS)) { continue }
+            $cur = $lines[$i].Trim($blank)
+            $nxt = ''
+            $j = $i + 1
+            if ($j -lt $lines.Length -and -not [regex]::IsMatch($lines[$j], $RE_SUPPRESS)) {
+                $nxt = $lines[$j].Trim($blank)
+            }
+            foreach ($phrase in $escRestatePhrases) {
+                $hit = $cur.Contains($phrase)
+                if (-not $hit -and $nxt.Length -gt 0 -and -not $nxt.Contains($phrase)) {
+                    $hit = ($cur + ' ' + $nxt).Contains($phrase)
+                }
+                if ($hit) {
+                    Add-Finding 'CL605' $rel ($i + 1) "restates '$phrase', which $escSkillName owns - name the rule ID and its trigger inputs instead"
+                    break
+                }
+            }
+        }
+    }
+}
+
+if ($escActive) { Invoke-EscalationRules }
 
 # ---- Phase C: suppressions, sort, emit -------------------------------------
 #

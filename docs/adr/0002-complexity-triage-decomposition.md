@@ -80,6 +80,9 @@ in this repo drives a `/sd:feature` run, so nothing exercises the threshold arit
 tolerant task count automatically. The conformance evidence is a manual trace (a 3-task corpus spec
 stays under; a 10-12-task one trips), recorded rather than automated. A check that cannot fail is a
 failure mode this repo has shipped before (SW-20); this one is asserted by trace, not by runner.
+**Update (SW-63):** decision 5's escalation policy now has a statement-consistency check -
+contract-lint `CL601`-`CL605` and `scripts/validate-escalation-lines.*` (ADR 0014). The threshold
+arithmetic, and whether a subagent was served the escalated model, remain uncovered by CI.
 
 **Scope declined.** SW-13 does **not** add an `SL` lint rule. The `complexity` field is frontmatter,
 so validation is `SL00x` territory, not the `SL06x` task-block band SW-11 reserved - there is no

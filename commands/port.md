@@ -48,33 +48,34 @@ hunk vocabulary this file wires together - it does not restate them.
 | status `done` | `done` | Print summary, exit |
 | status `archived` | `archived` | Print archived notice, exit |
 
+"Checked" and "unchecked" mean the task's check-off marker as defined in the "Check-off marker"
+section of the **sd-atomic-task-format** skill - the one definition; do not invent a marker. Task
+rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
+frontmatter first and is never resumed from its task markers.
+
 ---
 
 ## Phase 0 - Bootstrap (always runs)
 
-1. Read `CLAUDE.md`. If missing, WARN and continue - print "No `CLAUDE.md` found; stack
-   conventions may be incomplete."
-2. Read `.specs/constitution.md`. If `.specs/` or this file is missing, STOP: "No `.specs/` found -
-   run `/sd:setup` first."
-3. Read `.claude/project-config.json`. If missing, STOP with the same message. If present but
-   fails to parse as JSON, STOP: "`.claude/project-config.json` failed to parse - fix it or re-run
-   `/sd:setup`."
-4. Read `.specs/index.md`. If missing, STOP with the "run `/sd:setup` first" message.
-5. **Parse arguments**: `<slug>`; `--from <value>`; `--scope <endpoint|module|feature|pattern>`;
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. **Parse arguments**: `<slug>`; `--from <value>`; `--scope <endpoint|module|feature|pattern>`;
    `--snapshot <contract|contract+source>` (default `contract`).
    - `--scope` absent or not one of the four values -> ask the user to pick one. Never infer it.
    - `--from` absent -> STOP: "`--from` is required: a bridged contract artifact (cross-repo) or an
      in-repo path/symbol (intra-repo)."
    - `--snapshot` present and not one of the two values -> STOP naming the two legal forms.
-6. **Select topology from `--from`** - the rest of the pipeline is identical either way:
+3. **Select topology from `--from`** - the rest of the pipeline is identical either way:
    - Resolves to a directory or file containing a `contract.md` with frontmatter `type:
      port-extraction` -> topology = `bridged`.
    - Resolves to a path or symbol inside this working tree -> topology = `in-repo`.
    - Neither -> STOP naming both accepted forms.
-7. Compute the UTC date and the spec ID `PORT-<slug>-<YYYYMMDD>`.
-8. **Read the port policy.** Scan `.specs/constitution.md` for the first heading (any level) whose
+4. Compute the UTC date and the spec ID `PORT-<slug>-<YYYYMMDD>`.
+5. **Read the port policy.** Scan `.specs/constitution.md` for the first heading (any level) whose
    text contains "Port policy" (case-insensitive). Effective policy = that section's body.
-9. **State the effective policy in output, always** - including the fallback:
+6. **State the effective policy in output, always** - including the fallback:
    ```
    Effective port policy: <constitution heading> "<section body, or a one-line summary of it>"
    -- or, when no such section exists --
@@ -82,7 +83,11 @@ hunk vocabulary this file wires together - it does not restate them.
    policy" section found in .specs/constitution.md
    Scope: <scope>   Topology: <bridged|in-repo>   Snapshot mode: <contract|contract+source>
    ```
-10. Detect state from the table above. Print the resume plan.
+7. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 1 and Phase 6 step 2; this file names only rule IDs and trigger inputs. If
+   that file is unreadable, STOP: "specwright install incomplete - model escalation skill not
+   found under `~/.claude/skills/sd/`. Re-run the installer."
+8. Detect state from the table above. Print the resume plan.
 
 ---
 
@@ -101,10 +106,17 @@ hunk vocabulary this file wires together - it does not restate them.
 3. A `source_commit` reading `dirty (...)` is a WARN, not a STOP - record it as an Open question in
    the spec once created.
 4. `--snapshot contract+source` with no `source/` subtree in the bundle -> STOP.
+5. Read the bundle's `escalation_line` frontmatter value: the donor-side `/sd:explore --port`
+   decision for rule `ESC-PORT-01` of **sd-model-escalation**. Hold it for step 6 under "Both
+   branches". `none` -> nothing to carry. Key absent -> WARN "bundle predates ESC-PORT-01 - no
+   escalation decision to carry" and carry nothing.
 
 ### Branch B - topology `in-repo`
 
-1. Invoke `sd-code-explorer` with:
+1. **Model escalation check, then the extraction.** Apply rule `ESC-PORT-01` of
+   **sd-model-escalation** (read in Phase 0). Trigger inputs: `GITNEXUS_AVAILABLE` and `SCOPE`
+   below. The spec does not exist yet - hold the decision for step 6 under "Both branches".
+   Invoke `sd-code-explorer` (model: default, or as resolved above) with:
    - `TASK = port-extract`
    - `ENTRY_POINT = <the --from value>`
    - `SCOPE = <scope from Phase 0>`
@@ -128,6 +140,9 @@ hunk vocabulary this file wires together - it does not restate them.
    invariants (from the extraction's Non-obvious invariants section), leaves the three fidelity
    tables' `<<...>>` rows for Phase 4, leaves `AC-1` verbatim. Register in `.specs/index.md` at
    status `draft`.
+6. **Write the held `ESC-PORT-01` decision.** Append it to the new spec's `05-retro.md` per
+   **sd-model-escalation**'s logging contract: Branch A copies the bundle's `escalation_line`
+   verbatim, Branch B writes the decision it made at its step 1. Nothing held -> write nothing.
 
 No gate here - Gate 1 covers the freeze that follows in Phase 2, not the raw extraction.
 
@@ -299,7 +314,10 @@ the same question; the empty-diff proof is never skipped.
    - Over threshold: present a split at Gate 4, partitioned along disjoint `Host path` rows (each
      child owns a set of path-mapping rows plus the deviation IDs those rows reference), or a
      no-split flag. Under threshold: normal plan, zero added friction.
-2. Invoke `sd-spec-architect` with:
+2. **Model escalation check, then the plan.** Apply rule `ESC-PORT-06` of
+   **sd-model-escalation** (read in Phase 0). Trigger input: the port decompose metric computed in
+   step 1 (deviation rows requiring adaptation). Invoke `sd-spec-architect` (model: default, or as
+   resolved above) with:
    - `TASK = plan`
    - `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT = .specs/PORT-<slug>-<YYYYMMDD>/03-decisions.md`
@@ -355,7 +373,9 @@ current batch:
 4. **Self-check** (main thread, no per-task reviewer - same cost argument as `/sd:feature` Phase
    4): only files in `Files` were touched; the diff touches only what the cited member range
    accounts for, or a licensed deviation row; the test passes.
-5. Check off the task in `02-tasks.md`. Log one line to `05-retro.md`: `T<NN>: <status> - <note>`.
+5. Check off the task in `02-tasks.md` (set its `Status` line to `done`, per the "Check-off
+   marker" section of the **sd-atomic-task-format** skill). Log one line to `05-retro.md`:
+   `T<NN>: <status> - <note>`.
 
 ### ⛔ Gate 5 - Batch tests green
 
@@ -440,6 +460,9 @@ a resolution - it makes the diff justify itself.
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Phase 0 always runs, even on resume.
 - Gates 1, 2, 3, and 6 are HARD - no override path. Gates 4 and 5 are ordinary approvals; the
   workflow still declares 6 total gates.
@@ -458,6 +481,11 @@ a resolution - it makes the diff justify itself.
   `commands.build` / `commands.lint` / `commands.coverage`; paths from `paths.src` / `paths.tests` /
   `paths.layers` / `paths.protected`.
 - Model references are aliases only (`sonnet`, `haiku`, `opus`, `inherit`) - never a full model ID.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PORT-01` is applied at
+  Phase 1 (Branch B; carried from the bundle in Branch A) and `ESC-PORT-06` at Phase 6 step 2. The
+  Phase 5 and Phase 7 `sd-implementer` calls run at the default, a decision recorded in the skill;
+  the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
+  skill and are not restated here.
 - Snapshot visibility: this command warns about host tooling globbing `.specs/` and never edits the
   host's build, lint, or coverage configuration.
 - Implementer touches only files declared in the task's `Files` list. Any scope creep -> stop,

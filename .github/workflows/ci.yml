@@ -67,6 +67,38 @@ jobs:
           # would fail the step on its own correctly-detecting assertion.
           exit 0
 
+      # --- Retro escalation-line validator (SW-63), both directions. The bad
+      # fixture breaks the contract once per line, so "N violation(s) across N
+      # line(s)" is the assertion: a bare non-zero exit would stay green while
+      # all but one check rotted into a no-op --------------------------------
+      - name: Escalation-line validator (bash)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: |
+          bash scripts/validate-escalation-lines.sh --spec-dir tests/retro-escalation/fixtures/clean
+          if out="$(bash scripts/validate-escalation-lines.sh --spec-dir tests/retro-escalation/fixtures/bad)"; then
+            echo "$out"
+            echo "::error::bad fixture passed the escalation-line validator - checks are not firing"
+            exit 1
+          fi
+          echo "$out"
+          if ! grep -qE '([0-9]+) violation\(s\) across \1 escalation line' <<< "$out"; then
+            echo "::error::not every bad escalation line was rejected"
+            exit 1
+          fi
+
+      - name: Escalation-line validator (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/validate-escalation-lines.ps1 -SpecDir tests/retro-escalation/fixtures/clean
+          if ($LASTEXITCODE -ne 0) { throw "clean fixture failed the escalation-line validator" }
+          $out = ./scripts/validate-escalation-lines.ps1 -SpecDir tests/retro-escalation/fixtures/bad 6>&1 | Out-String
+          if ($LASTEXITCODE -eq 0) { throw "bad fixture passed the escalation-line validator - checks are not firing" }
+          Write-Output $out
+          if ($out -cnotmatch '(\d+) violation\(s\) across \1 escalation line') { throw "not every bad escalation line was rejected" }
+          exit 0
+
       # --- Lesson aggregator: pin the rendered output against a committed
       # expected file, then assert idempotence via --check. Both implementations
       # must land on the SAME bytes; the expected file is what makes a
@@ -103,6 +135,19 @@ jobs:
         shell: pwsh
         run: ./scripts/selftest-docs.ps1
 
+      # --- Root ad-hoc notes guard self-test: the validator above proves the
+      # root is clean; this proves Check 9 would NOTICE a REVIEW-TODO.md-shaped
+      # file reappearing, on both OSes and in both case variants -------------
+      - name: Root notes guard self-test (bash)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/selftest-root-guard.sh
+
+      - name: Root notes guard self-test (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/selftest-root-guard.ps1
+
       # --- Cross-impl hook conformance: pipe each golden fixture into BOTH
       # implementations (bash + pwsh); normalized decisions must match the
       # golden and each other. Runs under pwsh on every OS: ubuntu/macos get
@@ -115,6 +160,18 @@ jobs:
       - name: Hook conformance self-test (divergence detection)
         shell: pwsh
         run: ./tests/hooks/run-conformance.ps1 -SelfTest
+
+      # --- Hook latency floor (SW-50): spawn each PowerShell hook as a fresh
+      # process and fail if p95 exceeds specwright.manifest.json's
+      # hookLatencyBudgets. windows-latest names BOTH flavors explicitly, so a
+      # runner that lost powershell.exe fails instead of silently measuring
+      # only pwsh - conformance above never exercises real Windows PowerShell
+      # 5.1, which is the default wiring users actually run ----------------
+      - name: Hook latency budget
+        shell: pwsh
+        run: |
+          $flavors = if ($IsWindows) { @('pwsh', 'powershell') } else { @('pwsh') }
+          ./tests/hooks/measure-latency.ps1 -Flavors $flavors -Iterations 20 -CheckBudget
 
       # --- Contract-lint fixtures: same posture as the hook conformance pair
       # above. One pwsh runner drives BOTH linter implementations per case, so
@@ -136,7 +193,11 @@ jobs:
         run: |
           set -euo pipefail
           base="$(mktemp -d)"
-          ./install/install.sh --base-path "$base" --force
+          out="$(./install/install.sh --base-path "$base" --force 2>&1)"
+          echo "$out"
+          if echo "$out" | grep -q "Partial install at"; then
+            echo "FAIL: partial-install guard fired on a clean install"; exit 1
+          fi
           for area in commands agents hooks templates skills; do
             test -d "$base/$area/sd" || { echo "FAIL: $area/sd missing after install"; exit 1; }
           done
@@ -160,8 +221,10 @@ jobs:
           $base = Join-Path $env:RUNNER_TEMP 'sd-roundtrip'
           if (Test-Path $base) { Remove-Item -Recurse -Force $base }
           # Run installers in child processes so their `exit` does not end this step.
-          pwsh -NoProfile -File ./install/install.ps1 -BasePath $base -Force
+          $installOut = & pwsh -NoProfile -File ./install/install.ps1 -BasePath $base -Force *>&1 | Out-String
+          Write-Host $installOut
           if ($LASTEXITCODE -ne 0) { Write-Error 'install failed'; exit 1 }
+          if ($installOut -match 'Partial install at') { Write-Error 'FAIL: partial-install guard fired on a clean install'; exit 1 }
           foreach ($area in 'commands','agents','hooks','templates','skills') {
             if (-not (Test-Path "$base/$area/sd")) { Write-Error "FAIL: $area/sd missing after install"; exit 1 }
           }
@@ -174,3 +237,207 @@ jobs:
           if ($remaining) { Write-Error "FAIL: files survived uninstall:`n$($remaining.FullName -join "`n")"; exit 1 }
           Remove-Item -Recurse -Force $base
           Write-Host 'round-trip OK'
+
+      # --- BASE_PATH/--prefix validation negative cases (SW-45) --------------
+      - name: Install/uninstall argument validation negative cases (bash)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: |
+          # GitHub runs `shell: bash` as `bash -e`; `set -uo pipefail` does not
+          # turn -e back off, so the first expected non-zero `out="$(...)"` below
+          # would abort the step before `rc=$?` runs. These assertions check rc
+          # by hand, so -e must be off.
+          set +e
+          set -uo pipefail
+          repo_root="$(pwd)"
+          scratch="$(mktemp -d)"
+
+          # Empty BASE_PATH resolves to an absolute root path ("" + "/commands/sd"),
+          # so the load-bearing assertion is "no top-level area dir appeared at /",
+          # not "the scratch cwd stayed empty" - cwd is irrelevant for this case.
+          assert_no_root_writes() {
+            local desc="$1"; shift
+            local out rc
+            out="$(cd "$scratch" && "$@" 2>&1)"; rc=$?
+            if [ "$rc" -ne 2 ]; then
+              echo "FAIL: $desc exited $rc, expected 2"; echo "$out"; exit 1
+            fi
+            for area in commands agents hooks templates skills; do
+              if [ -e "/$area" ]; then
+                echo "FAIL: $desc created /$area"; exit 1
+              fi
+            done
+            echo "OK (2, no root writes): $desc"
+          }
+
+          # Whitespace-only / missing-value cases never reach path-building logic
+          # (the new guards fire first), so the scratch cwd must stay empty.
+          assert_scratch_empty() {
+            local desc="$1"; shift
+            local out rc n
+            out="$(cd "$scratch" && "$@" 2>&1)"; rc=$?
+            if [ "$rc" -ne 2 ]; then
+              echo "FAIL: $desc exited $rc, expected 2"; echo "$out"; exit 1
+            fi
+            n="$(find "$scratch" -mindepth 1 | wc -l | tr -d ' ')"
+            if [ "$n" -ne 0 ]; then
+              echo "FAIL: $desc left $n item(s) in scratch cwd"; find "$scratch"; exit 1
+            fi
+            echo "OK (2, scratch empty): $desc"
+          }
+
+          for script in install/install.sh install/uninstall.sh; do
+            assert_no_root_writes "$script --base-path ''" \
+              "$repo_root/$script" --base-path "" --force
+            assert_scratch_empty "$script --base-path '   '" \
+              "$repo_root/$script" --base-path "   " --force
+            assert_scratch_empty "$script --base-path (no value)" \
+              "$repo_root/$script" --base-path
+            assert_scratch_empty "$script --prefix (no value)" \
+              "$repo_root/$script" --prefix
+          done
+
+          rm -rf "$scratch"
+          echo "negative-case validation OK"
+
+      - name: Install/uninstall argument validation negative cases (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $repoRoot = $PWD.Path
+          $scratch = Join-Path $env:RUNNER_TEMP 'sd-basepath-negative'
+          if (Test-Path $scratch) { Remove-Item -Recurse -Force $scratch }
+          New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+
+          function Test-Rejected {
+              param(
+                  [string]$Desc,
+                  [string]$ScriptRelPath,
+                  [string[]]$InstallArgs,
+                  [int]$ExpectedExitCode = -1   # -1 = "any non-zero" (documented ps1 binder deviation)
+              )
+              Push-Location $scratch
+              try {
+                  & pwsh -NoProfile -File (Join-Path $repoRoot $ScriptRelPath) @InstallArgs *>&1 | Out-Null
+                  $rc = $LASTEXITCODE
+              } finally {
+                  Pop-Location
+              }
+              if ($ExpectedExitCode -ge 0) {
+                  if ($rc -ne $ExpectedExitCode) {
+                      Write-Error "FAIL: $Desc exited $rc, expected $ExpectedExitCode"
+                      exit 1
+                  }
+              } elseif ($rc -eq 0) {
+                  Write-Error "FAIL: $Desc exited 0, expected non-zero"
+                  exit 1
+              }
+              $leftover = Get-ChildItem -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+              if ($leftover) {
+                  Write-Error "FAIL: $Desc left $($leftover.Count) item(s) in scratch"
+                  exit 1
+              }
+              Write-Host "OK ($rc): $Desc"
+          }
+
+          foreach ($scriptRel in 'install\install.ps1', 'install\uninstall.ps1') {
+              Test-Rejected -Desc "$scriptRel -BasePath ''" -ScriptRelPath $scriptRel `
+                  -InstallArgs @('-BasePath', '', '-Force') -ExpectedExitCode 2
+              Test-Rejected -Desc "$scriptRel -BasePath '   '" -ScriptRelPath $scriptRel `
+                  -InstallArgs @('-BasePath', '   ', '-Force') -ExpectedExitCode 2
+              # Documented deviation: PowerShell's own parameter binder rejects this
+              # before the script body runs (exit 1, its own message) - see SW-45.
+              # Non-zero + zero writes is asserted, not the literal exit code.
+              Test-Rejected -Desc "$scriptRel -BasePath (no value)" -ScriptRelPath $scriptRel `
+                  -InstallArgs @('-BasePath')
+          }
+
+          Remove-Item -Recurse -Force $scratch
+          Write-Host 'negative-case validation OK'
+
+          # GitHub Actions appends an implicit `exit $LASTEXITCODE` to every pwsh
+          # step; the last child pwsh invocation above correctly returned non-zero,
+          # so without this reset the step would fail on its own passing assertions
+          # (same trap documented at the lesson-validator step above).
+          exit 0
+
+      # --- Installer --prefix parity (SW-53): one shared case table asserted
+      # against install.sh, uninstall.sh, install.ps1 and uninstall.ps1 in a
+      # single pwsh process. No `if:` guard - every OS runs all four, so a
+      # bash guard narrower than IsNullOrWhiteSpace fails on every runner ----
+      - name: Installer prefix parity (bash vs PowerShell)
+        shell: pwsh
+        run: ./tests/installer/run-prefix-parity.ps1
+
+      - name: Installer prefix parity self-test (divergence detection)
+        shell: pwsh
+        run: ./tests/installer/run-prefix-parity.ps1 -SelfTest
+
+      # --- Release-time prompt size report, CL500's replacement (SW-57) ------
+      - name: Prompt size report parity (bash vs PowerShell)
+        shell: pwsh
+        run: ./tests/prompt-size-report/run-parity.ps1
+
+      # --- Partial-install guard fires on a mid-copy failure (SW-46) ---------
+      - name: Partial-install guard negative case (bash)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: |
+          # GitHub runs `shell: bash` as `bash -e`; `set -uo pipefail` does not
+          # turn -e back off, so the first expected non-zero `out="$(...)"` below
+          # would abort the step before `rc=$?` runs. These assertions check rc
+          # by hand, so -e must be off.
+          set +e
+          set -uo pipefail
+          repo_root="$(pwd)"
+
+          # commands/ (plan position 1) installs successfully first, then
+          # agents/ (plan position 2) fails because its target already
+          # exists as a plain file - mkdir -p cannot create a directory
+          # there, so $INSTALLED > 0 when the guard should fire.
+          base="$(mktemp -d)"
+          mkdir -p "$base/agents"
+          : > "$base/agents/sd"
+          out="$("$repo_root/install/install.sh" --base-path "$base" --force 2>&1)"
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "FAIL: sabotaged install exited 0, expected non-zero"; echo "$out"; exit 1
+          fi
+          if ! echo "$out" | grep -qF "Partial install at '$base' (prefix 'sd')"; then
+            echo "FAIL: guard message did not fire on sabotaged install"; echo "$out"; exit 1
+          fi
+          if ! echo "$out" | grep -qF "./install/uninstall.sh --base-path \"$base\" --prefix \"sd\" --force"; then
+            echo "FAIL: guard message missing the exact uninstall command"; echo "$out"; exit 1
+          fi
+          rm -rf "$base"
+          echo "OK: guard fires with remedy on sabotaged install"
+
+      - name: Partial-install guard negative case (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $repoRoot = $PWD.Path
+          $base = Join-Path $env:RUNNER_TEMP 'sd-guard-sabotage'
+          if (Test-Path $base) { Remove-Item -Recurse -Force $base }
+          New-Item -ItemType Directory -Path (Join-Path $base 'agents') -Force | Out-Null
+          New-Item -ItemType File -Path (Join-Path $base 'agents\sd') -Force | Out-Null
+
+          $out = & pwsh -NoProfile -File (Join-Path $repoRoot 'install\install.ps1') -BasePath $base -Force *>&1 | Out-String
+          $rc = $LASTEXITCODE
+          if ($rc -eq 0) {
+            Write-Error "FAIL: sabotaged install exited 0, expected non-zero`n$out"; exit 1
+          }
+          if ($out -notmatch [regex]::Escape("Partial install at '$base' (prefix 'sd')")) {
+            Write-Error "FAIL: guard message did not fire on sabotaged install`n$out"; exit 1
+          }
+          $expectedCmd = ".\install\uninstall.ps1 -BasePath `"$base`" -Prefix `"sd`" -Force"
+          if ($out -notmatch [regex]::Escape($expectedCmd)) {
+            Write-Error "FAIL: guard message missing the exact uninstall command`n$out"; exit 1
+          }
+          Remove-Item -Recurse -Force $base
+          Write-Host 'OK: guard fires with remedy on sabotaged install'
+
+          # GitHub Actions appends an implicit `exit $LASTEXITCODE` to every pwsh
+          # step; the child pwsh invocation above correctly returned non-zero,
+          # so without this reset the step would fail on its own passing assertions.
+          exit 0

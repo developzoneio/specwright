@@ -38,14 +38,15 @@ Drives an optimization from a measured baseline to a measured improvement, with 
 
 ## Phase 0 - Bootstrap
 
-1. Read `CLAUDE.md`. If missing, WARN and continue - print "No `CLAUDE.md` found; stack
-   conventions may be incomplete." (the constitution is the binding Layer-2 contract, not
-   `CLAUDE.md`).
-2. Read `.specs/constitution.md`, `.claude/project-config.json`, `.specs/index.md`. If `.specs/`
-   or any of these is missing, STOP: "No `.specs/` found - run `/sd:setup` first." If
-   `.claude/project-config.json` is present but fails to parse as JSON, STOP:
-   "`.claude/project-config.json` failed to parse - fix it or re-run `/sd:setup`."
-3. Compute UTC date for spec ID.
+1. Read `~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md` and apply it before anything else here -
+   it owns the Layer-2 reads and all of their messages (commands cannot load skills via
+   frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
+   incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
+2. Compute UTC date for spec ID.
+3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
+   applied at Phase 4a step 4; this file names only rule IDs and trigger inputs. If that file is
+   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
 4. Detect state. Print resume plan.
 
 ---
@@ -129,15 +130,21 @@ For each selected hotspot, repeat this entire loop. Multiple hotspots = multiple
 
 ### 4a. Deep dive
 
-1. Invoke `sd-debugger` with:
+1. Invoke `sd-debugger` (model: default, or as resolved by step 4) with:
    - `TASK = hotspot-analysis`
    - `SUB_MODE = B`
-   - `HOTSPOT = <H# details>`
+   - `HOTSPOT = <H# details>` (on a step 4 re-invocation: plus this hotspot's `reverted`
+     Results-log rows, so the new hypotheses start from what already failed)
 2. Debugger produces 2-4 optimization hypotheses (not a single answer), each with:
    - Expected impact (e.g. "p95 -200ms based on current 350ms in this function").
    - Implementation cost (S / M / L).
    - Risk profile (correctness risk, scope of change, reversibility).
 3. Main thread appends the returned hypotheses to `03-decisions.md` (debugger has no write tool).
+4. **Model escalation check, before every return to Gate 4.** Each "loop back to Gate 4" below
+   passes through this step first. Apply rule `ESC-PERF-04` of **sd-model-escalation** (read in
+   Phase 0). Trigger input: the Results-log rows with decision `reverted` whose hypothesis belongs
+   to this hotspot (its `<H#x>` IDs). When the rule resolves to a re-invocation, re-run steps 1
+   and 3 once for this hotspot; Gate 4 then offers the untried hypotheses from both lists.
 
 ### ⛔ Gate 4 - Select hypothesis
 
@@ -150,7 +157,10 @@ STOP. Display hypotheses. Ask:
 
 ### 4b. Apply
 
-1. Invoke `sd-implementer` with:
+1. **Model escalation check, then the implementer.** Apply rule `ESC-PERF-04b` of
+   **sd-model-escalation** (read in Phase 0). Trigger input: the `Reversibility` value in the
+   chosen hypothesis's risk profile in `03-decisions.md`. The decision covers this attempt only.
+   Invoke `sd-implementer` (model: default, or as resolved above) with:
    - `TASK_DETAILS = <hypothesis details + target files>`
    - `SPEC_REF = .specs/PERF-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT_REF = .specs/PERF-<slug>-<YYYYMMDD>/03-decisions.md` (hotspot analysis)
@@ -167,7 +177,7 @@ STOP. Display hypotheses. Ask:
 STOP. Display test results.
 
 - All green -> proceed to 4d.
-- Any red -> REVERT immediately. Log failed attempt to Results log with `reverted` decision. Loop back to Gate 4 to select a different hypothesis.
+- Any red -> REVERT immediately. Log failed attempt to Results log with `reverted` decision. Loop back to Gate 4 (via 4a step 4) to select a different hypothesis.
 
 ### 4d. Re-measure
 
@@ -193,7 +203,7 @@ Branch on the noise check - the gate offers different choices depending on wheth
 > Keep change or revert? (keep / revert)
 
 - `keep` -> update row decision to `kept`. Commit. Loop back to Gate 4 with the next hypothesis OR finalize this hotspot if SLA now met.
-- `revert` -> update row decision to `reverted`. Revert the code. Loop back to Gate 4.
+- `revert` -> update row decision to `reverted`. Revert the code. Loop back to Gate 4 (via 4a step 4).
 
 **Case B - within noise** (no measurable improvement). A plain "keep" here is a constitution violation:
 either the improvement is real and measurable, or it does not exist. Default to revert. Ask:
@@ -201,7 +211,7 @@ either the improvement is real and measurable, or it does not exist. Default to 
 > Within measurement noise - no real improvement. Default: revert.
 > To keep anyway, state a constitution-exception reason; it will be logged. (revert / keep-with-reason)
 
-- `revert` (default) -> update row decision to `reverted`. Revert the code. Loop back to Gate 4.
+- `revert` (default) -> update row decision to `reverted`. Revert the code. Loop back to Gate 4 (via 4a step 4).
 - `keep-with-reason` -> allowed ONLY with an explicit written reason. Update the row decision to
   `kept (exception)` with that reason, and log a constitution exception to `05-retro.md`
   (`Constitution exception: kept within-noise change at <hotspot>. Reason: <reason>.`). Commit, then
@@ -275,10 +285,16 @@ STOP. Display reviewer verdict. Ask:
 
 ## Rules (hard constraints)
 
+- Change `.specs/index.md` and any spec `status:` field with the Edit tool only - never a shell
+  command (`sed -i`, `>`, `tee`, `Set-Content`). spec-gate checks an Edit-tool change (Rules 0,
+  0b, 1) and records its `spec_transition`; a shell write skips both (SW-79).
 - Gate 2 (Baseline) is HARD. No optimization work without a checked-in baseline artifact.
 - One change per attempt. Bundled changes invalidate measurement.
 - Revert on no measurable improvement. The Results log is the source of truth.
 - Reverted attempts are LOGGED, not deleted. They are knowledge.
+- **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PERF-04` is applied at Phase 4a
+  step 4, and `ESC-PERF-04b` at Phase 4b step 1; the ladder, precedence, `models.escalation` config
+  and the `05-retro.md` line format live in the skill and are not restated here.
 - Correctness tests must remain unchanged. If the optimization requires changing a test, it changes behavior - that needs a FEAT-* or BUG-* spec, not PERF-*.
 - Database access (via the project's MCP tool or CLI) for hotspot analysis is read-only: SELECT / EXPLAIN only.
 - If SLA cannot be met after exhausting hypotheses, close the PERF spec with the documented gap and lessons. Do not "ship anyway".

@@ -19,7 +19,8 @@ Running that pass against this repo's actual state surfaced two things the ticke
 didn't anticipate:
 
 1. **The corpus is thinner than "n=1 risk" implies.** specwright does not dogfood itself - there is
-   no `.specs/` directory in this repo at all. `examples/fixture-project`, the second corpus SW-31
+   no `.specs/` directory in this repo at all (a deliberate decision, recorded in ADR 0010).
+   `examples/fixture-project`, the second corpus SW-31
    was waiting on (SW-30), has exactly **one** closed spec (`FEAT-todo-priority`) and no
    `events.jsonl` history. Real accumulated data is n=1, not a "canyon" or a "cluster" - there is
    nothing to fit a distribution to yet.

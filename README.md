@@ -1,7 +1,7 @@
 # specwright
 
 > **Claude Code cannot touch your code until a spec is approved.**
-> 14 slash commands, 6 specialized subagents, 3 guard-rail hooks, 10 templates, 9 reusable skills - all under the `sd:` namespace, stack-agnostic, cross-platform, and ready to drop into any project.
+> 14 slash commands, 6 specialized subagents, 7 guard-rail hooks, 10 templates, 11 reusable skills - all under the `sd:` namespace, stack-agnostic, cross-platform, and ready to drop into any project.
 
 [![Release](https://img.shields.io/github/v/release/developzoneio/specwright)](https://github.com/developzoneio/specwright/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -70,7 +70,7 @@ meet. The engine never changes per project - which is what lets one `/sd:feature
 Plenty of tools ask the model nicely to plan first. Four things here are structural instead:
 
 - **Gates halt the workflow.** Silence is not approval - the phase does not advance without an explicit answer. HARD gates (bug reproduction, perf baseline) have no override path at all.
-- **The block lives outside the prompt.** `spec-gate` is a `PreToolUse` hook: with no in-progress spec, `Edit` / `Write` is denied by the CLI, not discouraged by instructions. A prompt can be argued with; a tool-level deny cannot.
+- **The block lives outside the prompt.** `spec-gate` is a `PreToolUse` hook: with no in-progress spec, `Edit` / `Write` is denied by the CLI, not discouraged by instructions. A prompt can be argued with; a tool-level deny cannot. A `Bash` / `PowerShell` command that visibly rewrites `.specs/index.md` or a protected file is denied too (a best-effort text check, SW-79).
 - **The reviewer physically cannot auto-fix.** Its tool allowlist contains no write tools, so findings must route back through a fresh implementer call.
 - **Specs are inputs, not write-ups.** `00-spec.md` through `06-verify.md` are what each subagent is handed on invocation - so they cannot rot into documentation nobody reads.
 
@@ -122,9 +122,9 @@ stopping at Gate 1 for your sign-off. No project handy? The bundled
 |---|---|
 | **14 slash commands** | 6 spec-producing workflows + 8 utilities - see the Commands table below |
 | **6 specialized subagents** | architect, explorer, debugger, implementer, reviewer, docs-writer |
-| **3 cross-platform hooks** | `prompt-router`, `spec-gate`, `subagent-retro` (PowerShell + bash) |
+| **7 cross-platform hooks** | `session-context`, `prompt-router`, `spec-gate`, `handoff-integrity`, `subagent-retro`, `precompact-state`, `stop-gate` (PowerShell + bash) |
 | **10 templates** | 4 setup templates + 6 spec templates (feature / bug / refactor / perf / rca / port) |
-| **9 reusable skills** | Shared rule packs loaded from agent frontmatter, never copy-pasted per agent |
+| **11 reusable skills** | Shared rule packs loaded from agent frontmatter or read at runtime by commands, never copy-pasted |
 | **Cross-platform installer** | Content-hash dedup, timestamped backups, dry-run mode |
 | **MCP-friendly** | Atlassian, Context7, sequential-thinking, GitNexus, your database MCP, Playwright, Tavily |
 | **Stack-agnostic** | .NET, Node, Python, Go, Rust - anything with a `CLAUDE.md` |
@@ -166,7 +166,7 @@ Commands do not do the work themselves - they orchestrate 6 subagents, each with
 
 Models use **portable aliases** (`sonnet`, `haiku`) so they auto-update - never a pinned model ID.
 
-Cross-cutting rules live in **9 skills**: markdown rule packs that agents load via a `skills:` list in their frontmatter, rather than copy-pasting the same rule into every agent body that needs it.
+Cross-cutting rules live in **11 skills**: markdown rule packs that agents load via a `skills:` list in their frontmatter, rather than copy-pasting the same rule into every agent body that needs it. Commands cannot load skills that way, so they read a `SKILL.md` at runtime instead - every workflow's Phase 0 applies `sd-bootstrap-guard`.
 
 Full tool allowlists, the command -> agent routing map, and the skill catalogue:
 [`docs/architecture.md`](docs/architecture.md).
@@ -209,7 +209,7 @@ None are required - agents fall back gracefully. Configure per project in `.clau
 | **Context7** | `sd-spec-architect`, `sd-implementer`, `sd-debugger` | Pull current library docs (no stale training-data examples) |
 | **sequential-thinking** | `sd-debugger`, `sd-reviewer` | Structured hypothesis enumeration and verification |
 | **GitNexus** | `sd-code-explorer`, `sd-debugger`, `sd-reviewer` | Fast symbol search, callers, call graph |
-| **Database** (project-provided, e.g. `mssql`, `postgres`) | `sd-debugger` (SELECT/EXPLAIN only) | Inspect schema and query plans during investigation |
+| **Database** (project-provided, e.g. `mssql`, `postgres`) | main thread only (SELECT/EXPLAIN only) | Inspect schema and query plans during investigation. `sd-debugger` cannot call it (fixed `tools:` allowlist); it uses a read-only CLI client via `Bash` |
 | **Playwright** | optional | E2E reproduction for `/sd:bug` |
 | **Tavily** | `sd-debugger` | Web search for error signatures / library issues |
 
@@ -217,7 +217,7 @@ None are required - agents fall back gracefully. Configure per project in `.clau
 
 | Component | Tested on | Notes |
 |---|---|---|
-| Claude Code CLI | Latest as of Aug 2026 | Hook contract: `UserPromptSubmit`, `PreToolUse`, `SubagentStop` |
+| Claude Code CLI | Latest as of Aug 2026 | Hook contract: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `SubagentStop`, `PreCompact`, `Stop` |
 | OS | Windows 11 (PS 5.1 + 7.x), macOS 13+, Ubuntu 22.04+ | PS 5.1 reads UTF-8 as CP1252, so hooks are pure ASCII; bash hooks branch `stat -f %m` vs `stat -c %Y` |
 | jq | 1.6+ | Optional. Bash hooks exit 0 if missing. |
 | Node stack | Node 20+ (plain JS) | Demonstrated end-to-end in [`examples/fixture-project/`](examples/fixture-project/) - a real `/sd:feature` run, committed, not just asserted. TS not yet exercised. |
@@ -243,6 +243,27 @@ Windows:
 .\install\uninstall.ps1            # remove the five sd/ engine directories
 ```
 
+## Local verification
+
+Everything CI checks on a push can be run locally:
+
+```bash
+bash scripts/validate.sh && bash scripts/smoke-hooks.sh    # needs bash + jq
+```
+
+```powershell
+.\scripts\validate.ps1; .\scripts\smoke-hooks.ps1          # Windows
+```
+
+- **Parity harnesses** (hooks, contract lint, installer). These live under `tests/` and are
+  PowerShell 7 only, by design: a single process drives both the bash and the PowerShell
+  implementation, so parity is asserted rather than inferred.
+- **Behavioral e2e suite** (`tests/e2e/`). This drives real `claude -p` sessions and runs on a
+  Claude subscription login. No API key is required.
+
+What each suite needs and covers, and why, is in
+[CONTRIBUTING.md - Test suites and prerequisites](CONTRIBUTING.md#test-suites-and-prerequisites).
+
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) - 3-layer design, agent routing, skills, lifecycle, cost model
@@ -260,7 +281,7 @@ Windows:
 ## Roadmap
 
 Shipped work is in [`CHANGELOG.md`](CHANGELOG.md); the latest release is
-[v1.6.0](https://github.com/developzoneio/specwright/releases). Next up, per [`ROADMAP.md`](ROADMAP.md):
+[v1.7.0](https://github.com/developzoneio/specwright/releases). Next up, per [`ROADMAP.md`](ROADMAP.md):
 GitHub Issue auto-fetch (`gh issue view`) to match the existing JIRA snapshot path, plus - exploratory -
 local-only, opt-in usage analytics. Have a workflow you wish existed?
 [Open an issue](https://github.com/developzoneio/specwright/issues/new) - the roadmap follows what people actually hit.

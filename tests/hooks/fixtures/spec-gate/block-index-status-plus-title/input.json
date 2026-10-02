@@ -1,0 +1,1 @@
+{"tool_name":"Edit","cwd":"{{CWD}}","tool_input":{"file_path":"{{CWD}}/.specs/index.md","old_string":"| FEAT-001 | feature | draft | Demo feature |","new_string":"| FEAT-001 | feature | approved | Renamed feature |"}}

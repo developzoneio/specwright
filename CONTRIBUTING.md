@@ -10,8 +10,10 @@ per-file-type guidelines, and how to test changes locally.
 - [Project goals and non-goals](#project-goals-and-non-goals)
 - [Repo layout](#repo-layout)
 - [The manifest](#the-manifest)
+- [Test suites and prerequisites](#test-suites-and-prerequisites)
 - [Threshold re-calibration](#threshold-re-calibration)
 - [PR process](#pr-process)
+  - [Changelog vs ADR](#changelog-vs-adr)
 - [Per-file-type guidelines](#per-file-type-guidelines)
   - [Commands (`commands/*.md`)](#commands-commandsmd)
   - [Agents (`agents/*.md`)](#agents-agentsmd)
@@ -45,8 +47,8 @@ specwright/
   commands/         # 14 slash commands (markdown with frontmatter)
   agents/           # 6 subagent definitions (markdown with frontmatter)
   hooks/
-    powershell/     # 3 PowerShell hooks
-    bash/           # 3 bash hooks (parity with PowerShell)
+    powershell/     # 7 PowerShell hooks
+    bash/           # 7 bash hooks (parity with PowerShell)
   templates/        # 4 setup templates
     specs/          # 6 spec templates
   install/          # install.ps1 + install.sh + install/README.md
@@ -94,12 +96,18 @@ Two constraints on `pattern`: it must be valid in **both** POSIX ERE (bash `[[ =
 `scripts/selftest-docs.{ps1,sh}` proves Check 7 still bites, by corrupting a throwaway copy of the
 repo and asserting the validator catches it. CI runs it on all three OSes.
 
-`tests/hooks/run-conformance.ps1` (single cross-platform pwsh script by design - it must run BOTH
-hook implementations in one process, so a bash twin would itself be a drift risk) pipes every
+`tests/hooks/run-conformance.ps1` (pwsh-only by design, see
+[Why the parity harnesses are pwsh-only](#why-the-parity-harnesses-are-pwsh-only)) pipes every
 golden fixture under `tests/hooks/fixtures/` into the bash and PowerShell implementation of each
 hook and fails if their normalized decisions diverge from each other or from the golden. Add a
 fixture case whenever you add hook behavior; `-SelfTest` proves the harness still detects
 divergence.
+
+In a fixture's `input.json`, `{{ROOT}}` is the workspace (the project root) and `{{CWD}}` is the
+session cwd. The session cwd is the root unless `setup.json` names a `"cwd"` subdirectory of the
+fixture's own `workspace/` tree. The runner strips `CLAUDE_PROJECT_DIR` from every child process,
+and `setup.json` `"env"` sets it per case (`{{ROOT}}` is substituted there too). A case with an
+off-root `cwd` also fails if any hook creates `.specs/` or `.claude/` under that cwd (SW-78).
 
 Check 7 needs `jq` on Unix and **fails loudly without it**. This is the opposite of the hook rule
 below (hooks exit `0` silently when `jq` is missing so they never block a user on their own bugs) -
@@ -149,10 +157,101 @@ registry entry, a rule function in *both* implementations, a fixture case under
 Each edge of that square is guarded by a different mechanism - the linters' own registry parity
 guard, and invariants C and D in `tests/contract-lint/run-selftest.ps1`.
 
-`tests/contract-lint/run-selftest.ps1` is the fixture suite. Like the hook conformance harness it is
-a single pwsh script by design: it runs both implementations in one process, so parity is asserted
-rather than inferred. `-SelfTest` swaps in a linter that reports nothing and asserts the harness
+`tests/contract-lint/run-selftest.ps1` is the fixture suite. Like the hook conformance harness, it
+is pwsh-only by design ([why](#why-the-parity-harnesses-are-pwsh-only)). `-SelfTest` swaps in a linter that reports nothing and asserts the harness
 notices.
+
+### Root-level ad-hoc notes guard (Check 9)
+
+Review findings become Jira issues, not files in the tree. If you find a defect while reviewing a
+PR or doing an audit, file it (or fix it directly) instead of leaving a `REVIEW-TODO.md`-style
+snapshot at the repo root - a hand-maintained defect list that no gate reads is exactly the kind of
+honour-system drift this repo exists to eliminate. Check 9 of `scripts/validate.{ps1,sh}` enforces
+this mechanically: it fails the build when a root-level file matches a declared ad-hoc-notes
+pattern in `specwright.manifest.json`'s `adHocNotesGuard` (`TODO.md`, `FIXME.md`, `NOTES.md`, and
+similarly-named findings snapshots). `ROADMAP.md` is a deliberately maintained project document and
+is excluded on purpose - the distinction is "ad-hoc findings snapshot" vs "maintained project
+document," not file extension. `scripts/selftest-root-guard.{ps1,sh}` proves Check 9 still bites,
+the same posture as `scripts/selftest-docs.{ps1,sh}` for Check 7.
+
+### Bash strict mode (Check 10)
+
+Every `*.sh` in the repo opens with `set -euo pipefail` as its first statement (comments and the
+shebang may come before it; a wider flag cluster such as `-Eeuo` is fine). Check 10 of
+`scripts/validate.{ps1,sh}` enforces this. A script that must not run under strict mode goes in
+`specwright.manifest.json`'s `bashStrictMode.exceptions` with a `reason`. Today that is only the
+bash hooks, which must exit 0 on every failure path. An exception whose path no longer exists
+fails the check, so the list cannot go stale.
+Scripts that need a tool the runner may lack (e.g. `jq`) check for it up front and exit `2` with
+the tool's name. They must not let a missing dependency show up as a failure of the thing under
+test.
+
+---
+
+## Test suites and prerequisites
+
+"Testing" in this repo means running the suites below. Every suite checks its own tools up front. A
+missing prerequisite exits `2` and names the dependency; it never shows up as a failed assertion
+against the code under test.
+
+| Suite | Needs | What it covers | Run it | In CI |
+|---|---|---|---|---|
+| `scripts/validate.{sh,ps1}` | bash + `jq`; or pwsh + bash | Every engine invariant: ASCII, hook-pair parity, model aliases, install targets, changelog, docs claims (Check 7), contract lint (Check 8), root notes guard (Check 9), bash strict mode (Check 10) | `bash scripts/validate.sh` / `.\scripts\validate.ps1` | Every OS, per push |
+| `scripts/smoke-hooks.{sh,ps1}` | bash + `jq`; or pwsh | Each hook, fed fixture JSON: exits `0` and emits the expected decision | `bash scripts/smoke-hooks.sh` / `.\scripts\smoke-hooks.ps1` | Every OS, per push |
+| `scripts/selftest-docs.{sh,ps1}` | Same as `validate` | Check 7 still catches a corrupted doc claim | `bash scripts/selftest-docs.sh` | Every OS, per push |
+| `scripts/selftest-root-guard.{sh,ps1}` | Same as `validate` | Check 9 still catches a root-level notes file | `bash scripts/selftest-root-guard.sh` | Every OS, per push |
+| `scripts/contract-lint.{sh,ps1}` | bash + `jq`; or pwsh | Check 8 on its own, for fast iteration on prompts | `bash scripts/contract-lint.sh --root .` | Via `validate` |
+| `tests/hooks/run-conformance.ps1` | **pwsh 7** + bash + `jq` | bash and PowerShell hooks reach identical decisions on every golden fixture | `pwsh tests/hooks/run-conformance.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/contract-lint/run-selftest.ps1` | **pwsh** + bash + `jq` | Both linters produce identical findings on every fixture | `pwsh tests/contract-lint/run-selftest.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/installer/run-prefix-parity.ps1` | **pwsh 7** + bash | All installer scripts agree on which `--prefix` values they accept | `pwsh tests/installer/run-prefix-parity.ps1 [-SelfTest]` | Every OS, per push |
+| `tests/prompt-size-report/run-parity.ps1` | **pwsh 7** + bash + git | Both prompt size reports print identical output, matching a hand-computed table | `pwsh tests/prompt-size-report/run-parity.ps1` | Every OS, per push |
+| `tests/e2e/run-e2e.ps1` | **pwsh 7** + `claude` CLI + claude auth (a subscription works; no API key needed) + Node for some scenarios | Real `claude -p` sessions: the commands and gates *behave* correctly, asserted on produced artifacts | `pwsh tests/e2e/run-e2e.ps1 [-Case <name>] [-SelfTest]` | Nightly, ubuntu only |
+
+`ci.yml` also runs inline checks: the lesson tooling fixtures and the installer's
+argument-validation and partial-install negative cases. It needs nothing beyond bash + `jq` or
+pwsh. `tests/hooks/measure-latency.ps1` is a measurement tool, not a pass/fail suite.
+
+### Why the parity harnesses are pwsh-only
+
+The five `tests/**/*.ps1` runners above have no bash twin. **That is a deliberate decision, not a
+gap.** Each one exists to prove that the bash and PowerShell implementations of something agree.
+That can only be *asserted* when one process drives both implementations and compares their
+outputs directly. Two separate platform-native runners, each green on its own side, only let you
+*infer* parity, and a bash twin of the harness would itself be one more pair that could drift.
+
+- **pwsh runs everywhere.** PowerShell 7 runs on Linux and macOS, and all three CI runner images
+  have it. On a machine without it, `pwsh` fails with the shell's own "command not found" before
+  any assertion runs.
+- **Harnesses aren't shipped.** The "hooks ship in pairs" rule applies to what the installer
+  copies into `~/.claude/`. The harnesses are never installed.
+- **No pwsh? You can still check most of it.** A contributor without pwsh can run every
+  `scripts/*.sh` suite. CI then covers the parity harnesses on every push.
+
+### e2e auth and cost
+
+The e2e suite is the only one that exercises real prompt behavior, so it matters that the
+maintainer can run it. It authenticates with any of the following:
+
+- `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (a subscription).
+- An existing `claude` login in `~/.claude/.credentials.json` (a subscription).
+- `ANTHROPIC_API_KEY` (API billing).
+
+On an API key, one full run costs more than ~$2.50. On a subscription, it draws on plan usage
+instead. The cheap negative scenarios (`-Case 03-spec-gate-negative`, `-Case 04-closeout-negative`)
+are practical to run before a PR. Details, the measured per-scenario costs, and the macOS Keychain
+caveat are in [`tests/e2e/README.md`](tests/e2e/README.md#auth).
+
+### Minimum local check before a PR
+
+```bash
+bash scripts/validate.sh && bash scripts/smoke-hooks.sh          # any OS with bash + jq
+```
+```powershell
+.\scripts\validate.ps1; .\scripts\smoke-hooks.ps1                # Windows
+pwsh tests/hooks/run-conformance.ps1                             # if you touched hooks
+pwsh tests/contract-lint/run-selftest.ps1                        # if you touched a lint rule
+pwsh tests/e2e/run-e2e.ps1 -Case 03-spec-gate-negative           # if you touched a command or gate
+```
 
 ---
 
@@ -171,6 +270,20 @@ first**:
    change a threshold without a stated measurement behind it.
 3. Where a threshold's rationale in `templates/project-config.template.json` is still a judgement
    call (no measured basis), leave its `_..._use` caveat in place rather than removing it.
+
+### Prompt size report
+
+Run it in the same pass, at each minor release, before the tag is cut:
+
+```bash
+bash scripts/prompt-size-report.sh          # compares against the previous release tag
+```
+
+Each `FLAG` row (a file that grew more than `promptSizeReport.flagGrowthPercent`) needs one line in
+the release's `CHANGELOG.md` section: either "trimmed" or why the growth is worth its cost. There is
+no budget number to raise; that ratchet (`CL500`) was retired, see
+`docs/adr/0011-retire-cl500-byte-ratchet.md`. `docs/contract-lint.md` ("Prompt size report")
+describes what a normal release looks like and the signs that this check has stopped working.
 
 ---
 
@@ -191,16 +304,58 @@ first**:
 
 4. **Run the validator** before opening the PR: `scripts/validate.ps1` (Windows) or
    `scripts/validate.sh` (Unix) runs every engine-invariant check at once (ASCII, hook-pair parity,
-   model aliases, install-target counts, changelog gate, docs consistency). CI runs the same on
-   Windows + Ubuntu. See also the [Local install test](#local-install-test) for a manual install
+   model aliases, install-target counts, changelog gate, docs consistency, root-level notes guard).
+   CI runs the same on Windows, Ubuntu and macOS. [Test suites and
+   prerequisites](#test-suites-and-prerequisites) lists every other suite, what each needs, and the
+   minimum local check. See also the [Local install test](#local-install-test) for a manual install
    smoke test, and [The manifest](#the-manifest) for what Check 7 enforces.
 
-5. **Update the changelog.** Add a line under `## [Unreleased]` in `CHANGELOG.md`.
+5. **Update the changelog.** Add a line under `## [Unreleased]` in `CHANGELOG.md`. Say what
+   changed; put why in an ADR - see [Changelog vs ADR](#changelog-vs-adr).
 
 6. **Open the PR** with:
    - A short description.
    - Screenshots or terminal output if behaviour changes.
    - A note on whether docs were updated.
+
+### Changelog vs ADR
+
+The two answer different questions, for different readers:
+
+- **`CHANGELOG.md` says what changed** and whether it affects the reader: the new command, flag,
+  file, rule or behavior, and what a user or contributor has to do about it. One entry, a few
+  lines, then a link to the ADR if one exists.
+- **An ADR in `docs/adr/` says why, and what was rejected**: the context that forced the decision,
+  the alternatives considered, what was deliberately not built, known gaps, and consequences.
+  One ADR per substantive decision, numbered `NNNN-<slug>.md`, following the existing ones.
+
+**The test.** If a sentence would still be true had the change been built differently, it is
+rationale and belongs in the ADR. If it describes what now exists, it belongs in the changelog.
+"Deliberately not built", "known gap", "X instead of Y because" and "found while building it" are
+always ADR material. If the rationale already lives in a doc (for example `docs/contract-lint.md`
+for a lint rule), link to it rather than copying it into a second place.
+
+**Worked example** (SW-42, from 1.6.0). The original changelog entry carried this:
+
+```markdown
+- **`## Spawned specs` in the feature, bug, refactor, and perf spec templates** (SW-42) - ...
+  prompts for the section when the retro names deferred work - a prompt, not a gate: gate counts
+  are unchanged, since hard-gating hygiene would tax every spec for a minority's benefit.
+  - **The section ships with no `<<...>>` token.** It is filled at close-out, i.e. after
+    `approved`, so an author-fill placeholder there would be an `SL010` BLOCK on every spec ...
+```
+
+Split along the test, the changelog keeps what exists:
+
+```markdown
+- **`## Spawned specs` in the feature, bug, refactor and perf spec templates** (SW-42), using the
+  RCA template's reserved-ID table. Close-out prompts for it when the retro names deferred work;
+  gate counts are unchanged. New `SL090` ... See [ADR 0009](docs/adr/0009-...md).
+```
+
+and `docs/adr/0009-spawned-specs-and-suggest-band.md` takes the "why": prompt rather than gate
+because hard-gating taxes every spec, no `<<...>>` token because of `SL010`, a reserved ID is not an
+index row because of `SL032`.
 
 ---
 
@@ -220,10 +375,8 @@ argument-hint: <ID or slug>
 # /sd:<name>
 
 ## Phase 0 - Bootstrap
-- Read CLAUDE.md
-- Read .specs/constitution.md
-- Read .claude/project-config.json
-- Detect state (resumable?)
+1. Read ~/.claude/skills/sd/sd-bootstrap-guard/SKILL.md and apply it
+2. Detect state (resumable?)
 
 ## Phase 1 - <name>
 ... (with hard gates marked as Gate N)
@@ -233,7 +386,8 @@ argument-hint: <ID or slug>
 ```
 
 **Conventions:**
-- Phase 0 always bootstraps; do not skip.
+- Phase 0 always bootstraps; do not skip. Step 1 applies `sd-bootstrap-guard` and never restates
+  its messages - contract-lint `CL009` blocks a Phase 0 that does.
 - Hard gates use the explicit marker `Gate N` and prose "STOP. Wait for explicit user approval."
 - State machine documented at top of file (what happens on re-invocation).
 - Subagent invocation uses the `sd-` prefix, never bare names.
@@ -381,6 +535,12 @@ rm -rf /tmp/sd-test
 
 Hooks read JSON from stdin. You can simulate Claude Code locally:
 
+**session-context (SessionStart):**
+```bash
+echo '{"source":"resume","session_id":"test-session-001","cwd":"/path/to/repo"}' \
+  | bash hooks/bash/session-context.sh
+```
+
 **prompt-router (UserPromptSubmit):**
 ```bash
 echo '{"prompt":"fix bug INV-2501 in stock service","cwd":"/path/to/repo"}' \
@@ -403,7 +563,30 @@ echo '{"cwd":"/path/to/repo","session_id":"test-session-001"}' \
   | bash hooks/bash/subagent-retro.sh
 ```
 
-Expected behaviour: every hook exits `0` and either prints a `<context-router>` / `<retro-reminder>` block to stdout, prints a warning to stderr, or stays silent.
+**precompact-state (PreCompact):** prints nothing; check for
+`.claude/.hookstate/precompact-test-session-001.json` afterwards, then pipe a `"source":"compact"`
+payload with the same `session_id` into session-context to see it re-injected.
+```bash
+echo '{"session_id":"test-session-001","trigger":"manual","transcript_path":"/path/to/transcript.jsonl","cwd":"/path/to/repo"}' \
+  | bash hooks/bash/precompact-state.sh
+```
+
+**stop-gate (Stop):** silent unless `hooks.stopGate.enabled` is `true` in the repo's
+`.claude/project-config.json` and the newest spec named in the transcript is past a HARD gate
+without its evidence. Re-run with `"stop_hook_active":true` to see the re-fire allowed.
+```bash
+echo '{"session_id":"test-session-001","transcript_path":"/path/to/transcript.jsonl","cwd":"/path/to/repo","stop_hook_active":false}' \
+  | bash hooks/bash/stop-gate.sh
+```
+
+**handoff-integrity (PostToolUse):** silent unless `hooks.handoffIntegrity.enabled` is `true`, the
+newest spec named in the transcript is `in-progress` with a `02-tasks.md`, and the edited file is
+outside the `Files` of every ready task (open, with its `Depends on` tasks done).
+```bash
+echo '{"tool_name":"Edit","tool_input":{"file_path":"/path/to/repo/src/foo.cs"},"transcript_path":"/path/to/transcript.jsonl","cwd":"/path/to/repo"}' \n  | bash hooks/bash/handoff-integrity.sh
+```
+
+Expected behaviour: every hook exits `0` and either prints a `<session-context>` / `<context-router>` / `<retro-reminder>` block to stdout, prints a `{"decision":"block",...}` object to stdout (spec-gate, stop-gate, handoff-integrity), prints a warning to stderr, or stays silent.
 
 ---
 
@@ -411,7 +594,7 @@ Expected behaviour: every hook exits `0` and either prints a `<context-router>` 
 
 - **Markdown:** ATX headers (`#`, `##`), no trailing colons in headers, fenced code blocks with language hint, 100-char soft wrap.
 - **PowerShell:** PascalCase function names, `$camelCase` variables, explicit `param()` block, pure ASCII.
-- **Bash:** lowercase function names, `snake_case` variables, `set -euo pipefail` at top of non-trivial scripts.
+- **Bash:** lowercase function names, `snake_case` variables, `set -euo pipefail` as the first statement (enforced by validate Check 10; declared exceptions in the manifest).
 - **YAML frontmatter:** keys in lowercase-with-hyphens (`argument-hint`), values unquoted unless they contain special chars.
 - **Commit messages:** imperative mood, 50-char subject, optional body wrapped at 72.
 

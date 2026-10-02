@@ -64,6 +64,7 @@ After resolution, print: "Reviewing <N> files in mode <A|B|C|D>."
 
 ---
 
+<!-- contract-lint: allow CL601 - single read-only reviewer call per run, and modes A/B/D have no spec frontmatter to read a trigger from (SW-62) -->
 ## Phase 2 - Invoke `sd-reviewer`
 
 Invoke with:
