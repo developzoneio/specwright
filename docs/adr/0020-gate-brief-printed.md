@@ -99,8 +99,12 @@ and the README says no other assertion may read the transcript.
   assertion, which is the intended signal: the assertion reports a real defect, and the self-test
   shows it is not a harness fault. Decisions 2 and 3 did take: 0 internal IDs and 0 `path:line` in
   user-visible text in both runs, and every phase line was found except Phase 5 in the small run.
-  The likely cause is the scripted single turn itself. Every gate there is followed by more tool
-  calls in the same turn, so no gate ever ends a turn, and the text between tool calls is what the
-  session chose to drop. Follow-ups: drive each gate reply as its own turn (`--resume`), so a gate
-  ends a turn as it does with a person, and decide whether `02` keeps the assertion red until then.
+  The cause is the scripted single turn. Every gate there is followed by more tool calls in the
+  same turn, so no gate ever ends a turn, and the session drops the text between tool calls.
+- **Probe, same day and engine (commit `e4a0779`):** the same `/sd:feature todo-count` request with
+  no standing reply stopped at Gate 1, and the gate ended the turn. The final message carried the
+  Gate 1 brief byte-for-byte (6 of 6 shown lines, `transcript-contains-section` passed), with 0
+  internal IDs, for $0.50. Decision 1 holds on the path a person takes; the single-turn script is
+  what defeats it. Follow-up SW-103 drives each gate reply as its own turn (`--resume`), so `02`
+  reaches every gate the way a person does. Until it lands, `02` fails this one assertion.
 - Other workflows adopt the brief in SW-96 and take these rules from the same skill.

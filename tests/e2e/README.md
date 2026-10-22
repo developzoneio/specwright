@@ -40,7 +40,10 @@ No other assertion may read the transcript, and no assertion may match model-wri
 21/22 and failed only this assertion, at 0 of 22 shown lines. Each gate was written and answered,
 and none was printed. The kept transcript showed the session had read the "Printed means reply
 text" rule. This is the SW-88 / SW-89 F1 defect, not a flake: it was the same in all four measured
-runs. ADR 0020 records the follow-up.
+runs. A probe the same day ran the same request with no standing reply, so the run stopped at
+Gate 1 and the gate ended the turn: its brief was printed byte-for-byte, and the assertion passed.
+The scripted single turn is what drops the print. SW-103 drives each gate reply as its own turn;
+until then `02` fails this one assertion (ADR 0020).
 
 ## Prerequisites
 
