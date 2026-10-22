@@ -8,7 +8,8 @@ step 4 (commands cannot load skills via frontmatter) and names only where each r
 `sd-spec-architect` and `sd-reviewer` load it via `skills:` so they know the block they return.
 
 Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
-brief language, plan-face decisions), Jira SW-102. Measured "before":
+brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means reply text, the
+closing summary, phase narration), Jira SW-99. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -31,6 +32,16 @@ presented a gate without printing a line of it.
 - **Written before it is shown.** The main thread writes the section with the Write or Edit tool,
   then prints the section body verbatim - the same characters, not a paraphrase. A gate whose
   brief is not on disk has not been presented.
+- **Printed means reply text.** The shown body is every line after the section heading up to and
+  including the question line; the heading and the `### More decisions (shown on details)`
+  subsection are not printed. Printing it means those lines appear in the main thread's own reply
+  text, as one text block of their own, after the write and before the next tool call (the one
+  that appends the `Reply:` line). Copy them from the content you just wrote, not from memory.
+  A Write, Edit or Read of the file is **not** printing it, even when a tool view displays the
+  content, and neither is a sentence that says the brief was shown. The same holds in a headless
+  or scripted run whose reply is already known, and in a turn that continues past the gate: the
+  reply text is the only channel the user reads. A gate whose body is not in reply text has not
+  been presented, and no later message may say it was.
 - **One section per gate pass.** Section headings, by gate:
 
 ```text
@@ -189,9 +200,12 @@ it into the conversation language (see "Language") without first removing IDs.
 
 ## User-facing text
 
-Applies to every line the user reads: all chat text of the workflow and `gate-briefs.md`. It does
-not apply to the machine records in other artifacts (for example the `escalation:` lines in
-`05-retro.md`, whose format **sd-model-escalation** owns and which keep their rule IDs).
+Applies to every line the user reads: `gate-briefs.md` and all reply text of the session, from
+Phase 0 to the end of the turn. That includes the closing summary and any report the request that
+started the workflow asks for (a final status line, an answer to a harness step): a report the
+invoking prompt asks for is still reply text the user reads. It does not apply to the machine
+records in other artifacts (for example the `escalation:` lines in `05-retro.md`, whose format
+**sd-model-escalation** owns and which keep their rule IDs).
 
 - **No internal IDs.** Never show a rule ID (`ESC-*`, or a lint or verify code of two letters and
   three digits), a constitution section sign reference, a criterion or decision
@@ -202,14 +216,22 @@ not apply to the machine records in other artifacts (for example the `escalation
 - **Narrate a model escalation in plain words**: what runs on a stronger model and why, for
   example "planning with a stronger model because the spec was sized large". The rule ID stays in
   the retro line only.
-- **Phase narration** names the phase and what it does ("Phase 2 - mapping what the change
-  touches"), not the step number of a rule.
+- **Narrate every phase on entry.** On entering each phase, Phase 0 and close-out included and
+  on a resume too, print one line of its own before the phase's first tool call:
+  `Phase <n> - <what it does>`, for example "Phase 2 - mapping what the change touches". It names
+  the phase and what it does, not the step number of a rule.
+- **Cite evidence by name, not by line.** The closing summary and any progress line name a test
+  by its name and code by its file. The `path:line` citations that close-out gathers belong in
+  `05-retro.md` and `06-verify.md`; the summary may name those files instead.
 - **A `details` excerpt is not brief text.** It is an artifact the user asked to see, printed
   verbatim, so it keeps the IDs and the English it has on disk.
 
 ## Anti-patterns
 
 - Printing the brief without writing it, or writing a paraphrase of what was printed.
+- Writing the brief and not printing it: treating the Write call, or a sentence such as "Gate 1
+  presented", as the print. Saying a gate was shown when its body is not in reply text.
+- Copying a `path:line` citation from the retro or the verify report into the closing summary.
 - Editing an earlier section to fix a typo instead of appending the next pass.
 - Raising the cap to fit an eleventh line instead of collapsing a decision.
 - Collapsing a blocking finding, or dropping a decision that does not fit.
