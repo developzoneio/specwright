@@ -2,12 +2,13 @@
 
 Gate brief discipline for specwright workflows: what a gate shows the user, where that text is
 kept, and how every user-facing line is worded. This file is the single owner of the brief
-artifact, the per-gate shapes, the decision ranking rule, the agent return blocks and the
-narration rule. `/sd:feature` reads it at runtime as Phase 0 step 4 (commands cannot load skills
-via frontmatter) and names only where each rule applies. `sd-spec-architect` and `sd-reviewer`
-load it via `skills:` so they know the block they return.
+artifact, its language, the per-gate shapes, the decision ranking rule, the `details` targets,
+the agent return blocks and the narration rule. `/sd:feature` reads it at runtime as Phase 0
+step 4 (commands cannot load skills via frontmatter) and names only where each rule applies.
+`sd-spec-architect` and `sd-reviewer` load it via `skills:` so they know the block they return.
 
-Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89. Measured "before":
+Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
+brief language, plan-face decisions), Jira SW-102. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -49,18 +50,36 @@ presented a gate without printing a line of it.
 - Subagents never write this file. `sd-spec-architect` and `sd-reviewer` return blocks (below);
   the main thread renders and writes.
 
+## Language
+
+- The brief is written in the **conversation language**: the language the user types in this
+  session. A fetched ticket or pasted text does not set it. When it is unclear, use English.
+- Agents return their blocks in English, like every spec artifact. The main thread renders a block
+  into the conversation language once, when it writes the section, and then shows the section
+  verbatim. Translation never happens between the file and the chat, so the text on disk and the
+  text shown stay byte-identical.
+- These stay English in every language, because tools and replies match on them: the section
+  headings, the `### More decisions (shown on details)` heading, the `Reply:` prefix, the option
+  tokens of the question line, the spec ID, task IDs and file paths.
+- Every other artifact under `<spec.dir>/<ID>/` stays English. `gate-briefs.md` is a record of
+  what was shown; no subagent reads it as input.
+
 ## Brief shape
 
 The shown body is **at most 10 lines**, counted from the line after the section heading up to and
 including the question line, blank lines excluded. A task table (Gate 2 faces only) adds its
-header, its separator and one row per task on top of the 10.
+header, its separator and one row per task on top of the 10. This cap replaces the "about 15
+lines" of the SW-89 ticket text: a total of 15 cannot hold one row per task for a plan at the
+decompose threshold, and the ticket's parts (what changes, decisions, risk, tasks) are all here.
 
 Lines, in order:
 
 1. `What changes: <one plain sentence>` - the user-visible effect, not the mechanism.
 2. `Decisions (top <k> of <N>):` then up to 3 numbered lines, each
    `<decision> - Recommended: <default>. <why, one clause>`. With no decision at all, a single
-   line `Decisions: none - the spec only restates the request.` replaces the block.
+   line replaces the block: `Decisions: none - the spec only restates the request.` at spec
+   approval, `Decisions: none - the plan adds no choice beyond the approved spec.` at a Gate 2
+   face.
 3. When `N > 3`: `<N - 3> more defaults taken - reply details to list them.`
 4. `Risk: <one line>` - the most likely way this goes wrong, or `Risk: none found.`
 5. Gate 2 faces only: the task table, one row per task, in task order:
@@ -76,11 +95,14 @@ Lines, in order:
 Per gate:
 
 - **Spec approval** - decisions come from the spec: resolved open questions, defaults the
-  architect chose, scope calls in Out of scope.
+  architect chose, scope calls in Out of scope. Every decision in the block, shown or collapsed,
+  is stated in `00-spec.md`: that file is the durable record of what this gate approves.
 - **Plan approval** - decisions come from the plan: added public symbols the spec does not name,
   ordering by choice rather than need, tasks with no `Files`, a rejected alternative a reviewer
-  could reasonably prefer. The Complexity face uses the same shape, and its `What changes` line
-  states the measured reason the plan is over threshold.
+  could reasonably prefer. **A decision the approved `00-spec.md` already settles is not a plan
+  decision**: the `yes` at spec approval took it, shown or collapsed. List only the decisions the
+  plan adds; `N` counts those alone. The Complexity face uses the same shape and the same rule,
+  and its `What changes` line states the measured reason the plan is over threshold.
 - **Integration and review** - no task table. Lines: `Tests: <summary>. Lint: <summary>.`,
   `Review: <n> blocking, <n> warnings, <n> suggestions.`, then one line per blocking finding
   (`Blocking: <plain title> - <file> - <direction>`, or `Blocking: none`), then
@@ -112,10 +134,22 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 
 ## The details option
 
-Every gate that carries a brief offers `details`. It prints the section's
-`### More decisions (shown on details)` subsection and the paths of the full artifacts the gate
-approves, records `Reply: details`, then asks the same question again. It is never an approval
-and never advances the workflow.
+Every gate that carries a brief offers `details`, and Gate 2 (both faces) and Gate 3 offer it
+with an optional target: `details <target>`. A `details` reply is never an approval and never
+advances the workflow. Each one prints, records `Reply: <reply verbatim>` in the open section,
+then asks the same question again. The printout is not appended: it is either already in the
+section or a copy of an artifact that is on disk.
+
+| Reply | Prints | Offered at |
+|---|---|---|
+| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate with a brief |
+| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line | Gate 2 faces, Gate 3 |
+| `details plan` | `01-plan.md`, verbatim | Gate 2 faces, Gate 3 |
+| `details risks` | the risks section of `01-plan.md` and the `### Risk assessment` section of `03-decisions.md`, verbatim | Gate 2 faces, Gate 3 |
+
+A target that names nothing at this gate (an unknown task ID, a target the gate does not offer)
+prints one line naming the valid targets, then asks again. Spec approval offers a bare `details`
+only: no plan, task list or impact analysis exists yet.
 
 ## Agent return blocks
 
@@ -148,7 +182,8 @@ suggest: <plain title> | <file>
 END_GATE_BRIEF
 ```
 
-Each field follows the user-facing text rule below: the block is rendered, not translated.
+Each field is English and follows the user-facing text rule below, so the main thread can render
+it into the conversation language (see "Language") without first removing IDs.
 
 ## User-facing text
 
@@ -167,6 +202,8 @@ not apply to the machine records in other artifacts (for example the `escalation
   the retro line only.
 - **Phase narration** names the phase and what it does ("Phase 2 - mapping what the change
   touches"), not the step number of a rule.
+- **A `details` excerpt is not brief text.** It is an artifact the user asked to see, printed
+  verbatim, so it keeps the IDs and the English it has on disk.
 
 ## Anti-patterns
 
@@ -174,5 +211,9 @@ not apply to the machine records in other artifacts (for example the `escalation
 - Editing an earlier section to fix a typo instead of appending the next pass.
 - Raising the cap to fit an eleventh line instead of collapsing a decision.
 - Collapsing a blocking finding, or dropping a decision that does not fit.
+- Re-listing at a Gate 2 face a decision the approved spec already settles.
+- Translating a section heading, the `Reply:` prefix or an option token; or translating between
+  the file and the chat instead of once, before the write.
+- Appending a `details` printout to the section, or summarizing an artifact instead of printing it.
 - Translating a rule ID into the brief as "(rule X)" - the reader cannot act on it either way.
 - Restating this file's shapes or ranking in a command or an agent body; name the skill.
