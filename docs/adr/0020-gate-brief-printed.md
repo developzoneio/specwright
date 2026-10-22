@@ -92,6 +92,15 @@ and the README says no other assertion may read the transcript.
 - `run-e2e.ps1 -SelfTest` runs six offline transcript cases before the paid `03`/`04` runs.
 - The gate count stays 3, `contractLint.gates` is unchanged, and no hook changes.
 - Printing is still an instruction to the model, now measured on every e2e run of `02`. If it keeps
-  failing, the next step is a structural one (for example a Stop-hook check), recorded as a
-  follow-up, not built here.
+  failing, the next step is a structural one, recorded as a follow-up, not built here.
+- **First measurement (2026-10-22, `claude` 2.1.308, headless, n=1 per size): decision 1 did not
+  take.** Both runs read the new rule and still printed 0 of their shown brief lines (S 0/22, M
+  0/28), and both final messages again said every gate was shown. `02-feature-happy` fails this
+  assertion, which is the intended signal: the assertion reports a real defect, and the self-test
+  shows it is not a harness fault. Decisions 2 and 3 did take: 0 internal IDs and 0 `path:line` in
+  user-visible text in both runs, and every phase line was found except Phase 5 in the small run.
+  The likely cause is the scripted single turn itself. Every gate there is followed by more tool
+  calls in the same turn, so no gate ever ends a turn, and the text between tool calls is what the
+  session chose to drop. Follow-ups: drive each gate reply as its own turn (`--resume`), so a gate
+  ends a turn as it does with a person, and decide whether `02` keeps the assertion red until then.
 - Other workflows adopt the brief in SW-96 and take these rules from the same skill.

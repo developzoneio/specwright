@@ -36,6 +36,12 @@ The transcript is this assertion's input, so a scenario that uses it keeps its s
 missing brief, or a brief with no matching section fails the assertion; it never passes empty.
 No other assertion may read the transcript, and no assertion may match model-written wording.
 
+**First live run, 2026-10-22** (Linux, `claude` 2.1.308, API key, commit `90021f1`): `02` passed
+21/22 and failed only this assertion, at 0 of 22 shown lines. Each gate was written and answered,
+and none was printed. The kept transcript showed the session had read the "Printed means reply
+text" rule. This is the SW-88 / SW-89 F1 defect, not a flake: it was the same in all four measured
+runs. ADR 0020 records the follow-up.
+
 ## Prerequisites
 
 The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the

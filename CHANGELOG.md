@@ -19,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gate-briefs.md` section's shown lines must appear verbatim in one main-thread text block. It
   compares artifact text, not model wording, and a scenario using it keeps its session.
   `02-feature-happy` uses it, and `-SelfTest` checks it offline on six built transcripts (printed
-  passes; write-only, subagent-only, paraphrased, no transcript, no section fail).
+  passes; write-only, subagent-only, paraphrased, no transcript, no section fail). The first
+  headless re-measure still printed 0 brief lines, so `02` now fails that one assertion; IDs and
+  `path:line` in chat dropped to 0, and phases 0-6 are narrated.
 - **Gate brief gaps closed (SW-102, ADR 0019)** - `details <target>` on Gate 2 (both faces) and
   Gate 3 of `/sd:feature`: `details T02` prints that task's full block, `details plan` the plan and
   `details risks` the plan's risks and the impact map's risk assessment, verbatim; a bare `details`
