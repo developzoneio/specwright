@@ -8,6 +8,7 @@
   { "type": "file-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "(?m)^## Gate 1\\b" },
   { "type": "file-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "(?m)^## Gate 2\\b" },
   { "type": "file-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "(?m)^## Gate 3\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "(?m)^Reply: yes\\b" },
   { "type": "file-not-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "file-not-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-todo-count\\s*\\|\\s*feature\\s*\\|\\s*done" },
