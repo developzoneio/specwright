@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gate brief gaps closed (SW-102, ADR 0019)** - `details <target>` on Gate 2 (both faces) and
+  Gate 3 of `/sd:feature`: `details T02` prints that task's full block, `details plan` the plan and
+  `details risks` the plan's risks and the impact map's risk assessment, verbatim; a bare `details`
+  works as before and lists the targets. The brief is written in the user's conversation language
+  and printed as the same text, so "verbatim" stays a byte copy; headings, `Reply:`, option tokens,
+  IDs and paths stay English, as do all other spec files. A Gate 2 face lists only decisions the
+  plan adds, not ones the approved spec already settles. The 10-line cap is confirmed over the
+  ticket's "about 15".
 - **Gate brief for `/sd:feature` (SW-89, ADR 0018)** - new skill `sd-gate-brief` (skills 11 ->
   12). Each gate now writes what it shows to an append-only `.specs/<ID>/gate-briefs.md`, one
   section per gate pass, then prints that section verbatim. The SW-88 baseline found headless runs
