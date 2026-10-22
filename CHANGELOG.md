@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Gate brief for `/sd:feature` (SW-89, ADR 0018)** - new skill `sd-gate-brief` (skills 11 ->
+  12). Each gate now writes what it shows to an append-only `.specs/<ID>/gate-briefs.md`, one
+  section per gate pass, then prints that section verbatim. The SW-88 baseline found headless runs
+  printed no gate text while claiming they had. A brief has at most 10 lines plus one row per
+  task: the top 3 decisions by impact and reversibility, each with a recommended default, and the
+  rest collapsed into one line that the new `details` option expands. Gate 3 lists blocking
+  findings, counts warnings (default: log as follow-ups) and logs suggestions without asking.
+  `sd-spec-architect` and `sd-reviewer` return `GATE_BRIEF` blocks; the reviewer stays read-only.
+  No internal rule, criterion or section ID appears in any user-facing text, escalation narration
+  included. The gate count stays 3. `/sd:spec status` lists the new file, and e2e
+  `02-feature-happy` asserts it.
+
 ## [1.7.0] - 2026-10-01
 
 ### Prompt size report

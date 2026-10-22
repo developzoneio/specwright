@@ -62,7 +62,7 @@ Every PR adds a line under `## [Unreleased]` in `CHANGELOG.md` (Keep a Changelog
 | `agents/` | `~/.claude/agents/sd/` | 6 subagents (`sd-spec-architect`, `sd-code-explorer`, `sd-debugger`, `sd-implementer`, `sd-reviewer`, `sd-docs-writer`) |
 | `hooks/powershell/` + `hooks/bash/` | `~/.claude/hooks/sd/` | 7 hooks × 2 platforms (`session-context`, `prompt-router`, `spec-gate`, `handoff-integrity`, `subagent-retro`, `precompact-state`, `stop-gate`) |
 | `templates/` | `~/.claude/templates/sd/` | 4 setup templates + 6 spec templates in `specs/` |
-| `skills/` | `~/.claude/skills/sd/` | 11 rule packs, one folder per skill with `SKILL.md` |
+| `skills/` | `~/.claude/skills/sd/` | 12 rule packs, one folder per skill with `SKILL.md` |
 
 Source filenames are unprefixed (`agents/reviewer.md`); the `sd-`/`sd:` namespace comes from frontmatter `name:` and the `sd/` install subfolder. The namespace exists for collision avoidance and clean uninstall — never use bare names when assets reference each other.
 

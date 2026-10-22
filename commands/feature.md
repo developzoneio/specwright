@@ -47,6 +47,11 @@ frontmatter first and is never resumed from its task markers.
    names only rule IDs and trigger inputs. If that file is unreadable, STOP: "specwright install
    incomplete - model escalation skill not found under `~/.claude/skills/sd/`. Re-run the
    installer."
+4. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
+   (`gate-briefs.md`), what each gate shows, the `details` option and the wording of every
+   user-facing line; this file names only the gates it applies to. If that file is unreadable,
+   STOP: "specwright install incomplete - gate brief skill not found under `~/.claude/skills/sd/`.
+   Re-run the installer."
 
 ---
 
@@ -64,12 +69,14 @@ frontmatter first and is never resumed from its task markers.
 
 ### ⛔ Gate 1 - Spec approval
 
-STOP. Present the spec to the user. Ask:
+STOP. The main thread writes the Gate 1 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the
+architect's `GATE_BRIEF` block, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Approve spec FEAT-<arg>? (yes / refine <feedback> / abort)
+> Approve spec FEAT-<arg>? (yes / refine <feedback> / details / abort)
 
 - `yes` -> set status=`approved`, proceed.
-- `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop.
+- `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop; the next pass is a new brief section.
+- `details` -> show the collapsed decisions per **sd-gate-brief**, then ask again.
 - `abort` -> set status=`archived`, exit.
 
 ---
@@ -116,23 +123,30 @@ STOP. This gate has two faces. Which one you present is decided by the architect
 from Phase 3 step 2 - **not** by adding a separate always-on gate. A spec **under** the decompose
 thresholds sees only the normal plan approval below, with **zero added friction**.
 
-**Face A - normal plan approval** (plan is under threshold). Present the plan and task list. Ask:
+Either face starts the same way: the main thread writes the Gate 2 brief to
+`.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block (the plan face or the
+complexity face, per **sd-gate-brief**), then shows it verbatim. `details` on either face shows the
+collapsed decisions and asks the same question again.
 
-> Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>) (yes / refine <feedback> / abort)
+**Face A - normal plan approval** (plan is under threshold). Show the plan brief. Ask:
+
+> Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>) (yes / refine <feedback> / details / abort)
 
 - `yes` -> set status=`in-progress` in `00-spec.md` and `index.md`; proceed to Phase 4.
 - `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop.
+- `details` -> show the collapsed decisions, then ask again.
 - `abort` -> set status=`archived`, exit.
 
 **Face B - Gate Complexity (HARD)** (plan is over threshold: tasks > 8; spans > 2 production
 layers/subsystems - distinct `Layer` values excluding `Tests`/`Config`, which cross-cut every
 change; impact surface > 8 files; or an unresolved Open question remains). The workflow **refuses to
-execute one oversized plan.** Present the architect's proposal and STOP.
+execute one oversized plan.** Show the complexity brief, which carries the architect's proposal,
+and STOP.
 
 If the architect returned a **decompose proposal**, ask:
 
 > FEAT-<arg> exceeds the complexity threshold (<reason: e.g. 14 tasks, spans 3 layers>).
-> Split into <N> child specs? (approve split / no-split <reason> / refine <feedback> / abort)
+> Split into <N> child specs? (approve split / no-split <reason> / refine <feedback> / details / abort)
 
 - `approve split` -> for each proposed child, in dependency order:
   1. Invoke `sd-spec-architect` with `TASK = create`, `TEMPLATE = feature.template.md`,
@@ -156,6 +170,7 @@ If the architect returned a **decompose proposal**, ask:
   status=`in-progress`, proceed to Phase 4. Log the no-split decision and its reason to
   `05-retro.md`.
 - `refine` -> `sd-spec-architect` `TASK = refine`; loop back through the self-assessment.
+- `details` -> show the collapsed decisions, then ask again.
 - `abort` -> set status=`archived`, exit.
 
 If the architect returned a **no-split** flag itself (over threshold but it found no clean split),
@@ -206,7 +221,8 @@ Reachable from Phase 4 (self-check above) **and** Phase 5b (a batch-review findi
 itself is wrong). Follow the **sd-replan-loop** skill; the protocol is defined there once and shared
 with `/sd:refactor`. In brief:
 
-1. STOP. Surface the trigger, the affected task IDs, and the proposed delta. Ask:
+1. STOP. The main thread writes the Re-plan brief (trigger, affected tasks, proposed delta) to
+   `.specs/FEAT-<arg>/gate-briefs.md` per **sd-gate-brief**, then shows it verbatim. Ask:
 
    > Re-plan FEAT-<arg>? Discovery: <trigger>. Affects <task IDs>. (approve / revise <feedback> / abort task)
 
@@ -249,13 +265,13 @@ Reviewer checks ALL changes in one pass:
 
 ### ⛔ Gate 3 - Integration + review pass
 
-STOP. Display:
-- Test + lint summary.
-- Reviewer verdict counts (BLOCK / WARN / SUGGEST / PASS).
+STOP. The main thread logs every 🟡 SUGGEST to `05-retro.md` without asking, then writes the
+Gate 3 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the reviewer's `GATE_BRIEF` block plus the
+Phase 5a test + lint summary, per **sd-gate-brief**, and shows it verbatim. Ask:
 
-Ask:
+> All clean for FEAT-<arg>? (yes / address findings / details / abort)
 
-> All clean for FEAT-<arg>? (yes / address findings / abort)
+`details` shows the collapsed warning and suggestion detail, then asks again.
 
 Treat findings:
 - Any 🔴 BLOCK that is a **code defect** (the task was right, the implementation is wrong) -> route
@@ -265,8 +281,9 @@ Treat findings:
   4) with `Phase: review`, not a bare implementer fix. This is the review-time re-plan path: the
   wrong decision is recorded as a revision and the affected tasks are regenerated, rather than
   hand-patched with only a retro sentence.
-- Any 🟠 WARN -> ask user: address now or log to `05-retro.md` as follow-up?
-- 🟡 SUGGEST and 🟢 PASS -> log to retro, proceed.
+- Any 🟠 WARN -> the brief recommends logging it as a follow-up. `yes` logs each one to
+  `05-retro.md` as a follow-up; `address findings` routes it back to the implementer instead.
+- 🟡 SUGGEST (already logged) and 🟢 PASS -> proceed.
 
 ---
 
@@ -323,7 +340,11 @@ Treat findings:
 - **Model escalation follows `sd-model-escalation` only.** Rules `ESC-FEAT-02`, `ESC-FEAT-03`,
   `ESC-FEAT-03b`, `ESC-FEAT-04` and `ESC-FEAT-04b` are applied where named above; the ladder,
   precedence, `models.escalation` config and the `05-retro.md` line format live in the skill and
-  are not restated here.
+  are not restated here. Narrating a fired rule to the user follows **sd-gate-brief**.
+- **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above writes
+  its brief to `.specs/FEAT-<arg>/gate-briefs.md` before showing it. The brief shape, the decision
+  cap, the `details` option and the rule for every line the user reads live in the skill and are
+  not restated here.
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.
