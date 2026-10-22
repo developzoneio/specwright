@@ -185,6 +185,12 @@
         "summary": "HARD gate prose describes an escape hatch with no contract-lint: allow suppression"
       },
       {
+        "id": "CL307",
+        "severity": "BLOCK",
+        "wave": 1,
+        "summary": "gate-brief wiring disagrees with contractLint.gateBriefs: a declared gate block not naming sd-gate-brief or an option set lacking details, or a block wiring either undeclared"
+      },
+      {
         "id": "CL400",
         "severity": "BLOCK",
         "wave": 3,

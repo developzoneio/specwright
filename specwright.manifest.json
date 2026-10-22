@@ -368,6 +368,7 @@
       { "id": "CL304", "severity": "BLOCK", "wave": 1, "summary": "conditional gate on disk undeclared, or declared and absent" },
       { "id": "CL305", "severity": "BLOCK", "wave": 1, "summary": "HARD gate listing an override token as a selectable option" },
       { "id": "CL306", "severity": "BLOCK", "wave": 3, "summary": "HARD gate prose describes an escape hatch with no contract-lint: allow suppression" },
+      { "id": "CL307", "severity": "BLOCK", "wave": 1, "summary": "gate-brief wiring disagrees with contractLint.gateBriefs: a declared gate block not naming sd-gate-brief or an option set lacking details, or a block wiring either undeclared" },
 
       { "id": "CL400", "severity": "BLOCK", "wave": 3, "summary": "hardcoded stack command token outside a <<placeholder>>, fenced example or suppression comment" },
       { "id": "CL401", "severity": "WARN",  "wave": 3, "summary": "hardcoded language/framework name in the same contexts (stays WARN permanently - often legitimate in prose)" },
@@ -404,6 +405,21 @@
       "defined once in the skill and reached from commands/feature.md and commands/refactor.md,",
       "so its count belongs to those workflows, not to the skill. Check 7's seeding loop skips",
       "null quantities; CL302 and CL304 do not care either way."
+    ],
+
+    "gateBriefs": {
+      "commands/feature.md": { "briefs": ["1", "2", "3", "Re-plan"], "details": ["1", "2", "3"] }
+    },
+
+    "$gateBriefsComment": [
+      "CL307's contract (SW-101): which gate blocks carry a gate brief (name sd-gate-brief) and",
+      "which of those offer the details option. Declared, not derived, like gates: deriving it",
+      "from the blocks would compare disk against itself. Labels are the gate index's: 1, 2a,",
+      "Re-plan. Re-plan carries a brief but keeps its option set (ADR 0018). Both directions are",
+      "checked, so deleting this key fails every wired gate instead of turning the rule off. A",
+      "gate declared to offer details needs it in every option set of its block - Gate 2's two",
+      "faces each have one. A listed file that does not exist, or a details label missing from",
+      "briefs, exits 2, like gates."
     ],
 
     "specArtifacts": [
