@@ -61,13 +61,23 @@
     the sandbox root holds a `.claude/` (SW-73). A missing prerequisite
     exits 2 with the dependency named, never as a failed assertion.
 
+    Assertion type transcript-contains-section (SW-99) is the one assertion
+    that reads the session transcript. It compares ARTIFACT text - the shown
+    lines of each gate-briefs.md section the run wrote - with the main
+    thread's assistant text, verbatim, so it asserts no model phrasing. A
+    scenario that uses it keeps its session (no --no-session-persistence)
+    whatever SD_E2E_TRANSCRIPT says, and a missing transcript fails it.
+
     -SelfTest re-runs the negative scenarios (03, 04) once per guard
     mutation of spec-gate's installed hook files - an always-allow stub, and
     the real hook with its deny JSON in the pre-SW-80 shape (SW-82) - and
     asserts they now FAIL, proving the harness would catch a regression that
     removes the guard or breaks its output (mirrors
     tests/hooks/run-conformance.ps1 and tests/contract-lint/run-selftest.ps1's
-    own -SelfTest modes).
+    own -SelfTest modes). Before those paid runs it checks
+    transcript-contains-section offline against built transcripts (SW-99):
+    a printed brief must pass, and a brief that was only written, only
+    printed by a subagent, paraphrased, or has no transcript must fail.
 
     A scenario whose claude -p timed out, printed no parseable result, or
     returned is_error: true "could not run" (SW-81): its assertions are
@@ -382,7 +392,8 @@ function Invoke-ClaudeHeadless {
         [switch]$SkipPermissions,
         [string[]]$DisallowedTools,
         [string[]]$AllowedTools,
-        [string]$PermissionMode = 'dontAsk'
+        [string]$PermissionMode = 'dontAsk',
+        [switch]$KeepSession
     )
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = 'claude'
@@ -397,8 +408,10 @@ function Invoke-ClaudeHeadless {
     # without --no-session-persistence the CLI writes it under
     # <FakeHome>/.claude/projects/, and the fake home is then kept (see the
     # finally block in Invoke-Scenario). Off by default - a transcript is
-    # debugging evidence, not an assertion input.
-    if (-not $env:SD_E2E_TRANSCRIPT) { $cliArgs += '--no-session-persistence' }
+    # debugging evidence, not an assertion input - except for a scenario
+    # with a transcript assertion (SW-99), which keeps the session as its
+    # input; its fake home is still deleted after the assertions run.
+    if (-not $env:SD_E2E_TRANSCRIPT -and -not $KeepSession) { $cliArgs += '--no-session-persistence' }
     # Permission posture (SW-80, verified on claude 2.1.283 with
     # probe-permission-posture.ps1). dontAsk refuses every tool call no rule
     # allows, so a scenario that writes files or runs its test command grants
@@ -560,8 +573,223 @@ function Get-ScenarioBudget {
     return 3.0
 }
 
+# ---- transcript assertion (SW-99) ---------------------------------------------
+
+function Test-ScenarioUsesTranscript {
+    # A scenario with a transcript-* assertion needs its session kept: the
+    # transcript is that assertion's input, not debugging evidence.
+    param([string]$ScenarioDir)
+    $expectPath = Join-Path $ScenarioDir 'expect.json'
+    if (-not (Test-Path -LiteralPath $expectPath)) { return $false }
+    return @(Get-Content -LiteralPath $expectPath -Raw | ConvertFrom-Json |
+        Where-Object { $_.type -like 'transcript-*' }).Count -gt 0
+}
+
+function Get-MainThreadTextBlocks {
+    # The text blocks of the main thread's assistant messages, in order, from
+    # <FakeHome>/.claude/projects/*/<SessionId>.jsonl. Tool calls (a Write's
+    # content included) and subagent transcripts (subagents/, isSidechain)
+    # are not reply text. Returns $null when no main transcript is found.
+    param([string]$FakeHome, [string]$SessionId)
+    $projects = Join-Path $FakeHome '.claude' 'projects'
+    if (-not (Test-Path -LiteralPath $projects)) { return $null }
+    $files = @(Get-ChildItem -LiteralPath $projects -Recurse -File -Filter '*.jsonl' |
+        Where-Object { $_.Directory.Name -ne 'subagents' })
+    if ($SessionId) { $files = @($files | Where-Object { $_.BaseName -eq $SessionId }) }
+    if ($files.Count -eq 0) { return $null }
+    $blocks = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in $files) {
+        foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $entry = $null
+            try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            if ($entry.type -ne 'assistant' -or $entry.isSidechain -eq $true) { continue }
+            if ($null -eq $entry.message -or $null -eq $entry.message.content) { continue }
+            foreach ($c in @($entry.message.content)) {
+                if ($c.type -eq 'text' -and $c.text) { $blocks.Add(([string]$c.text).Replace("`r`n", "`n")) }
+            }
+        }
+    }
+    return , $blocks.ToArray()
+}
+
+function Get-BriefShownSections {
+    # Each gate-briefs.md section whose heading matches $SectionPattern, with
+    # its shown lines: after the heading, blank lines excluded, up to the
+    # `### More decisions` subsection or the `Reply:` line, per sd-gate-brief.
+    param([string]$Path, [string]$SectionPattern)
+    $sections = [System.Collections.Generic.List[object]]::new()
+    $current = $null
+    foreach ($raw in [System.IO.File]::ReadAllLines($Path)) {
+        $line = $raw.TrimEnd()
+        if ($line -match '^## ') {
+            $current = $null
+            if ($line -match $SectionPattern) {
+                $current = [pscustomobject]@{
+                    Heading = $line
+                    Lines   = [System.Collections.Generic.List[string]]::new()
+                    Closed  = $false
+                }
+                $sections.Add($current)
+            }
+            continue
+        }
+        if ($null -eq $current -or $current.Closed) { continue }
+        if ($line -match '^### More decisions' -or $line -match '^Reply:') { $current.Closed = $true; continue }
+        if ($line) { $current.Lines.Add($line) }
+    }
+    return , $sections.ToArray()
+}
+
+function Test-BlockHasLinesInOrder {
+    param([string]$Block, [string[]]$Lines)
+    $at = 0
+    foreach ($l in $Lines) {
+        $i = $Block.IndexOf($l, $at, [System.StringComparison]::Ordinal)
+        if ($i -lt 0) { return $false }
+        $at = $i + $l.Length
+    }
+    return $true
+}
+
+function Test-TranscriptContainsSections {
+    # transcript-contains-section: every matching section's shown lines appear,
+    # verbatim and in order, inside one main-thread text block. Fails - never
+    # passes vacuously - on a missing brief, no matching section, an empty
+    # section, or no main transcript. Says what is missing via Write-Info.
+    param($Assertion, [string]$Workspace, [string]$FakeHome, $Run)
+    $p = Join-Path $Workspace $Assertion.path
+    if (-not (Test-Path -LiteralPath $p)) { Write-Info "brief not found: $($Assertion.path)"; return $false }
+    $pattern = if ($Assertion.section) { [string]$Assertion.section } else { '^## Gate ' }
+    $sections = Get-BriefShownSections -Path $p -SectionPattern $pattern
+    if ($sections.Count -eq 0) { Write-Info "no section matches $pattern in $($Assertion.path)"; return $false }
+    $sessionId = if ($Run -and $Run.Result -and $Run.Result.session_id) { [string]$Run.Result.session_id } else { '' }
+    $blocks = Get-MainThreadTextBlocks -FakeHome $FakeHome -SessionId $sessionId
+    if ($null -eq $blocks) { Write-Info "no main-thread transcript found under $FakeHome (session '$sessionId')"; return $false }
+    $allText = $blocks -join "`n"
+    $ok = $true
+    foreach ($s in $sections) {
+        if ($s.Lines.Count -eq 0) { Write-Info "$($s.Heading): no shown lines"; $ok = $false; continue }
+        $lines = $s.Lines.ToArray()
+        $found = $false
+        foreach ($b in $blocks) { if (Test-BlockHasLinesInOrder -Block $b -Lines $lines) { $found = $true; break } }
+        if ($found) { continue }
+        $ok = $false
+        $absent = @($lines | Where-Object { -not $allText.Contains($_) })
+        if ($absent.Count -gt 0) {
+            Write-Info "$($s.Heading): $($absent.Count) of $($lines.Count) shown lines not in reply text, first: $($absent[0])"
+        } else {
+            Write-Info "$($s.Heading): every line is in reply text, but not in order within one text block"
+        }
+    }
+    return $ok
+}
+
+function Invoke-TranscriptAssertionSelfCheck {
+    # -SelfTest, offline (SW-99): runs transcript-contains-section against
+    # transcripts built here. The printed brief must pass; each mutation that
+    # removes or alters the print must fail. Returns $true when every case
+    # behaved as expected.
+    $sid = 'selftest-session'
+    $brief = @(
+        '# Gate briefs - FEAT-selftest'
+        'Append-only. Each section is the text shown at that gate pass.'
+        ''
+        '## Gate 1 - Spec approval (pass 1)'
+        'What changes: the list shows how many todos are done.'
+        'Decisions: none - the spec only restates the request.'
+        'Risk: none found.'
+        'Approve spec FEAT-selftest? (yes / refine <feedback> / details / abort)'
+        ''
+        '### More decisions (shown on details)'
+        'none'
+        'Reply: yes'
+        ''
+        '## Gate 2 - Plan approval (pass 1)'
+        'What changes: one method and one test.'
+        'Decisions: none - the plan adds no choice beyond the approved spec.'
+        'Risk: none found.'
+        '| Task | What it does | Main file |'
+        '|---|---|---|'
+        '| T01 | Count todos by status | src/service.js |'
+        'Approve plan for FEAT-selftest? (1 tasks, complexity S) (yes / refine <feedback> / details <target> / abort)'
+        'Reply: yes'
+    )
+    $g1 = ($brief[4..7] -join "`n")
+    $g2 = ($brief[14..20] -join "`n")
+    $paraphrased = $g2.Replace('one method and one test', 'a method plus its test')
+
+    function New-Entry {
+        param([object[]]$Content, [bool]$Sidechain = $false)
+        return ([ordered]@{
+            type = 'assistant'; isSidechain = $Sidechain; sessionId = $sid
+            message = [ordered]@{ role = 'assistant'; content = $Content }
+        } | ConvertTo-Json -Depth 10 -Compress)
+    }
+    function New-Text { param([string]$t) return [ordered]@{ type = 'text'; text = $t } }
+    $writeCall = [ordered]@{
+        type = 'tool_use'; name = 'Write'
+        input = [ordered]@{ file_path = '.specs/FEAT-selftest/gate-briefs.md'; content = ($brief -join "`n") }
+    }
+
+    $cases = @(
+        @{ Name = 'printed'; Expect = $true
+           Main = @((New-Entry @($writeCall)), (New-Entry @((New-Text "Phase 1 - writing the spec"))),
+                    (New-Entry @((New-Text $g1))), (New-Entry @((New-Text $g2)))) }
+        @{ Name = 'write-only'; Expect = $false
+           Main = @((New-Entry @($writeCall)), (New-Entry @((New-Text 'Gate 1 and Gate 2 presented; standing reply yes.')))) }
+        @{ Name = 'subagent-only'; Expect = $false
+           Main = @((New-Entry @($writeCall)))
+           Sub  = @((New-Entry @((New-Text $g1)) $true), (New-Entry @((New-Text $g2)) $true)) }
+        @{ Name = 'paraphrase'; Expect = $false
+           Main = @((New-Entry @((New-Text $g1))), (New-Entry @((New-Text $paraphrased)))) }
+        @{ Name = 'no-transcript'; Expect = $false; Main = $null }
+        @{ Name = 'no-sections'; Expect = $false; NoSections = $true
+           Main = @((New-Entry @((New-Text $g1)))) }
+    )
+
+    $allOk = $true
+    $root = New-EmptyTempDir -Prefix 'sd-e2e-transcript-selftest'
+    try {
+        foreach ($c in $cases) {
+            $caseDir = Join-Path $root $c.Name
+            $ws = Join-Path $caseDir 'ws'
+            $fh = Join-Path $caseDir 'home'
+            $briefDir = Join-Path $ws '.specs' 'FEAT-selftest'
+            New-Item -ItemType Directory -Path $briefDir -Force | Out-Null
+            $briefLines = if ($c.NoSections) { $brief[0..1] } else { $brief }
+            [System.IO.File]::WriteAllText((Join-Path $briefDir 'gate-briefs.md'), (($briefLines -join "`n") + "`n"))
+            if ($null -ne $c.Main) {
+                $proj = Join-Path $fh '.claude' 'projects' 'selftest-ws'
+                New-Item -ItemType Directory -Path $proj -Force | Out-Null
+                [System.IO.File]::WriteAllText((Join-Path $proj "$sid.jsonl"), (($c.Main -join "`n") + "`n"))
+                if ($c.Sub) {
+                    $subDir = Join-Path $proj $sid 'subagents'
+                    New-Item -ItemType Directory -Path $subDir -Force | Out-Null
+                    [System.IO.File]::WriteAllText((Join-Path $subDir 'agent-1.jsonl'), (($c.Sub -join "`n") + "`n"))
+                }
+            }
+            $assertion = [pscustomobject]@{
+                type = 'transcript-contains-section'; path = '.specs/FEAT-selftest/gate-briefs.md'; section = '^## Gate '
+            }
+            $run = [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $sid } }
+            $got = Test-TranscriptContainsSections -Assertion $assertion -Workspace $ws -FakeHome $fh -Run $run
+            $want = if ($c.Expect) { 'pass' } else { 'fail' }
+            if ($got -eq $c.Expect) {
+                Write-Ok "self-test: transcript-contains-section [$($c.Name)] : $want, as expected"
+            } else {
+                Write-Bad "self-test: transcript-contains-section [$($c.Name)] : expected $want, got the opposite"
+                $allOk = $false
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $allOk
+}
+
 function Test-OneAssertion {
-    param($Assertion, [string]$Workspace, $Run)
+    param($Assertion, [string]$Workspace, $Run, [string]$FakeHome)
     $type = $Assertion.type
     switch ($type) {
         'file-exists' {
@@ -611,6 +839,10 @@ function Test-OneAssertion {
             }
             return $false
         }
+        'transcript-contains-section' {
+            return (Test-TranscriptContainsSections -Assertion $Assertion -Workspace $Workspace `
+                -FakeHome $FakeHome -Run $Run)
+        }
         default {
             throw "unknown assertion type '$type'"
         }
@@ -628,6 +860,10 @@ function Get-AssertionLabel {
         'exit-code'        { return "exit-code: $($Assertion.value)" }
         'file-no-bom'      { return "file-no-bom: $($Assertion.path)" }
         'permission-denied' { return "permission-denied: $($Assertion.tool) on $($Assertion.path)" }
+        'transcript-contains-section' {
+            $section = if ($Assertion.section) { $Assertion.section } else { '^## Gate ' }
+            return "transcript-contains-section: $($Assertion.path) [$section]"
+        }
         default            { return "unknown: $($Assertion.type)" }
     }
 }
@@ -674,13 +910,14 @@ function Invoke-Scenario {
         $disallowedTools = Get-ScenarioDisallowedTools -ScenarioDir $ScenarioDir
         $allowedTools = Get-ScenarioAllowedTools -ScenarioDir $ScenarioDir
         $permissionMode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
+        $keepSession = Test-ScenarioUsesTranscript -ScenarioDir $ScenarioDir
 
         $timeoutSec = Get-ScenarioTimeout -ScenarioDir $ScenarioDir
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         $run = Invoke-ClaudeHeadless -Workspace $ws -FakeHome $fakeHome -Prompt $prompt `
             -MaxBudgetUsd $budget -TimeoutSec $timeoutSec -PermissionMode $permissionMode `
             -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools `
-            -AllowedTools $allowedTools
+            -AllowedTools $allowedTools -KeepSession:$keepSession
         $stopwatch.Stop()
         $record.durationSeconds = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
         $record.timedOut = [bool]$run.TimedOut
@@ -723,7 +960,7 @@ function Invoke-Scenario {
             $label = Get-AssertionLabel -Assertion $a
             $ok = $false
             try {
-                $ok = Test-OneAssertion -Assertion $a -Workspace $ws -Run $run
+                $ok = Test-OneAssertion -Assertion $a -Workspace $ws -Run $run -FakeHome $fakeHome
             } catch {
                 Write-Bad "$name : $label (error: $($_.Exception.Message))"
                 $scenarioOk = $false
@@ -836,8 +1073,10 @@ Assert-Prerequisites -ScenarioDirs $selectedDirs
 # ---- self-test mode ------------------------------------------------------------
 
 if ($SelfTest) {
+    Write-Host '=== e2e self-test: transcript-contains-section must FAIL on a brief that was not printed ==='
+    $allDetected = Invoke-TranscriptAssertionSelfCheck
+    Write-Host ''
     Write-Host '=== e2e self-test: harness must DETECT a removed or malformed guard ==='
-    $allDetected = $true
     foreach ($mutation in $guardMutations) {
         foreach ($n in $negativeScenarios) {
             $dir = Join-Path $scenariosDir $n

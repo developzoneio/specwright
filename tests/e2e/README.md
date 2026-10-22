@@ -2,7 +2,7 @@
 
 Drives real `claude -p` (headless) sessions against a throwaway copy of a fixture project and
 asserts on **produced artifacts** - files, frontmatter, status values - never on transcript
-wording. This is the only mechanism in the repo that exercises a real model session against the
+wording (one assertion compares artifact text with the transcript; see the rule below). This is the only mechanism in the repo that exercises a real model session against the
 engine's commands and hooks; everything else (`scripts/validate.*`, `tests/hooks/`,
 `tests/contract-lint/`) checks the *assets* (do commands/agents/skills reference each other
 correctly) or pipes fixture JSON directly into a hook script in isolation. Neither proves the
@@ -17,6 +17,24 @@ values, do not. Every `expect.json` in `scenarios/*/` asserts on file existence,
 patterns, or (only for the one report-only command, scenario 5) presence of specific structured
 rule-ID tokens in the final output - never on sentence-level wording. Any assertion that flakes
 twice gets deleted or rewritten, not retried.
+
+**One assertion reads the transcript, and it still asserts an artifact (SW-99).**
+`transcript-contains-section` checks that the shown lines of each `gate-briefs.md` section appear
+verbatim in the main thread's reply text. It meets the rule for three reasons:
+
+- **The expected text is the artifact, not a sentence in `expect.json`.** The scenario names a
+  file and a section heading pattern. The lines it looks for are whatever this run wrote to disk,
+  so a different wording in the next run moves both sides at once and cannot flake the check.
+- **The comparison is byte-for-byte, not a judgment of phrasing.** `sd-gate-brief` (ADR 0019)
+  makes the file and the chat the same text, rendered once before the write. A paraphrase fails on
+  purpose: it is the gate presented in words the record does not hold.
+- **It answers a question no file can.** SW-88 and SW-89 found sessions that wrote every brief,
+  printed none of it, and then said each gate was presented. Only the reply channel shows that.
+
+The transcript is this assertion's input, so a scenario that uses it keeps its session whatever
+`SD_E2E_TRANSCRIPT` says, and its fake home is still deleted afterwards. A missing transcript, a
+missing brief, or a brief with no matching section fails the assertion; it never passes empty.
+No other assertion may read the transcript, and no assertion may match model-written wording.
 
 ## Prerequisites
 
@@ -57,7 +75,8 @@ $env:SD_E2E_DEBUG = '1'; .\tests\e2e\run-e2e.ps1
 $env:SD_E2E_KEEP = '1'; .\tests\e2e\run-e2e.ps1 -Case 01-setup
 
 # Keep the session transcript too: drops --no-session-persistence and implies SD_E2E_KEEP. The
-# transcript lands under <fakeHome>\.claude\projects\ (the path is printed) (SW-79)
+# transcript lands under <fakeHome>\.claude\projects\ (the path is printed) (SW-79). A scenario
+# with a transcript-contains-section assertion keeps its session without it, then deletes it (SW-99)
 $env:SD_E2E_TRANSCRIPT = '1'; .\tests\e2e\run-e2e.ps1 -Case 02-feature-happy
 
 # Also write the run as JSON: date, mode, claude version, auth mode, OS, git commit, and per
@@ -357,6 +376,22 @@ and `tests/contract-lint/run-selftest.ps1`'s own `-SelfTest` modes.
 | `always-allow` | Replaces the hook with a stub that decides nothing: the guard is gone. | Every assertion: the edit lands, nothing is denied, no block event. |
 | `malformed-deny` (SW-82) | Keeps the real hook but rewrites its deny JSON to the pre-SW-80 shape, with no `hookSpecificOutput.hookEventName`. | The file and `permission-denied` assertions. The hook still decides to block and records the event, but the CLI drops the deny, so the granted edit lands. |
 
+Before those paid runs, `-SelfTest` checks `transcript-contains-section` offline (SW-99). It
+builds a brief with a Gate 1 and a Gate 2 section, writes one transcript per case into a scratch
+fake home, and runs the real assertion function against each. No `claude` session is started, and
+the check costs nothing:
+
+| Case | Transcript | Must |
+|---|---|---|
+| `printed` | the Write call, a phase line, then each section's shown lines as a text block | pass |
+| `write-only` | the Write call carrying the whole brief, then "Gate 1 and Gate 2 presented" | fail |
+| `subagent-only` | the Write call; the shown lines only in a `subagents/` transcript | fail |
+| `paraphrase` | both sections printed, one line reworded | fail |
+| `no-transcript` | no session file at all | fail |
+| `no-sections` | the brief has no `## Gate` section | fail |
+
+`write-only` is the SW-88 / SW-89 F1 pattern. If any case behaves otherwise, `-SelfTest` exits 1.
+
 `malformed-deny` is the regression SW-80 fixed, and the reason `03` and `04` grant the edit. Under
 the old no-grant posture the mode refused the edit anyway, and both scenarios stayed green. The
 mutation rewrites the hook's deny emitter by pattern. If that pattern stops matching (the emitter
@@ -389,7 +424,7 @@ and exits 1.
 | # | Scenario | Claim under test |
 |---|---|---|
 | 1 | `01-setup` | `/sd:setup` on a bare, unscaffolded project produces `CLAUDE.md`, `.specs/`, `.claude/project-config.json`, `.claude/settings.json`, all BOM-free. |
-| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89). |
+| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89), and every section's shown lines appear verbatim in the main thread's reply text (SW-99). |
 | 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. The edit is granted, so only the hook's deny keeps `src/domain/todo.js` unchanged and puts it in `permission_denials` (SW-82). |
 | 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. The edit is granted, so only the hook's deny keeps the row `in-progress` and puts `.specs/index.md` in `permission_denials` (SW-82). |
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
@@ -413,6 +448,18 @@ holds one permission rule per line (`#` comments allowed), because a rule such a
 matching call. An optional `requires.txt` lists
 commands the scenario needs on `PATH` (one per line, `#` comments allowed). The preflight checks it
 for the selected scenarios only, so `-Case 03-spec-gate-negative` does not demand Node.
+
+### Assertion types
+
+| Type | Fields | Passes when |
+|---|---|---|
+| `file-exists` / `file-not-exists` | `path` | the workspace file exists / does not |
+| `file-matches` / `file-not-matches` | `path`, `pattern` (regex) | the file content matches / does not (a missing file counts as not matching) |
+| `file-no-bom` | `path` | the file exists and does not start with a UTF-8 BOM |
+| `output-contains` | `value` | the final `result` text holds `value` literally (scenario 5 only, see the rule) |
+| `exit-code` | `value` | `claude -p` exited with that code |
+| `permission-denied` | `tool` (regex), `path` (suffix) | `permission_denials` holds a matching call (SW-80) |
+| `transcript-contains-section` | `path`, `section` (heading regex, default `^## Gate `) | every matching section has shown lines, and they appear verbatim and in order in one main-thread text block. Shown lines are those after the heading, blank lines excluded, up to `### More decisions` or `Reply:`. Tool calls and subagent transcripts do not count (SW-99) |
 
 ## Cost and CI placement
 
