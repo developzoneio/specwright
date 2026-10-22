@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and printed as the same text, so "verbatim" stays a byte copy; headings, `Reply:`, option tokens,
   IDs and paths stay English, as do all other spec files. A Gate 2 face lists only decisions the
   plan adds, not ones the approved spec already settles. The 10-line cap is confirmed over the
-  ticket's "about 15".
+  ticket's "about 15". e2e `02-feature-happy` also asserts a `Reply: yes` line in the briefs.
 - **Gate brief for `/sd:feature` (SW-89, ADR 0018)** - new skill `sd-gate-brief` (skills 11 ->
   12). Each gate now writes what it shows to an append-only `.specs/<ID>/gate-briefs.md`, one
   section per gate pass, then prints that section verbatim. The SW-88 baseline found headless runs
