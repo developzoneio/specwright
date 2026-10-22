@@ -352,6 +352,7 @@ evidence missing*, and fires only when both hold:
 | perf Gate 2 | Phase 3+ evidence exists while the baseline artifact, Results log row 0 or the measured `Current observed` is missing |
 | rca Gate 2 (SW-51) | the root cause is written or the status moved on, while `## Hypothesis tree` still holds its `<<PHASE-2:` field |
 | port Gates 1, 2, 3, 6 | later-phase artifacts exist while `MANIFEST.md`/`Frozen: yes`, filled tables, `## Behavior pinning` or `parity/INDEX.md` is missing |
+| feature Gates 1, 2, 3 (SW-100) | the status moved on, a task is done or a passing `06-verify.md` exists, while `gate-briefs.md` has no section for the gate, or no `Reply:` line in it approves (a reply other than `details`, `refine`, `abort`, `address`, `approve split`, `no`). No brief, or a brief that starts after the gate (a resumed or pre-SW-89 spec), checks nothing (ADR 0021) |
 
 A hit prints `{"decision":"block","reason":"..."}` and exits 0 - Stop's own schema, which blocks
 exactly like exit 2 (ADR 0015). The reason names the spec, the gate, what is missing and the
@@ -555,7 +556,9 @@ workstation (2026-09-26, 10 iterations per case) it measured p95 399 ms under po
 `precompact-state` (SW-68) came later still. On the same workstation (2026-09-26, 15 iterations
 per case) it measured p95 397 ms under powershell and 532 ms under pwsh, and it reuses
 `session-context`'s budget. `stop-gate` (SW-69) measured p95 546 ms under powershell and 660 ms under pwsh
-(2026-09-27, 15 iterations per case, same workstation) and reuses the same budget.
+(2026-09-27, 15 iterations per case, same workstation) and reuses the same budget. With the
+`/sd:feature` rules and their case in the selection (SW-100), it measured p95 543 ms under
+powershell and 541 ms under pwsh (2026-10-22, 15 iterations per case, same workstation).
 `handoff-integrity` (SW-70) measured p95 575 ms under powershell and 635 ms under pwsh (2026-09-27,
 30 iterations per case, same workstation; `spec-gate` in the same run: 689 / 744 ms). Its 5.1
 budget is 1200 ms. Enabled, it runs after every write-tool call, in addition to `spec-gate`.

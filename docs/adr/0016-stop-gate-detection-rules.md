@@ -7,6 +7,7 @@
   latency budget); SW-51 (rca Gate 2 could run on an empty hypothesis tree); SW-44 (why gate
   markers are not parsed out of command markdown)
 - Supersedes: none
+- Extended by: ADR 0021 (`/sd:feature` rows FEAT-G1..G3, evidenced by `gate-briefs.md`; SW-100)
 
 ## Context
 
@@ -47,6 +48,9 @@ progress.
 | PORT-G2 | `/sd:port` Gate 2 - Fidelity tables complete | status `approved` or `in-progress` | the spec body still holds an author-fill `<<...>>` token |
 | PORT-G3 | `/sd:port` Gate 3 - Behavior pinned | `02-tasks.md` exists | `03-decisions.md` has no `## Behavior pinning` section |
 | PORT-G6 | `/sd:port` Gate 6 - Justified-diff parity | `06-verify.md` exists | no `04-artifacts/parity/INDEX.md` |
+
+ADR 0021 adds three `/sd:feature` rows (FEAT-G1..G3), whose evidence is the gate's section and
+`Reply:` line in `gate-briefs.md`.
 
 Section text is read from a `## Heading` to the next `## ` heading with `<!-- ... -->` comments
 removed, so template guidance that quotes `<<...>>` never counts. An author-fill token is any
