@@ -19,9 +19,13 @@ Small, well-scoped items targeted at the next minor release.
 
 Larger items that each warrant a full `/sd:feature` spec before building.
 
-_Nothing new proposed right now. Substantial work is already specced and built, queued for the
-next version cut - see the `[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md) for what
-that is._
+- **Codex support** - port specwright to OpenAI Codex so the same spec-driven workflows run there,
+  not only in Claude Code. Needs a spec to settle how commands, agents, skills, and hooks map onto
+  Codex equivalents, and an installer target for it. The engine stays generic (see Non-goals); only
+  the Layer 1 packaging and the hook wiring differ per host. Priority: do this before submission.
+
+Substantial work is also already specced and built, queued for the next version cut - see the
+`[Unreleased]` section of [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Exploratory
 
