@@ -192,8 +192,12 @@ return, not from the artifacts. End those returns with the `GATE_BRIEF` block de
 for an under-threshold plan, `gate: complexity` for a `STATUS = needs-input` plan. List every
 decision a reviewer could veto, ranked per that skill's "Decision ranking", each with the default
 you recommend - including the open questions you resolved yourself, which are the decisions the
-user most needs to see. Word every field per the skill's "User-facing text" rule. A scoped re-plan
-returns no block.
+user most needs to see. For `gate: spec`, state every decision you list in `00-spec.md` itself:
+the spec is the durable record of what Gate 1 approves. For `gate: plan` and `gate: complexity`,
+list only the decisions the plan adds - check each one against the approved `SPEC` you already
+read, and leave out any decision it settles, per the skill's "Plan approval" rule. Word every
+field in English per the skill's "User-facing text" rule; the main thread owns the conversation
+language. A scoped re-plan returns no block.
 
 ---
 
