@@ -125,16 +125,16 @@ thresholds sees only the normal plan approval below, with **zero added friction*
 
 Either face starts the same way: the main thread writes the Gate 2 brief to
 `.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block (the plan face or the
-complexity face, per **sd-gate-brief**), then shows it verbatim. `details` on either face shows the
-collapsed decisions and asks the same question again.
+complexity face, per **sd-gate-brief**), then shows it verbatim. `details <target>` on either face prints what the target names (no
+target, a task ID, `plan` or `risks`) per **sd-gate-brief** and asks the same question again.
 
 **Face A - normal plan approval** (plan is under threshold). Show the plan brief. Ask:
 
-> Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>) (yes / refine <feedback> / details / abort)
+> Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>) (yes / refine <feedback> / details <target> / abort)
 
 - `yes` -> set status=`in-progress` in `00-spec.md` and `index.md`; proceed to Phase 4.
 - `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop.
-- `details` -> show the collapsed decisions, then ask again.
+- `details <target>` -> print what the target names, then ask again.
 - `abort` -> set status=`archived`, exit.
 
 **Face B - Gate Complexity (HARD)** (plan is over threshold: tasks > 8; spans > 2 production
@@ -146,7 +146,7 @@ and STOP.
 If the architect returned a **decompose proposal**, ask:
 
 > FEAT-<arg> exceeds the complexity threshold (<reason: e.g. 14 tasks, spans 3 layers>).
-> Split into <N> child specs? (approve split / no-split <reason> / refine <feedback> / details / abort)
+> Split into <N> child specs? (approve split / no-split <reason> / refine <feedback> / details <target> / abort)
 
 - `approve split` -> for each proposed child, in dependency order:
   1. Invoke `sd-spec-architect` with `TASK = create`, `TEMPLATE = feature.template.md`,
@@ -170,7 +170,7 @@ If the architect returned a **decompose proposal**, ask:
   status=`in-progress`, proceed to Phase 4. Log the no-split decision and its reason to
   `05-retro.md`.
 - `refine` -> `sd-spec-architect` `TASK = refine`; loop back through the self-assessment.
-- `details` -> show the collapsed decisions, then ask again.
+- `details <target>` -> print what the target names, then ask again.
 - `abort` -> set status=`archived`, exit.
 
 If the architect returned a **no-split** flag itself (over threshold but it found no clean split),
@@ -269,9 +269,10 @@ STOP. The main thread logs every 🟡 SUGGEST to `05-retro.md` without asking, t
 Gate 3 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the reviewer's `GATE_BRIEF` block plus the
 Phase 5a test + lint summary, per **sd-gate-brief**, and shows it verbatim. Ask:
 
-> All clean for FEAT-<arg>? (yes / address findings / details / abort)
+> All clean for FEAT-<arg>? (yes / address findings / details <target> / abort)
 
-`details` shows the collapsed warning and suggestion detail, then asks again.
+`details <target>` prints what the target names per **sd-gate-brief** (no target: the collapsed
+warning and suggestion detail), then asks again.
 
 Treat findings:
 - Any 🔴 BLOCK that is a **code defect** (the task was right, the implementation is wrong) -> route
@@ -342,9 +343,9 @@ Treat findings:
   precedence, `models.escalation` config and the `05-retro.md` line format live in the skill and
   are not restated here. Narrating a fired rule to the user follows **sd-gate-brief**.
 - **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above writes
-  its brief to `.specs/FEAT-<arg>/gate-briefs.md` before showing it. The brief shape, the decision
-  cap, the `details` option and the rule for every line the user reads live in the skill and are
-  not restated here.
+  its brief to `.specs/FEAT-<arg>/gate-briefs.md` before showing it. The brief shape and language,
+  the decision cap, the `details` targets and the rule for every line the user reads live in the
+  skill and are not restated here.
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.
