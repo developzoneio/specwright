@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ends a turn the way it does with a person. `02-feature-happy` now stops at each gate and gets
   `yes` three times, then the constitution probe as a last turn. It passes 22/22, and all three
   gate briefs reach the chat byte-for-byte (they printed 0 lines under the single scripted turn).
+  The medium-size run (7 tasks) did the same, 5/5.
   Cost in `-ResultsFile` is the last turn's, since the CLI reports a resumed session's cumulative
   cost; each turn's raw figure is kept in `turnCostsUsd`. `-SelfTest` adds three multi-turn
   transcript cases.

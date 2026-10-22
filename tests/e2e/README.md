@@ -51,6 +51,10 @@ three briefs were printed byte-for-byte, each inside one text block (Gate 1 7/7 
 448 s, $1.92. A full-suite run on commit `dc86f70` right after passed `02` 22/22 again (414 s,
 $1.79) and every other scenario unchanged: 112/112 assertions, about $6.12 for the suite. `-SelfTest`
 passed all 9 transcript cases and all 4 guard runs.
+The SW-88 medium scenario (`90-spike-feature-m`, scratch, not committed) under replies-as-turns, at
+commit `caad4e1`: 5/5, with all three briefs printed byte-for-byte (8/8, 16/16, 5/5 lines), no
+internal ID in user-visible text, 7 tasks, 4 turns, 740 s, $2.81. In both multi-turn runs a phase
+that starts right after a gate reply was sometimes not narrated (Phase 6 in both, Phase 4 in M).
 
 ## Prerequisites
 
