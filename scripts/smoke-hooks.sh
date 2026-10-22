@@ -306,6 +306,83 @@ run_hook "$repo_root/hooks/bash/stop-gate.sh" "${payload/\"stop_hook_active\":fa
 assert_exit0 "stop-gate re-fire" "$CODE"
 assert_empty "stop-gate re-fire" "$STDOUT"
 
+# ---- stop-gate: /sd:feature gates read from gate-briefs.md (SW-100) ---------
+
+fg="$fixture/stop-gate-feat-ws"
+fd="$fg/.specs/FEAT-SMOKE-2"
+mkdir -p "$fg/.claude" "$fd"
+printf '%s\n' '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}' > "$fg/.claude/project-config.json"
+printf '%s\n' '{"type":"user","message":{"content":"/sd:feature SMOKE-2 (FEAT-SMOKE-2)"}}' > "$fg/transcript.jsonl"
+fpayload="$(printf '{"session_id":"smoke-stop-feat","cwd":"%s","transcript_path":"%s/transcript.jsonl","stop_hook_active":false}' "$fg" "$fg")"
+
+# feat_state <status> <T01 status|''> <06-verify result|''> <briefs>
+# <briefs> is '-' for no gate-briefs.md (a spec from before SW-89), else
+# space-separated gate=reply pairs; an empty reply leaves that section open.
+feat_state() {
+    local g
+    rm -f "$fd"/*.md
+    printf -- '---\nid: FEAT-SMOKE-2\ntype: feature\nstatus: %s\n---\n' "$1" > "$fd/00-spec.md"
+    [[ "$1" != "draft" ]] && printf '# Decisions\n' > "$fd/03-decisions.md"
+    [[ -n "$2" ]] && printf -- '### T01 - Count\n\n- **Status**: %s\n' "$2" > "$fd/02-tasks.md"
+    [[ -n "$3" ]] && printf -- '---\nresult: %s\n---\n' "$3" > "$fd/06-verify.md"
+    [[ "$4" == "-" ]] && return 0
+    printf '# Gate briefs - FEAT-SMOKE-2\n' > "$fd/gate-briefs.md"
+    for g in $4; do
+        printf '\n## Gate %s - smoke (pass 1)\n\nApprove? (yes / abort)\n' "${g%%=*}" >> "$fd/gate-briefs.md"
+        [[ -n "${g#*=}" ]] && printf '\nReply: %s\n' "${g#*=}" >> "$fd/gate-briefs.md"
+    done
+    return 0
+}
+
+# feat_case <label> <'silent' | substring of the block reason> <feat_state args...>
+feat_case() {
+    local label="$1" expect="$2"
+    shift 2
+    feat_state "$@"
+    section "stop-gate (bash): feature $label"
+    run_hook "$repo_root/hooks/bash/stop-gate.sh" "$fpayload"
+    assert_exit0 "stop-gate feature $label" "$CODE"
+    if [[ "$expect" == "silent" ]]; then
+        assert_empty "stop-gate feature $label" "$STDOUT"
+    else
+        assert_contains "stop-gate feature $label" "$STDOUT" '"decision":"block"'
+        assert_contains "stop-gate feature $label" "$STDOUT" "$expect"
+    fi
+}
+
+feat_case "Gate 1 passed without a reply - blocks" "Gate 1 (Spec approval)" approved "" "" "1="
+feat_case "Gate 1 passed with Reply: yes - silent" silent approved "" "" "1=yes"
+feat_case "at Gate 1 - silent" silent draft "" "" "1="
+feat_case "Gate 1 passed, no brief (pre-SW-89) - silent" silent approved "" "" "-"
+feat_case "Gate 2 passed without a reply - blocks" "Gate 2 (Plan approval)" in-progress done "" "1=yes 2="
+feat_case "Gate 2 passed with Reply: yes - silent" silent in-progress done "" "1=yes 2=yes"
+feat_case "at Gate 2 - silent" silent approved open "" "1=yes 2="
+feat_case "Gate 2 passed, no brief (pre-SW-89) - silent" silent in-progress done "" "-"
+feat_case "Gate 3 passed without a reply - blocks" "Gate 3 (Integration and review)" in-progress done pass "1=yes 2=yes 3="
+feat_case "Gate 3 passed with Reply: yes - silent" silent in-progress done pass "1=yes 2=yes 3=yes"
+feat_case "at Gate 3 - silent" silent in-progress done "" "1=yes 2=yes 3="
+feat_case "Gate 3 passed, no brief (pre-SW-89) - silent" silent in-progress done pass "-"
+
+section "stop-gate (bash): feature re-fire with stop_hook_active - silent"
+feat_state in-progress done pass "1=yes 2=yes 3="
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "${fpayload/\"stop_hook_active\":false/\"stop_hook_active\":true}"
+assert_exit0 "stop-gate feature re-fire" "$CODE"
+assert_empty "stop-gate feature re-fire" "$STDOUT"
+
+# The shipped example: FEAT-todo-priority is done and has no gate-briefs.md.
+# Its project enables stop-gate, so the nightly e2e runs these rules there.
+section "stop-gate (bash): examples/fixture-project FEAT-todo-priority - silent, unchanged"
+fp="$repo_root/examples/fixture-project"
+printf '%s\n' '{"type":"user","message":{"content":"/sd:feature todo-priority (FEAT-todo-priority)"}}' > "$fg/transcript-fp.jsonl"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" \
+    "$(printf '{"session_id":"smoke-stop-fp","cwd":"%s","transcript_path":"%s/transcript-fp.jsonl","stop_hook_active":false}' "$fp" "$fg")"
+assert_exit0 "stop-gate fixture-project" "$CODE"
+assert_empty "stop-gate fixture-project" "$STDOUT"
+if command -v git >/dev/null 2>&1 && git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then
+    assert_empty "stop-gate fixture-project FEAT-todo-priority unchanged" \
+        "$(git -C "$repo_root" status --porcelain -- examples/fixture-project/.specs/FEAT-todo-priority)"
+fi
+
 # ---- handoff-integrity: an edit outside the ready task's Files is flagged (SW-70)
 
 # Its own workspace, for the same reason as stop-gate: the hook is opt-in.

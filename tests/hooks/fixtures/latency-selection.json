@@ -27,7 +27,8 @@
   "stop-gate": [
     "silent-default-off",
     "block-bug-repro-skipped",
-    "block-port-multiple-gates"
+    "block-port-multiple-gates",
+    "block-feat-g3-no-reply"
   ],
   "handoff-integrity": [
     "silent-default-off",

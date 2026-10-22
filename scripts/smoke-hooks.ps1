@@ -316,6 +316,94 @@ Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($sgPayload -
 Assert-Exit0 'stop-gate re-fire' $script:Code
 Assert-Empty 'stop-gate re-fire' $script:Stdout
 
+# ---- stop-gate: /sd:feature gates read from gate-briefs.md (SW-100) ---------
+
+$fg = Join-Path $fixture 'stop-gate-feat-ws'
+$fd = Join-Path $fg '.specs\FEAT-SMOKE-2'
+New-Item -ItemType Directory -Force -Path (Join-Path $fg '.claude'), $fd | Out-Null
+Set-Content -LiteralPath (Join-Path $fg '.claude\project-config.json') -Encoding UTF8 `
+    -Value '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}'
+Set-Content -LiteralPath (Join-Path $fg 'transcript.jsonl') -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"/sd:feature SMOKE-2 (FEAT-SMOKE-2)"}}'
+$fgEsc = $fg -replace '\\', '\\\\'
+$fPayload = "{`"session_id`":`"smoke-stop-feat`",`"cwd`":`"$fgEsc`",`"transcript_path`":`"$fgEsc\\transcript.jsonl`",`"stop_hook_active`":false}"
+
+# Set-FeatState <status> <T01 status|''> <06-verify result|''> <briefs>
+# <briefs> is '-' for no gate-briefs.md (a spec from before SW-89), else
+# space-separated gate=reply pairs; an empty reply leaves that section open.
+function Set-FeatState {
+    param([string]$Status, [string]$Task, [string]$Verify, [string]$Briefs)
+    Get-ChildItem -LiteralPath $fd -Filter '*.md' | Remove-Item -Force
+    Set-Content -LiteralPath (Join-Path $fd '00-spec.md') -Encoding UTF8 -NoNewline `
+        -Value "---`nid: FEAT-SMOKE-2`ntype: feature`nstatus: $Status`n---`n"
+    if ($Status -ne 'draft') { Set-Content -LiteralPath (Join-Path $fd '03-decisions.md') -Encoding UTF8 -Value '# Decisions' }
+    if ($Task) {
+        Set-Content -LiteralPath (Join-Path $fd '02-tasks.md') -Encoding UTF8 -NoNewline `
+            -Value "### T01 - Count`n`n- **Status**: $Task`n"
+    }
+    if ($Verify) {
+        Set-Content -LiteralPath (Join-Path $fd '06-verify.md') -Encoding UTF8 -NoNewline -Value "---`nresult: $Verify`n---`n"
+    }
+    if ($Briefs -eq '-') { return }
+    $text = "# Gate briefs - FEAT-SMOKE-2`n"
+    foreach ($g in ($Briefs -split ' ')) {
+        $gate, $reply = $g -split '=', 2
+        $text += "`n## Gate $gate - smoke (pass 1)`n`nApprove? (yes / abort)`n"
+        if ($reply) { $text += "`nReply: $reply`n" }
+    }
+    Set-Content -LiteralPath (Join-Path $fd 'gate-briefs.md') -Encoding UTF8 -NoNewline -Value $text
+}
+
+# Test-FeatCase <label> <'silent' | substring of the block reason> <Set-FeatState args...>
+function Test-FeatCase {
+    param([string]$Label, [string]$Expect, [string]$Status, [string]$Task, [string]$Verify, [string]$Briefs)
+    Set-FeatState $Status $Task $Verify $Briefs
+    Write-Section "stop-gate (PowerShell): feature $Label"
+    Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') $fPayload
+    Assert-Exit0 "stop-gate feature $Label" $script:Code
+    if ($Expect -eq 'silent') {
+        Assert-Empty "stop-gate feature $Label" $script:Stdout
+    } else {
+        Assert-Contains "stop-gate feature $Label" $script:Stdout '"decision":"block"'
+        Assert-Contains "stop-gate feature $Label" $script:Stdout $Expect
+    }
+}
+
+Test-FeatCase 'Gate 1 passed without a reply - blocks' 'Gate 1 (Spec approval)' 'approved' '' '' '1='
+Test-FeatCase 'Gate 1 passed with Reply: yes - silent' 'silent' 'approved' '' '' '1=yes'
+Test-FeatCase 'at Gate 1 - silent' 'silent' 'draft' '' '' '1='
+Test-FeatCase 'Gate 1 passed, no brief (pre-SW-89) - silent' 'silent' 'approved' '' '' '-'
+Test-FeatCase 'Gate 2 passed without a reply - blocks' 'Gate 2 (Plan approval)' 'in-progress' 'done' '' '1=yes 2='
+Test-FeatCase 'Gate 2 passed with Reply: yes - silent' 'silent' 'in-progress' 'done' '' '1=yes 2=yes'
+Test-FeatCase 'at Gate 2 - silent' 'silent' 'approved' 'open' '' '1=yes 2='
+Test-FeatCase 'Gate 2 passed, no brief (pre-SW-89) - silent' 'silent' 'in-progress' 'done' '' '-'
+Test-FeatCase 'Gate 3 passed without a reply - blocks' 'Gate 3 (Integration and review)' 'in-progress' 'done' 'pass' '1=yes 2=yes 3='
+Test-FeatCase 'Gate 3 passed with Reply: yes - silent' 'silent' 'in-progress' 'done' 'pass' '1=yes 2=yes 3=yes'
+Test-FeatCase 'at Gate 3 - silent' 'silent' 'in-progress' 'done' '' '1=yes 2=yes 3='
+Test-FeatCase 'Gate 3 passed, no brief (pre-SW-89) - silent' 'silent' 'in-progress' 'done' 'pass' '-'
+
+Write-Section 'stop-gate (PowerShell): feature re-fire with stop_hook_active - silent'
+Set-FeatState 'in-progress' 'done' 'pass' '1=yes 2=yes 3='
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($fPayload -replace '"stop_hook_active":false', '"stop_hook_active":true')
+Assert-Exit0 'stop-gate feature re-fire' $script:Code
+Assert-Empty 'stop-gate feature re-fire' $script:Stdout
+
+# The shipped example: FEAT-todo-priority is done and has no gate-briefs.md.
+# Its project enables stop-gate, so the nightly e2e runs these rules there.
+Write-Section 'stop-gate (PowerShell): examples/fixture-project FEAT-todo-priority - silent, unchanged'
+$fp = Join-Path $repoRoot 'examples\fixture-project'
+$fpEsc = $fp -replace '\\', '\\\\'
+Set-Content -LiteralPath (Join-Path $fg 'transcript-fp.jsonl') -Encoding UTF8 -NoNewline `
+    -Value '{"type":"user","message":{"content":"/sd:feature todo-priority (FEAT-todo-priority)"}}'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') `
+    "{`"session_id`":`"smoke-stop-fp`",`"cwd`":`"$fpEsc`",`"transcript_path`":`"$fgEsc\\transcript-fp.jsonl`",`"stop_hook_active`":false}"
+Assert-Exit0 'stop-gate fixture-project' $script:Code
+Assert-Empty 'stop-gate fixture-project' $script:Stdout
+if ($null -ne (Get-Command git -ErrorAction SilentlyContinue)) {
+    $fpStatus = (& git -C $repoRoot status --porcelain -- 'examples/fixture-project/.specs/FEAT-todo-priority') -join "`n"
+    if ($LASTEXITCODE -eq 0) { Assert-Empty 'stop-gate fixture-project FEAT-todo-priority unchanged' $fpStatus }
+}
+
 # ---- handoff-integrity: an edit outside the ready task's Files is flagged (SW-70)
 
 # Its own workspace, for the same reason as stop-gate: the hook is opt-in.
