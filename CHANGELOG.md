@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+- `ROADMAP.md` and the README roadmap section now list Codex support as a planned item.
+
 ## [1.7.0] - 2026-10-01
 
 ### Prompt size report
