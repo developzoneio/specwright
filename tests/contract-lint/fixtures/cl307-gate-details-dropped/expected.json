@@ -1,0 +1,26 @@
+{
+  "note": "the details half: Gate 1 lost it, one face of Gate 2 lost it while the other kept it, and Re-plan grew it without a manifest edit (SW-101)",
+  "findings": [
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "details-dropped"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "details-dropped-one-face"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "details-undeclared"
+    }
+  ]
+}

@@ -183,6 +183,9 @@ RE_SUPPRESS='<!--[[:blank:]]*contract-lint:[[:blank:]]*allow[[:blank:]]+CL[0-9][
 # An option set: a slash-separated parenthetical carrying no nested parens.
 RE_OPTPAREN='\(([^()/]+/)+[^()]+\)'
 RE_BULLETTOK='^-[[:blank:]]+`([^`]+)`'
+# CL307 - a gate block naming the gate-brief skill, word-bounded so a longer
+# sd- name that merely starts with it never counts.
+RE_GATE_BRIEF_REF='(^|[^A-Za-z0-9_-])sd-gate-brief([^A-Za-z0-9_-]|$)'
 # CL1xx invocation contract. A mode heading carries its selector as a backticked
 # `KEY = value` pair (Mode N: `TASK = create`, `WORKFLOW_TYPE = feature`), except
 # the reviewer/debugger `Task type: `value`` grammar, whose selector key is the
@@ -305,6 +308,7 @@ CL303
 CL304
 CL305
 CL306
+CL307
 CL400
 CL401
 CL402
@@ -455,6 +459,36 @@ while IFS= read -r _f; do
     fi
     set_add EDIT_TOOL_ONLY_FILES "$_f"
 done < <(mjq '.contractLint.editToolOnly.files[]?')
+
+# gateBriefs (CL307, SW-101): which gate blocks carry a gate brief, and which
+# of those offer `details`. Declared, like gates: a listed file that does not
+# exist, or a details label missing from briefs, is a broken contract (exit 2).
+# Keys are "file<US>label". The skill name is a constant, never read from the
+# manifest, so deleting gateBriefs fails every wired gate (the disk direction)
+# instead of turning the rule off - the SW-20 lesson CL6xx also applies.
+GATE_BRIEF_SKILL="sd-gate-brief"
+GATE_BRIEF_DECL=""
+GATE_DETAILS_DECL=""
+while IFS= read -r _f; do
+    [[ -z "$_f" ]] && continue
+    if [[ ! -f "$ROOT/$_f" ]]; then
+        echo "contract-lint: contractLint.gateBriefs names a file that does not exist: $_f" >&2
+        exit 2
+    fi
+done < <(mjq '.contractLint.gateBriefs // {} | keys[]')
+while IFS=$'\x1f' read -r _f _l; do
+    [[ -z "$_f" ]] && continue
+    set_has GATE_BRIEF_DECL "${_f}"$'\x1f'"${_l}" && continue
+    set_add GATE_BRIEF_DECL "${_f}"$'\x1f'"${_l}"
+done < <(mjq '.contractLint.gateBriefs // {} | to_entries[] | .key as $f | (.value.briefs // [])[] | "\($f)\u001f\(.)"')
+while IFS=$'\x1f' read -r _f _l; do
+    [[ -z "$_f" ]] && continue
+    if ! set_has GATE_BRIEF_DECL "${_f}"$'\x1f'"${_l}"; then
+        echo "contract-lint: contractLint.gateBriefs.${_f}.details names gate '${_l}' that is not in briefs" >&2
+        exit 2
+    fi
+    set_add GATE_DETAILS_DECL "${_f}"$'\x1f'"${_l}"
+done < <(mjq '.contractLint.gateBriefs // {} | to_entries[] | .key as $f | (.value.details // [])[] | "\($f)\u001f\(.)"')
 
 # escalationTriggers / escalationPolicy (CL6xx, SW-63). The band switches on
 # when skills/sd-model-escalation/SKILL.md exists on disk, NOT when the
@@ -1506,6 +1540,78 @@ rule_CL300_CL301_CL305_CL306() {
     done <<< "$GATES"
 }
 
+# CL307 - gate-brief wiring (SW-101). contractLint.gateBriefs declares which
+# gate blocks carry a brief (name sd-gate-brief on a non-fenced line) and which
+# of those offer `details`. Both are checked in both directions, the CL304
+# shape: declared and missing, or wired and undeclared. A gate declared to
+# offer details needs it in EVERY slash parenthetical of its block, so
+# /sd:feature's Gate 2 cannot drop it from one face while the other still has
+# it; a bullets-only option set needs a `details` bullet. A block with no option
+# set at all is CL301's finding, not this one's. A declared label with no gate
+# on disk lands on line 1 of the declared file.
+rule_CL307() {
+    local _f _l _kind _label _hard _end _i _key _named _ol _ot _has _seen="" _paren _first
+    while IFS=$'\x1f' read -r _f _l _kind _label _hard _end; do
+        [[ -z "$_f" ]] && continue
+        if [[ "$CUR_REL" != "$_f" ]]; then load_file "$_f"; fi
+        _key="${_f}"$'\x1f'"${_label}"
+        set_add _seen "$_key"
+        _named=0
+        for ((_i = _l - 1; _i < _end; _i++)); do
+            [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
+            [[ "${CUR_LINES[$_i]}" =~ $RE_SUPPRESS ]] && continue
+            if [[ "${CUR_LINES[$_i]}" =~ $RE_GATE_BRIEF_REF ]]; then _named=1; break; fi
+        done
+        if set_has GATE_BRIEF_DECL "$_key"; then
+            if [[ $_named -eq 0 ]]; then
+                add_finding CL307 "$_f" "$_l" "gate '$_label' is declared in contractLint.gateBriefs but its block never names $GATE_BRIEF_SKILL"
+            fi
+        elif [[ $_named -eq 1 ]]; then
+            add_finding CL307 "$_f" "$_l" "gate '$_label' names $GATE_BRIEF_SKILL but is not declared in contractLint.gateBriefs"
+        fi
+        gate_options "$_f" "$_l" "$_end"
+        if set_has GATE_DETAILS_DECL "$_key"; then
+            [[ $OPT_HAS_SET -eq 0 ]] && continue
+            _paren=0
+            for ((_i = _l - 1; _i < _end; _i++)); do
+                [[ "${CUR_LINES[$_i]}" =~ $RE_OPTPAREN ]] || continue
+                _paren=1
+                _has=0
+                while IFS=$'\x1f' read -r _ol _ot; do
+                    if [[ "$_ol" == "$((_i + 1))" && "$_ot" == "details" ]]; then _has=1; break; fi
+                done <<< "$OPT_TOKENS"
+                if [[ $_has -eq 0 ]]; then
+                    add_finding CL307 "$_f" "$((_i + 1))" "gate '$_label' is declared to offer details but this option set does not"
+                fi
+            done
+            if [[ $_paren -eq 0 ]]; then
+                _has=0
+                while IFS=$'\x1f' read -r _ol _ot; do
+                    if [[ "$_ot" == "details" ]]; then _has=1; break; fi
+                done <<< "$OPT_TOKENS"
+                if [[ $_has -eq 0 ]]; then
+                    add_finding CL307 "$_f" "$_l" "gate '$_label' is declared to offer details but its option set does not"
+                fi
+            fi
+        else
+            _first=""
+            while IFS=$'\x1f' read -r _ol _ot; do
+                if [[ "$_ot" == "details" ]]; then _first="$_ol"; break; fi
+            done <<< "$OPT_TOKENS"
+            if [[ -n "$_first" ]]; then
+                add_finding CL307 "$_f" "$_first" "gate '$_label' offers details but is not declared in contractLint.gateBriefs details"
+            fi
+        fi
+    done <<< "$GATES"
+    while IFS= read -r _key; do
+        [[ -z "$_key" ]] && continue
+        set_has _seen "$_key" && continue
+        _f="${_key%%$'\x1f'*}"
+        _label="${_key#*$'\x1f'}"
+        add_finding CL307 "$_f" 1 "manifest declares a gate brief for gate '$_label' but no such gate is on disk"
+    done <<< "$GATE_BRIEF_DECL"
+}
+
 # CL400 / CL401 / CL402 - stack-agnostic prose + hardcoded absolute paths.
 # One line-scan pass over scanScope, deliberately narrow (word-bounded
 # vocabulary hits, positive-boundary path regex) to keep the false-positive
@@ -1887,6 +1993,7 @@ rule_CL203_CL204
 rule_CL205
 rule_CL206
 rule_CL300_CL301_CL305_CL306
+rule_CL307
 rule_CL302_CL303_CL304
 rule_CL400_CL401_CL402
 rule_CL601_CL605

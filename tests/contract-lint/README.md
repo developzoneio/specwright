@@ -72,6 +72,8 @@ wording can improve in one commit while a divergence still fails.
 | `cl304-conditional-gate-mismatch` | CL304, both directions |
 | `cl305-hard-gate-offers-override` | CL305 |
 | `cl306-hard-gate-prose-escape-unsuppressed` | CL306 |
+| `cl307-gate-brief-unwired` | CL307, a declared gate naming the skill only in a fence, a wired gate left undeclared, a declared gate absent from disk |
+| `cl307-gate-details-dropped` | CL307, `details` dropped from a gate and from one face of a two-face gate, and offered by an undeclared gate |
 | `cl400-hardcoded-npm-test` | CL400 |
 | `cl401-hardcoded-typescript` | CL401 |
 | `cl402-hardcoded-absolute-path` | CL402 |
@@ -105,6 +107,8 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |
 | `fp-cl009-phrase-outside-phase0` | bootstrap guard text inside the skill that owns it, in a fenced example, and outside Phase 0; a Phase 0 that reads the skill at runtime | `skills/sd-bootstrap-guard/SKILL.md`, the Phase 0 of every workflow command |
 | `fp-cl206-phrase-wrapped` | the `editToolOnly` phrase wrapped across two lines of a rules bullet | `## Rules (hard constraints)` of every command in `contractLint.editToolOnly` |
+| `fp-cl307-replan-brief-without-details` | a gate carrying a brief with no `details` by design, a two-face gate offering `details` on both faces, and the skill named outside gate blocks | `commands/feature.md` Gate Re-plan and Gate 2 |
+| `fp-cl307-non-brief-workflow` | a workflow absent from `gateBriefs` that names the skill outside its gate block | every workflow but `commands/feature.md` |
 | `fp-cl601-allow-comment` | a fully wired escalation tree, plus an invoking command exempted by `allow CL601` with a reason | `commands/adr.md`, `commands/explore.md`, `commands/review.md` |
 | `fp-cl605-alias-list` | an alias list, and "escalate" used about a tool allowlist | `commands/port.md`, `commands/explore.md` |
 

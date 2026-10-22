@@ -1,0 +1,25 @@
+{
+  "note": "both directions of the brief half: Gate 1 declared but names the skill only in a fence, Gate 2 wired but undeclared, and a declared Gate 3 that is not on disk (SW-101)",
+  "findings": [
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "brief-only-fenced"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "brief-undeclared"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "file"
+    }
+  ]
+}

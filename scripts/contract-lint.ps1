@@ -87,6 +87,9 @@ $RE_SUPPARTS  = 'allow[ \t]+(CL[0-9][0-9][0-9])(.*)$'
 $RE_OPTPAREN  = '\(([^()/]+/)+[^()]+\)'
 $RE_BULLET    = '^-[ \t]'
 $RE_BULLETTOK = '^-[ \t]+`([^`]+)`'
+# CL307 - a gate block naming the gate-brief skill, word-bounded so a longer
+# sd- name that merely starts with it never counts.
+$RE_GATE_BRIEF_REF = '(^|[^A-Za-z0-9_-])sd-gate-brief([^A-Za-z0-9_-]|$)'
 $RE_SUBHEAD   = '^#{1,6}[ \t]'
 $RE_PHASE     = '^Phase[ \t]+[0-9]+[ \t]+-[ \t]+(.*)$'
 $RE_GATE_NUM  = '^ ([0-9]+)([ \t].*)?$'
@@ -241,7 +244,7 @@ $dispatchIds = @(
     'CL001', 'CL002', 'CL003', 'CL004', 'CL005', 'CL006', 'CL007', 'CL008', 'CL009',
     'CL100', 'CL101', 'CL102', 'CL103', 'CL104',
     'CL200', 'CL201', 'CL202', 'CL203', 'CL204', 'CL205', 'CL206',
-    'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306',
+    'CL300', 'CL301', 'CL302', 'CL303', 'CL304', 'CL305', 'CL306', 'CL307',
     'CL400', 'CL401', 'CL402',
     'CL601', 'CL602', 'CL603', 'CL604', 'CL605',
     'CL900', 'CL901', 'CL902'
@@ -361,6 +364,45 @@ if ($cl.PSObject.Properties.Name.Contains('editToolOnly') -and $null -ne $cl.edi
                 exit 2
             }
             [void]$editToolOnlyFiles.Add($ef)
+        }
+    }
+}
+
+# gateBriefs (CL307, SW-101): which gate blocks carry a gate brief, and which
+# of those offer `details`. Declared, like gates: a listed file that does not
+# exist, or a details label missing from briefs, is a broken contract (exit 2).
+# Keys are "file<US>label". The skill name is a constant, never read from the
+# manifest, so deleting gateBriefs fails every wired gate (the disk direction)
+# instead of turning the rule off - the SW-20 lesson CL6xx also applies.
+$gateBriefSkill = 'sd-gate-brief'
+$keySep = [string][char]31
+$gateBriefDecl = New-Object 'System.Collections.Generic.List[string]'
+$gateBriefSet = New-OrdinalSet
+$gateDetailsSet = New-OrdinalSet
+if ($cl.PSObject.Properties.Name.Contains('gateBriefs') -and $null -ne $cl.gateBriefs) {
+    foreach ($p in $cl.gateBriefs.PSObject.Properties) {
+        $bf = $p.Name
+        if (-not (Test-Path -LiteralPath (Join-Path $Root $bf) -PathType Leaf)) {
+            Write-Err "contract-lint: contractLint.gateBriefs names a file that does not exist: $bf"
+            exit 2
+        }
+    }
+    foreach ($p in $cl.gateBriefs.PSObject.Properties) {
+        if (-not $p.Value.PSObject.Properties.Name.Contains('briefs') -or $null -eq $p.Value.briefs) { continue }
+        foreach ($bl in @($p.Value.briefs)) {
+            $k = $p.Name + $keySep + [string]$bl
+            if ($gateBriefSet.Add($k)) { [void]$gateBriefDecl.Add($k) }
+        }
+    }
+    foreach ($p in $cl.gateBriefs.PSObject.Properties) {
+        if (-not $p.Value.PSObject.Properties.Name.Contains('details') -or $null -eq $p.Value.details) { continue }
+        foreach ($dl in @($p.Value.details)) {
+            $k = $p.Name + $keySep + [string]$dl
+            if (-not $gateBriefSet.Contains($k)) {
+                Write-Err "contract-lint: contractLint.gateBriefs.$($p.Name).details names gate '$dl' that is not in briefs"
+                exit 2
+            }
+            [void]$gateDetailsSet.Add($k)
         }
     }
 }
@@ -1307,6 +1349,73 @@ foreach ($g in $gates) {
             }
         }
     }
+}
+
+# CL307 - gate-brief wiring (SW-101). contractLint.gateBriefs declares which
+# gate blocks carry a brief (name sd-gate-brief on a non-fenced line) and which
+# of those offer `details`. Both are checked in both directions, the CL304
+# shape: declared and missing, or wired and undeclared. A gate declared to
+# offer details needs it in EVERY slash parenthetical of its block, so
+# /sd:feature's Gate 2 cannot drop it from one face while the other still has
+# it; a bullets-only option set needs a `details` bullet. A block with no option
+# set at all is CL301's finding, not this one's. A declared label with no gate
+# on disk lands on line 1 of the declared file.
+$cl307Seen = New-OrdinalSet
+foreach ($g in $gates) {
+    $lines = $fileLines[$g.File]
+    $fence = $fileFence[$g.File]
+    $key = $g.File + $keySep + $g.Label
+    [void]$cl307Seen.Add($key)
+    $named = $false
+    for ($i = $g.Line - 1; $i -lt $g.BlockEnd; $i++) {
+        if ($fence[$i]) { continue }
+        if ([regex]::IsMatch($lines[$i], $RE_SUPPRESS)) { continue }
+        if ([regex]::IsMatch($lines[$i], $RE_GATE_BRIEF_REF)) { $named = $true; break }
+    }
+    if ($gateBriefSet.Contains($key)) {
+        if (-not $named) {
+            Add-Finding 'CL307' $g.File $g.Line "gate '$($g.Label)' is declared in contractLint.gateBriefs but its block never names $gateBriefSkill"
+        }
+    } elseif ($named) {
+        Add-Finding 'CL307' $g.File $g.Line "gate '$($g.Label)' names $gateBriefSkill but is not declared in contractLint.gateBriefs"
+    }
+    $opts = Get-GateOptions $g.File $g.Line $g.BlockEnd
+    if ($gateDetailsSet.Contains($key)) {
+        if (-not $opts.HasSet) { continue }
+        $paren = $false
+        for ($i = $g.Line - 1; $i -lt $g.BlockEnd; $i++) {
+            if (-not [regex]::IsMatch($lines[$i], $RE_OPTPAREN)) { continue }
+            $paren = $true
+            $has = $false
+            foreach ($t in $opts.Tokens) {
+                if ($t.Line -eq ($i + 1) -and $t.Token -ceq 'details') { $has = $true; break }
+            }
+            if (-not $has) {
+                Add-Finding 'CL307' $g.File ($i + 1) "gate '$($g.Label)' is declared to offer details but this option set does not"
+            }
+        }
+        if (-not $paren) {
+            $has = $false
+            foreach ($t in $opts.Tokens) {
+                if ($t.Token -ceq 'details') { $has = $true; break }
+            }
+            if (-not $has) {
+                Add-Finding 'CL307' $g.File $g.Line "gate '$($g.Label)' is declared to offer details but its option set does not"
+            }
+        }
+    } else {
+        foreach ($t in $opts.Tokens) {
+            if ($t.Token -ceq 'details') {
+                Add-Finding 'CL307' $g.File $t.Line "gate '$($g.Label)' offers details but is not declared in contractLint.gateBriefs details"
+                break
+            }
+        }
+    }
+}
+foreach ($k in $gateBriefDecl) {
+    if ($cl307Seen.Contains($k)) { continue }
+    $parts = $k.Split([char]31)
+    Add-Finding 'CL307' $parts[0] 1 "manifest declares a gate brief for gate '$($parts[1])' but no such gate is on disk"
 }
 
 # CL400 / CL401 / CL402 - stack-agnostic prose + hardcoded absolute paths.

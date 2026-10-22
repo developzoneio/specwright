@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Contract-lint rule CL307 for gate-brief wiring (SW-101)** - a new BLOCK rule checks the
+  wiring SW-89 added to `/sd:feature`. `contractLint.gateBriefs` declares which gate blocks name
+  `sd-gate-brief` and which offer `details`, and the rule checks both directions, like CL304. It
+  also checks each option set, so Gate 2 cannot lose `details` on one face. Gate Re-plan has a
+  brief but no `details` (ADR 0018). Four fixtures cover it; the engine tree is clean under both
+  linters.
 - **e2e gate replies as their own turns (SW-103)** - a scenario may carry `replies.txt`, one reply
   per line. `run-e2e.ps1` sends each one with `claude -p --resume` on the same session, so a gate
   ends a turn the way it does with a person. `02-feature-happy` now stops at each gate and gets

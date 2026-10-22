@@ -216,6 +216,7 @@ trip a gate rule -- they all sit under a `## Phase 0` heading.
 | `CL304` | BLOCK | a conditional gate is on disk but undeclared, or declared and absent |
 | `CL305` | BLOCK | a HARD gate lists an override token as a selectable option |
 | `CL306` | BLOCK | a HARD gate's prose describes an escape hatch with no `contract-lint: allow CL306` comment nearby |
+| `CL307` | BLOCK | a gate declared in `contractLint.gateBriefs` does not name `sd-gate-brief`, or one of its option sets lacks `details` when declared; or a block wires either without being declared |
 
 An **option set** is a slash-separated parenthetical such as `(yes / revise / abort)`, or two or
 more top-level `- ` bullets. `CL303` compares **sets, never file order**: `commands/bug.md` authors
@@ -240,8 +241,33 @@ second mechanism saying the same thing was not worth adding.
 clean under both implementations** -- the same rollout `CL200` used, for the same reason: it reads
 prose intent, not pure structure.
 
+`CL307` guards the gate-brief wiring SW-89 put into `/sd:feature`: each gate block names
+`sd-gate-brief`, and Gates 1, 2 and 3 offer `details` ([ADR 0018](adr/0018-gate-brief-artifact.md)).
+Nothing else stopped a later edit from dropping either one.
+
+- **Declared, not inferred.** `contractLint.gateBriefs.<file>` lists the gate labels that carry a
+  brief (`briefs`) and the subset that offers `details` (`details`). Labels are the gate index's
+  (`1`, `2a`, `Re-plan`). Gate Re-plan is in `briefs` but not in `details`: it keeps its option
+  set because its protocol is shared with `/sd:refactor`.
+- **Both directions, the `CL304` shape.** A declared gate whose block never names the skill on a
+  non-fenced line fires, and so does a block that names it without being declared. The same goes
+  for `details`. A declared label with no gate on disk fires on line 1. The skill name is a
+  constant in both linters, so deleting `gateBriefs` fails every wired gate instead of turning
+  the rule off.
+- **Every option set.** A gate declared to offer `details` needs the token in each slash
+  parenthetical of its block, read through `gate_options` / `Get-GateOptions`. `/sd:feature`'s
+  Gate 2 is one block with two option sets, one per face, so dropping `details` from Face B
+  fires while Face A still has it. A bullets-only option set needs a `details` bullet. A block
+  with no option set at all is left to `CL301`.
+- **Blind spot.** It proves the wiring is written, not that the model shows the brief. That is
+  the e2e harness's job (SW-99).
+
+`CL307` **shipped BLOCK from its introduction on 2026-10-22** (SW-101), on the same grounds as
+`CL009` and `CL205`: it is a new id that reads structure, not prose intent, and with
+`contractLint.warnBudget` at `0` a WARN would already fail validate's Check 8.
+
 Gate classification needs no exclusion list. `Gate` followed by a lowercase word is never a gate,
-which is what makes `## Gate activity` in `commands/status.md` invisible to all six rules.
+which is what makes `## Gate activity` in `commands/status.md` invisible to all seven rules.
 
 ### CL4xx -- stack-agnostic prose
 
@@ -413,6 +439,7 @@ and never touch `areas`, `derived` or `docClaims`.
 | `installNamespaceSegment` | the `sd` in `templates/sd/...`, folded away before CL005 tests disk |
 | `rules` | the registry: id, severity, wave, summary. The one source of severity |
 | `gates` | per file: the declared hard count, the declared conditional labels, and the Check 7 quantity name |
+| `gateBriefs` | CL307's contract: per file, the gate labels that carry a brief (`briefs`) and those that offer `details` (`details`) |
 | `specArtifacts` | the numbered artifact filenames CL008 accepts |
 | `skillConsumers` | skills whose only consumers live outside scan scope, with the reason |
 | `overrideOptionTokens` | the vocabulary CL305 treats as an escape hatch |
@@ -455,7 +482,7 @@ implementation, one fixture, one row in the tables above.
 
 | Wave | Band | Status |
 |---|---|---|
-| 1 | CL0xx reference resolution, CL3xx gate integrity, CL9xx suppression hygiene | shipped, BLOCK (CL009 added 2026-09-24, BLOCK from the start) |
+| 1 | CL0xx reference resolution, CL3xx gate integrity, CL9xx suppression hygiene | shipped, BLOCK (CL009 added 2026-09-24 and CL307 2026-10-22, both BLOCK from the start) |
 | 2 | CL1xx invocation contract (agent input declarations) | shipped, BLOCK+WARN |
 | 3a | CL2xx role and tool integrity (CL200-CL206) | shipped, BLOCK (CL200 promoted from WARN; CL202/CL203 stay WARN; CL204 added 2026-09-02, CL205 2026-09-23 and CL206 2026-09-25, all BLOCK from the start) |
 | 3b | CL4xx stack-agnostic prose, CL306 | shipped 2026-07-30 WARN, now BLOCK (CL400/CL306 promoted 2026-07-31; CL401 stays WARN) |
