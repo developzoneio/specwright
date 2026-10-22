@@ -7,6 +7,7 @@
   invariants - a possible consumer, not built here); ADR 0002 (model escalation - its retro line
   keeps rule IDs); `skills/sd-gate-brief/SKILL.md` (the rules this ADR introduces)
 - Supersedes: none
+- Extended by: ADR 0019 (`details` targets, brief language, plan-face decisions; SW-102)
 
 ## Context
 
