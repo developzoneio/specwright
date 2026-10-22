@@ -12,9 +12,10 @@
 #   3. The spec checked is the newest spec ID in the transcript tail whose
 #      folder has a 00-spec.md and is not done/archived. No fallback: a turn
 #      that never touched a spec is never blocked.
-#   4. By the frontmatter type:, evaluate the invariant table of ADR 0016. A
-#      rule fires only when later-phase evidence exists AND the HARD gate's own
-#      evidence is missing.
+#   4. By the frontmatter type:, evaluate the invariant table of ADR 0016
+#      (feature rows: ADR 0021, read from gate-briefs.md). A rule fires only
+#      when later-phase evidence exists AND the HARD gate's own evidence is
+#      missing.
 #   5. On a hit, print {"decision":"block","reason":...} to stdout. That blocks
 #      Stop exactly like exit 2 (ADR 0015) while this hook still exits 0.
 #
@@ -289,11 +290,152 @@ push() {
     fi
 }
 
+# --- gate briefs (ADR 0021) ---------------------------------------------------
+# /sd:feature gates leave no verdict in the phase artifacts; their evidence is
+# gate-briefs.md (sd-gate-brief): one `## Gate <n> ...` section per gate pass,
+# closed by a `Reply: <reply verbatim>` line. Only those two kinds of line are
+# read. Mirrors Get-BriefState in the .ps1.
+
+# A reply's token: the first word after `Reply:`, with surrounding markdown
+# quotes and trailing punctuation removed. Sets reply_tok; empty means the line
+# carries no reply.
+reply_token() {
+    local t="${1#*Reply:}"
+    t="${t#"${t%%[![:space:]]*}"}"
+    while [[ "${t}" == [\`\*_\"\']* ]]; do t="${t#?}"; done
+    t="${t%%[[:space:]]*}"
+    while [[ "${t}" == *[.,\;:\!\?\`\*_\"\'] ]]; do t="${t%?}"; done
+    reply_tok="${t}"
+}
+
+# The option tokens that keep gate $1 open or leave it, plus a bare "no". Any
+# other reply approves, so a reply in the conversation language still counts.
+# Sets deny_tok to the matched token, lowercase, or ''.
+deny_token() {
+    local w words
+    case "$1" in
+        1) words="details refine abort no" ;;
+        2) words="details refine abort approve no" ;;
+        *) words="details address abort no" ;;
+    esac
+    deny_tok=""
+    shopt -s nocasematch
+    for w in ${words}; do
+        if [[ "$2" == "${w}" ]]; then
+            deny_tok="${w}"
+            break
+        fi
+    done
+    shopt -u nocasematch
+}
+
+# One pass over the brief. Per gate n in 1..3: brief_seen_n (a section exists),
+# brief_replies_n (Reply: lines with a token), brief_ok_n (one of them
+# approves), brief_deny_n (the last non-approving token). brief_start is the
+# rank of the first gate heading, doubled to stay integral: Gate 1 = 2,
+# Gate 2 = 4, Gate Re-plan = 5, Gate 3 = 6. A `### ` subheading does not end a
+# section; any other `## ` heading does.
+read_brief() {
+    local l h g n rank cur=0
+    local rx_gate='^## Gate ([123])([^0-9]|$)' rx_replan='^## Gate Re-plan' rx_reply='^[[:blank:]]*Reply:'
+    brief_start=0
+    for g in 1 2 3; do
+        printf -v "brief_seen_${g}" 0
+        printf -v "brief_replies_${g}" 0
+        printf -v "brief_ok_${g}" 0
+        printf -v "brief_deny_${g}" ''
+    done
+    while IFS= read -r l || [[ -n "${l}" ]]; do
+        if [[ "${l}" == "## "* ]]; then
+            h="${l%"${l##*[![:space:]]}"}"
+            cur=0
+            rank=0
+            if [[ "${h}" =~ ${rx_gate} ]]; then
+                cur="${BASH_REMATCH[1]}"
+                rank=$((cur * 2))
+                printf -v "brief_seen_${cur}" 1
+            elif [[ "${h}" =~ ${rx_replan} ]]; then
+                rank=5
+            fi
+            [[ ${brief_start} -eq 0 && ${rank} -gt 0 ]] && brief_start=${rank}
+            continue
+        fi
+        [[ ${cur} -eq 0 ]] && continue
+        [[ "${l}" =~ ${rx_reply} ]] || continue
+        reply_token "${l}"
+        [[ -z "${reply_tok}" ]] && continue
+        n="brief_replies_${cur}"
+        printf -v "${n}" '%s' "$(( ${!n} + 1 ))"
+        deny_token "${cur}" "${reply_tok}"
+        if [[ -n "${deny_tok}" ]]; then
+            printf -v "brief_deny_${cur}" '%s' "${deny_tok}"
+        else
+            printf -v "brief_ok_${cur}" 1
+        fi
+    done <<< "$1"
+}
+
+# Pushes onto `mis` what gate $1 lacks, when the brief covers that gate: it is
+# at or after the first gate the brief records. A gate before that point
+# (a resumed spec, or one created before gate briefs existed) is never
+# checked: a missing record is not a skipped gate.
+brief_missing() {
+    local g="$1" seen="brief_seen_$1" replies="brief_replies_$1" ok="brief_ok_$1" deny="brief_deny_$1"
+    [[ ${brief_start} -gt 0 && $((g * 2)) -ge ${brief_start} ]] || return 0
+    if [[ "${!seen}" -eq 0 ]]; then
+        push mis "a ## Gate ${g} section in gate-briefs.md"
+    elif [[ "${!ok}" -eq 1 ]]; then
+        return 0
+    elif [[ "${!replies}" -eq 0 ]]; then
+        push mis "a Reply: line in a ## Gate ${g} section of gate-briefs.md"
+    else
+        push mis "an approving Reply: line in a ## Gate ${g} section of gate-briefs.md (last reply: ${!deny})"
+    fi
+}
+
 spec_text="$(doc_text "${dir}/00-spec.md")" || exit 0
 has_decisions=0; [[ -f "${dir}/03-decisions.md" ]] && has_decisions=1
 has_tasks=0; [[ -f "${dir}/02-tasks.md" ]] && has_tasks=1
 
+feature_note=""
+
 case "${spec_type}" in
+    feature)
+        # No gate-briefs.md: a spec from before gate briefs, or one no session
+        # has presented a gate for yet. Not evidence of a skipped gate.
+        brief="$(doc_text "${dir}/gate-briefs.md")" || brief=""
+        if [[ -n "${brief}" ]]; then
+            read_brief "${brief}"
+
+            # FEAT-G1: Spec approval.
+            adv=""; mis=""
+            [[ "${status}" == "approved" || "${status}" == "in-progress" ]] && push adv "status is ${status}"
+            [[ ${has_tasks} -eq 1 ]] && push adv "02-tasks.md exists"
+            [[ ${has_decisions} -eq 1 ]] && push adv "03-decisions.md exists"
+            brief_missing 1
+            add_finding "1 (Spec approval)" "${mis}" "${adv}"
+
+            # FEAT-G2: Plan approval, either face (Complexity: no-split approves).
+            adv=""; mis=""
+            [[ "${status}" == "in-progress" ]] && push adv "status is in-progress"
+            tasks="$(doc_text "${dir}/02-tasks.md")" || tasks=""
+            has_line "${tasks}" '^- \*\*Status\*\*:[[:blank:]]*done([^A-Za-z0-9_]|$)' \
+                && push adv "a task in 02-tasks.md is done"
+            brief_missing 2
+            add_finding "2 (Plan approval)" "${mis}" "${adv}"
+
+            # FEAT-G3: Integration and review.
+            adv=""; mis=""
+            verify="$(doc_text "${dir}/06-verify.md")" || verify=""
+            has_line "${verify}" '^result:[[:blank:]]*pass[[:blank:]]*$' && push adv "06-verify.md records result: pass"
+            brief_missing 3
+            add_finding "3 (Integration and review)" "${mis}" "${adv}"
+
+            # No apostrophe: PowerShell 5.1's ConvertTo-Json would escape it as
+            # ' and the twins' stdout would no longer be byte-identical.
+            feature_note=" A /sd:feature gate is evidenced by its section in gate-briefs.md and the reply recorded on its Reply: line; if the user already answered that gate in this conversation, append that answer verbatim as the Reply: line instead of asking again."
+        fi
+        ;;
     bug)
         # BUG-G2: Reproduction confirmed.
         adv=""; mis=""
@@ -379,6 +521,6 @@ esac
 
 [[ -z "${findings}" ]] && exit 0
 
-reason="specwright stop-gate: ${active} (/sd:${spec_type}) is past a HARD gate without its evidence.${findings} Return to that gate: present it to the user and STOP for their answer, or undo the later-phase work. HARD gates have no override."
+reason="specwright stop-gate: ${active} (/sd:${spec_type}) is past a HARD gate without its evidence.${findings}${feature_note} Return to that gate: present it to the user and STOP for their answer, or undo the later-phase work. HARD gates have no override."
 jq -nc --arg r "${reason}" '{decision:"block",reason:$r}' 2>/dev/null | tr -d '\r'
 exit 0
