@@ -317,7 +317,7 @@ Treat findings:
    the real spec directory does (see `/sd:spec`, "Index <-> folder symmetry").
 5. Set frontmatter status=`done` in `00-spec.md`.
 6. Update `.specs/index.md`: state -> `done`, completion date.
-7. Print a 5-line summary to the user.
+7. Print a 5-line summary to the user, worded per **sd-gate-brief**.
 
 ---
 

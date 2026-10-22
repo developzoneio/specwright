@@ -6,6 +6,7 @@
 - Relates to: ADR 0018 (the gate brief artifact this ADR extends); `skills/sd-gate-brief/SKILL.md`
   (the rules); Jira SW-99 (what "printed verbatim" means)
 - Supersedes: none. Extends ADR 0018 decisions 2, 3 and 5; reverses none of them.
+- Extended by: ADR 0020 (what "printed" means and how the e2e harness checks it; SW-99)
 
 ## Context
 
