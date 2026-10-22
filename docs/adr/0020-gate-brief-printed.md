@@ -9,6 +9,8 @@
   assertion)
 - Supersedes: none. Extends ADR 0018 decisions 1 and 6 and ADR 0019 decision 2; reverses none of
   them.
+- Follow-up: SW-103 sends each e2e gate reply as its own turn. With it, `02-feature-happy` passes
+  `transcript-contains-section` (see `tests/e2e/README.md`, "Gate replies as turns").
 
 ## Context
 

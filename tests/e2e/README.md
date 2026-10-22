@@ -42,8 +42,15 @@ and none was printed. The kept transcript showed the session had read the "Print
 text" rule. This is the SW-88 / SW-89 F1 defect, not a flake: it was the same in all four measured
 runs. A probe the same day ran the same request with no standing reply, so the run stopped at
 Gate 1 and the gate ended the turn: its brief was printed byte-for-byte, and the assertion passed.
-The scripted single turn is what drops the print. SW-103 drives each gate reply as its own turn;
-until then `02` fails this one assertion (ADR 0020).
+The scripted single turn is what drops the print.
+
+**SW-103 run, 2026-10-22** (same machine and CLI, commit `a4bcdf1` plus the SW-103 diff): with
+each gate reply sent as its own turn (see "Gate replies as turns" below), `02` passed 22/22. All
+three briefs were printed byte-for-byte, each inside one text block (Gate 1 7/7 lines, Gate 2
+12/12, Gate 3 4/4), and user-visible text carried no internal ID and no `path:line`. Five turns,
+448 s, $1.92. A full-suite run on commit `dc86f70` right after passed `02` 22/22 again (414 s,
+$1.79) and every other scenario unchanged: 112/112 assertions, about $6.12 for the suite. `-SelfTest`
+passed all 9 transcript cases and all 4 guard runs.
 
 ## Prerequisites
 
@@ -312,6 +319,11 @@ either. `bypassPermissions` is no narrower than skip-permissions, so `01` stays 
 `skip-permissions.txt` states why. The cost is the one the ticket named: under skip, a
 `/sd:setup` regression that writes its files through `Bash` rather than the Write tool would still
 pass `01`. `01` asserts no deny, so skip does not hide a hook failure.
+
+**As root, `01` needs `IS_SANDBOX=1`.** The CLI refuses `--dangerously-skip-permissions` under root
+("cannot be used with root/sudo privileges for security reasons"), so in a container that runs as
+root `01` reports "could not run". `IS_SANDBOX=1` in the runner's environment lets it run; it passed
+11/11 that way (Linux container, `claude` 2.1.308, 2026-10-22). Set it only in a throwaway sandbox.
 
 **`03` and `04` grant the edit they expect to be denied (SW-82).** Before SW-82 they ran under
 `dontAsk` with no grant, so the mode refused their `Edit` whether or not spec-gate was there. Their
