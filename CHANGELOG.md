@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `02-feature-happy` uses it, and `-SelfTest` checks it offline on six built transcripts (printed
   passes; write-only, subagent-only, paraphrased, no transcript, no section fail). The first
   headless re-measure still printed 0 brief lines, so `02` now fails that one assertion; IDs and
-  `path:line` in chat dropped to 0, and phases 0-6 are narrated.
+  `path:line` in chat dropped to 0, and phases 0-6 are narrated. A probe that stops at Gate 1
+  printed its brief byte-for-byte, so the single scripted turn is the cause; SW-103 follows up.
 - **Gate brief gaps closed (SW-102, ADR 0019)** - `details <target>` on Gate 2 (both faces) and
   Gate 3 of `/sd:feature`: `details T02` prints that task's full block, `details plan` the plan and
   `details risks` the plan's risks and the impact map's risk assessment, verbatim; a bare `details`
