@@ -40,7 +40,17 @@ No other assertion may read the transcript, and no assertion may match model-wri
 21/22 and failed only this assertion, at 0 of 22 shown lines. Each gate was written and answered,
 and none was printed. The kept transcript showed the session had read the "Printed means reply
 text" rule. This is the SW-88 / SW-89 F1 defect, not a flake: it was the same in all four measured
-runs. ADR 0020 records the follow-up.
+runs. A probe the same day ran the same request with no standing reply, so the run stopped at
+Gate 1 and the gate ended the turn: its brief was printed byte-for-byte, and the assertion passed.
+The scripted single turn is what drops the print.
+
+**SW-103 run, 2026-10-22** (same machine and CLI, commit `a4bcdf1` plus the SW-103 diff): with
+each gate reply sent as its own turn (see "Gate replies as turns" below), `02` passed 22/22. All
+three briefs were printed byte-for-byte, each inside one text block (Gate 1 7/7 lines, Gate 2
+12/12, Gate 3 4/4), and user-visible text carried no internal ID and no `path:line`. Five turns,
+448 s, $1.92. A full-suite run on commit `dc86f70` right after passed `02` 22/22 again (414 s,
+$1.79) and every other scenario unchanged: 112/112 assertions, about $6.12 for the suite. `-SelfTest`
+passed all 9 transcript cases and all 4 guard runs.
 
 ## Prerequisites
 
@@ -310,6 +320,11 @@ either. `bypassPermissions` is no narrower than skip-permissions, so `01` stays 
 `/sd:setup` regression that writes its files through `Bash` rather than the Write tool would still
 pass `01`. `01` asserts no deny, so skip does not hide a hook failure.
 
+**As root, `01` needs `IS_SANDBOX=1`.** The CLI refuses `--dangerously-skip-permissions` under root
+("cannot be used with root/sudo privileges for security reasons"), so in a container that runs as
+root `01` reports "could not run". `IS_SANDBOX=1` in the runner's environment lets it run; it passed
+11/11 that way (Linux container, `claude` 2.1.308, 2026-10-22). Set it only in a throwaway sandbox.
+
 **`03` and `04` grant the edit they expect to be denied (SW-82).** Before SW-82 they ran under
 `dontAsk` with no grant, so the mode refused their `Edit` whether or not spec-gate was there. Their
 file assertions passed with no hook at all, and a deny JSON missing `hookEventName` (the bug SW-80
@@ -370,6 +385,11 @@ the task is the software-engineering equivalent of `expect(validator.reject(badI
 scenario needs the same pattern, keep it truthful rather than adversarial; an adversarially-framed
 prompt is also a worse regression signal, since a refusal and a hook malfunction now look the same.
 
+The same holds for gate replies. `02-feature-happy` says what is true: the runner types each gate
+reply as the next message, so the session should stop at each gate and wait. Before SW-103 it was
+told to take a standing "yes" and continue within one turn, which no person ever does, and which
+the SW-99 measurements showed drops every gate brief from the chat.
+
 ## Self-test (guard-neutering)
 
 `-SelfTest` re-runs scenarios `03-spec-gate-negative` and `04-closeout-negative` once for each of
@@ -394,6 +414,9 @@ the check costs nothing:
 | `subagent-only` | the Write call; the shown lines only in a `subagents/` transcript | fail |
 | `paraphrase` | both sections printed, one line reworded | fail |
 | `no-transcript` | no session file at all | fail |
+| `multi-turn` | one session file: Gate 1 printed, a user `yes` turn, then Gate 2 printed (SW-103) | pass |
+| `forked-session` | Gate 1 printed in one session file and Gate 2 in a second, and the run names both | pass |
+| `forked-last-only` | the same two files, but the run names only the second session | fail |
 | `no-sections` | the brief has no `## Gate` section | fail |
 
 `write-only` is the SW-88 / SW-89 F1 pattern. If any case behaves otherwise, `-SelfTest` exits 1.
@@ -430,7 +453,7 @@ and exits 1.
 | # | Scenario | Claim under test |
 |---|---|---|
 | 1 | `01-setup` | `/sd:setup` on a bare, unscaffolded project produces `CLAUDE.md`, `.specs/`, `.claude/project-config.json`, `.claude/settings.json`, all BOM-free. |
-| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89), and every section's shown lines appear verbatim in the main thread's reply text (SW-99). |
+| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89), and every section's shown lines appear verbatim in the main thread's reply text (SW-99). Each gate reply (`yes` x3) and the constitution probe are sent as their own turns from `replies.txt`, so each gate ends a turn (SW-103). |
 | 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. The edit is granted, so only the hook's deny keeps `src/domain/todo.js` unchanged and puts it in `permission_denials` (SW-82). |
 | 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. The edit is granted, so only the hook's deny keeps the row `in-progress` and puts `.specs/index.md` in `permission_denials` (SW-82). |
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
@@ -445,7 +468,8 @@ Each scenario directory may contain: `source.txt` (repo-relative base tree to co
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
 `tests/contract-lint` `_base` + overlay fixture pattern), `prompt.txt` (the literal headless
 prompt), `expect.json` (declarative assertions), and optional `budget.txt` / `timeout.txt` / `permission-mode.txt`
-/ `skip-permissions.txt` / `disallowed-tools.txt` / `allowed-tools.txt` overrides. A
+/ `skip-permissions.txt` / `disallowed-tools.txt` / `allowed-tools.txt` overrides, plus `replies.txt`
+(gate replies sent as their own turns, see below). A
 `skip-permissions.txt` must hold the evidenced reason the scenario cannot run under `dontAsk` with a
 grant; the preflight refuses an empty one. `allowed-tools.txt`
 holds one permission rule per line (`#` comments allowed), because a rule such as
@@ -454,6 +478,31 @@ holds one permission rule per line (`#` comments allowed), because a rule such a
 matching call. An optional `requires.txt` lists
 commands the scenario needs on `PATH` (one per line, `#` comments allowed). The preflight checks it
 for the selected scenarios only, so `-Case 03-spec-gate-negative` does not demand Node.
+
+### Gate replies as turns (SW-103)
+
+An optional `replies.txt` holds one reply per line (`#` comments allowed; a long reply stays on one
+line). The runner sends `prompt.txt` first, then each reply as its own turn with
+`claude -p --resume <session_id> "<reply>"`, in the same workspace, fake home and posture. A gate
+then ends a turn and its reply arrives as the next message, the way it does with a person. That is
+the path SW-99's Gate 1 probe showed prints the brief; one scripted turn that continues past every
+gate prints none of it (ADR 0020).
+
+- `budget.txt` and `timeout.txt` apply to each turn. `-ResultsFile` records the number of turns,
+  the duration over all of them, and `totalCostUsd` from the **last** turn, plus each turn's raw
+  figure in `turnCostsUsd`. On `--resume` the CLI reports the session's cumulative cost: in the
+  first SW-103 run of `02` (`claude` 2.1.308) the five turns reported $0.45, $0.86, $1.47, $1.86 and
+  $1.92, while the last turn's own tokens (one denied Edit) came to about $0.10. Summing them would
+  have reported $6.57.
+- Assertions run once, after the last turn. `permission_denials` is merged over every turn,
+  `output-contains` reads the last turn's result, and `transcript-contains-section` reads every
+  turn's session file.
+- A turn that times out, prints no result, returns `is_error`, or leaves no `session_id` to resume
+  makes the scenario "could not run" (SW-81), naming the turn.
+- The reply list is fixed. If a turn ends somewhere other than the gate its reply was written for
+  (for example a question the workflow asks first), the replies fall out of step and the
+  assertions fail. That is the intended outcome: the run did not take the path the scenario
+  describes. Read the kept transcript (`SD_E2E_TRANSCRIPT=1`) to see where it stopped.
 
 ### Assertion types
 

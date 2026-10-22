@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **e2e gate replies as their own turns (SW-103)** - a scenario may carry `replies.txt`, one reply
+  per line. `run-e2e.ps1` sends each one with `claude -p --resume` on the same session, so a gate
+  ends a turn the way it does with a person. `02-feature-happy` now stops at each gate and gets
+  `yes` three times, then the constitution probe as a last turn. It passes 22/22, and all three
+  gate briefs reach the chat byte-for-byte (they printed 0 lines under the single scripted turn).
+  Cost in `-ResultsFile` is the last turn's, since the CLI reports a resumed session's cumulative
+  cost; each turn's raw figure is kept in `turnCostsUsd`. `-SelfTest` adds three multi-turn
+  transcript cases.
 - **Gate brief printed, and checked (SW-99, ADR 0020)** - `sd-gate-brief` now defines printing:
   the brief's shown lines appear in the main thread's own reply text, as one text block after the
   write. A Write of the file, or a sentence saying the gate was shown, does not count, in headless
@@ -21,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `02-feature-happy` uses it, and `-SelfTest` checks it offline on six built transcripts (printed
   passes; write-only, subagent-only, paraphrased, no transcript, no section fail). The first
   headless re-measure still printed 0 brief lines, so `02` now fails that one assertion; IDs and
-  `path:line` in chat dropped to 0, and phases 0-6 are narrated.
+  `path:line` in chat dropped to 0, and phases 0-6 are narrated. A probe that stops at Gate 1
+  printed its brief byte-for-byte, so the single scripted turn is the cause; SW-103 follows up.
 - **Gate brief gaps closed (SW-102, ADR 0019)** - `details <target>` on Gate 2 (both faces) and
   Gate 3 of `/sd:feature`: `details T02` prints that task's full block, `details plan` the plan and
   `details risks` the plan's risks and the impact map's risk assessment, verbatim; a bare `details`
