@@ -68,7 +68,7 @@ Behavior:
 2. Read `00-spec.md`. Display:
    - Frontmatter (id, type, status, created, jira/severity if present).
    - First H2 (title or "Why").
-   - Status of each phase artifact: which of `00-spec.md`, `01-plan.md`, `02-tasks.md`, `03-decisions.md`, `04-artifacts/`, `05-retro.md`, `06-verify.md` (written by `/sd:verify`; gates the `done` transition) exist.
+   - Status of each phase artifact: which of `00-spec.md`, `01-plan.md`, `02-tasks.md`, `03-decisions.md`, `04-artifacts/`, `05-retro.md`, `06-verify.md` (written by `/sd:verify`; gates the `done` transition), `gate-briefs.md` (the append-only record of what each gate showed; `/sd:feature` only, per **sd-gate-brief**) exist.
 3. If `02-tasks.md` exists, show task completion count `N/M`.
 4. Print folder URL: `file://<absolute path>`.
 
