@@ -48,7 +48,8 @@ and the SW-89 re-measure found a fourth:
 4. **A Gate 2 face lists only the decisions the plan adds.** A decision the approved `00-spec.md`
    already settles was approved by the Gate 1 `yes`, shown or collapsed. To make that durable, every
    decision in a spec-face block is stated in `00-spec.md`. The architect checks plan decisions
-   against the spec it already reads for `TASK = plan`, so it gains no input and no tool. With no
+   against the spec it already reads for `TASK = plan`, so it gains no input and no tool. The main
+   thread drops any such decision that still arrives before it writes the section. With no
    plan-added decision, the block is one line saying so.
 
 ## Alternatives considered
@@ -70,7 +71,8 @@ and the SW-89 re-measure found a fourth:
 ## Consequences
 
 - The e2e scenario `02-feature-happy` runs in English, so its ID and heading assertions are
-  unchanged by decision 2.
+  unchanged by decision 2. It gains one assertion that a `Reply: yes` line is on disk, which holds
+  in any conversation language because the `Reply:` prefix and the option tokens stay English.
 - `details <target>` replies are recorded like any other reply, so a resumed session can see what
   the user asked to read.
 - The gate count stays 3, `contractLint.gates` is unchanged, and no hook changes.

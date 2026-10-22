@@ -101,7 +101,9 @@ Per gate:
   ordering by choice rather than need, tasks with no `Files`, a rejected alternative a reviewer
   could reasonably prefer. **A decision the approved `00-spec.md` already settles is not a plan
   decision**: the `yes` at spec approval took it, shown or collapsed. List only the decisions the
-  plan adds; `N` counts those alone. The Complexity face uses the same shape and the same rule,
+  plan adds; `N` counts those alone. The architect applies this when it builds the block; the
+  main thread drops any such decision that still arrives before it writes the section. The
+  Complexity face uses the same shape and the same rule,
   and its `What changes` line states the measured reason the plan is over threshold.
 - **Integration and review** - no task table. Lines: `Tests: <summary>. Lint: <summary>.`,
   `Review: <n> blocking, <n> warnings, <n> suggestions.`, then one line per blocking finding
