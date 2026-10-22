@@ -52,6 +52,14 @@
                       (default 600). An explicit -TimeoutSeconds wins over it.
       requires.txt - optional, one command name per line that must be on
                       PATH (e.g. node, npm); checked by the preflight.
+      replies.txt  - optional (SW-103), one reply per line. After prompt.txt,
+                      each reply is sent as its own turn with --resume on the
+                      same session, so each gate ends a turn as it does with a
+                      person. budget.txt and timeout.txt apply per turn;
+                      duration covers every turn, cost is the last turn's
+                      (the CLI reports a resumed session's cumulative cost),
+                      permission_denials are merged, and any turn that could
+                      not run makes the scenario "could not run".
 
     Preflight: before any sandbox is built, the harness checks the claude
     CLI (present, >= the minimum version), that some claude auth is
@@ -78,6 +86,7 @@
     transcript-contains-section offline against built transcripts (SW-99):
     a printed brief must pass, and a brief that was only written, only
     printed by a subagent, paraphrased, or has no transcript must fail.
+    Multi-turn cases (SW-103) prove every turn's session is read.
 
     A scenario whose claude -p timed out, printed no parseable result, or
     returned is_error: true "could not run" (SW-81): its assertions are
@@ -393,12 +402,16 @@ function Invoke-ClaudeHeadless {
         [string[]]$DisallowedTools,
         [string[]]$AllowedTools,
         [string]$PermissionMode = 'dontAsk',
-        [switch]$KeepSession
+        [switch]$KeepSession,
+        [string]$ResumeSessionId
     )
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = 'claude'
-    $cliArgs = @(
-        '-p', $Prompt,
+    $cliArgs = @('-p', $Prompt)
+    # SW-103: a reply turn continues the scenario's session (same session ID;
+    # no --fork-session), with the same posture as the first turn.
+    if ($ResumeSessionId) { $cliArgs += @('--resume', $ResumeSessionId) }
+    $cliArgs += @(
         '--output-format', 'json',
         '--setting-sources', 'project',
         '--add-dir', $FakeHome,
@@ -512,6 +525,59 @@ function Get-ScenarioAllowedTools {
         Where-Object { $_ -and -not $_.StartsWith('#') })
 }
 
+function Get-ScenarioReplies {
+    # Optional replies.txt (SW-103): one reply per line, blank lines and #
+    # comments ignored. Each reply is sent as its own turn after prompt.txt,
+    # resuming the same session. A long reply stays on one line.
+    param([string]$ScenarioDir)
+    $p = Join-Path $ScenarioDir 'replies.txt'
+    if (-not (Test-Path -LiteralPath $p)) { return @() }
+    return @(Get-Content -LiteralPath $p |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#') })
+}
+
+function Get-TurnUnusableReason {
+    # SW-81: why one claude -p turn produced no usable session, or $null.
+    param($Turn, [int]$TimeoutSec)
+    if ($Turn.TimedOut) { return "timed out after $TimeoutSec s" }
+    if ($null -eq $Turn.Result) { return "no parseable result (exit $($Turn.ExitCode))" }
+    if ($Turn.Result.is_error -eq $true) { return 'is_error: true' }
+    return $null
+}
+
+function Merge-TurnResults {
+    # One run object for the assertions (SW-103): the last turn's result,
+    # with permission_denials concatenated over every turn, and SessionIds
+    # listing each turn's session (the transcript assertion reads them all).
+    # total_cost_usd stays the last turn's: on --resume the CLI reports the
+    # session's cumulative cost (claude 2.1.308: the probe turn of 02 used
+    # about $0.10 of tokens and reported $1.92), so summing would count each
+    # turn again. TurnCosts keeps the raw per-turn figures. A single turn
+    # passes through unchanged apart from SessionIds and TurnCosts.
+    param([object[]]$Turns)
+    $last = $Turns[-1]
+    $ids = @($Turns | Where-Object { $_.Result -and $_.Result.session_id } |
+        ForEach-Object { [string]$_.Result.session_id } | Select-Object -Unique)
+    $result = $last.Result
+    $turnCosts = @($Turns | ForEach-Object { if ($_.Result) { $_.Result.total_cost_usd } else { $null } })
+    if ($Turns.Count -gt 1 -and $result) {
+        $result = $result | Select-Object *
+        $denials = @($Turns | Where-Object { $_.Result } | ForEach-Object { @($_.Result.permission_denials) } |
+            Where-Object { $null -ne $_ })
+        $result | Add-Member -NotePropertyName permission_denials -NotePropertyValue $denials -Force
+    }
+    return [pscustomobject]@{
+        TimedOut   = [bool]$last.TimedOut
+        ExitCode   = $last.ExitCode
+        Stdout     = $last.Stdout
+        Stderr     = $last.Stderr
+        Result     = $result
+        SessionIds = $ids
+        TurnCosts  = $turnCosts
+    }
+}
+
 function Assert-ScenarioPosture {
     # SW-80: a scenario that asserts a hook deny runs under dontAsk with a
     # narrow grant, never acceptEdits or skip-permissions. A well-formed deny
@@ -587,15 +653,17 @@ function Test-ScenarioUsesTranscript {
 
 function Get-MainThreadTextBlocks {
     # The text blocks of the main thread's assistant messages, in order, from
-    # <FakeHome>/.claude/projects/*/<SessionId>.jsonl. Tool calls (a Write's
+    # <FakeHome>/.claude/projects/*/<SessionId>.jsonl for each of $SessionIds
+    # (one per turn, SW-103; resumed turns share one). Tool calls (a Write's
     # content included) and subagent transcripts (subagents/, isSidechain)
     # are not reply text. Returns $null when no main transcript is found.
-    param([string]$FakeHome, [string]$SessionId)
+    param([string]$FakeHome, [string[]]$SessionIds)
     $projects = Join-Path $FakeHome '.claude' 'projects'
     if (-not (Test-Path -LiteralPath $projects)) { return $null }
     $files = @(Get-ChildItem -LiteralPath $projects -Recurse -File -Filter '*.jsonl' |
         Where-Object { $_.Directory.Name -ne 'subagents' })
-    if ($SessionId) { $files = @($files | Where-Object { $_.BaseName -eq $SessionId }) }
+    $wanted = @($SessionIds | Where-Object { $_ })
+    if ($wanted.Count -gt 0) { $files = @($files | Where-Object { $wanted -contains $_.BaseName }) }
     if ($files.Count -eq 0) { return $null }
     $blocks = [System.Collections.Generic.List[string]]::new()
     foreach ($f in $files) {
@@ -663,9 +731,11 @@ function Test-TranscriptContainsSections {
     $pattern = if ($Assertion.section) { [string]$Assertion.section } else { '^## Gate ' }
     $sections = Get-BriefShownSections -Path $p -SectionPattern $pattern
     if ($sections.Count -eq 0) { Write-Info "no section matches $pattern in $($Assertion.path)"; return $false }
-    $sessionId = if ($Run -and $Run.Result -and $Run.Result.session_id) { [string]$Run.Result.session_id } else { '' }
-    $blocks = Get-MainThreadTextBlocks -FakeHome $FakeHome -SessionId $sessionId
-    if ($null -eq $blocks) { Write-Info "no main-thread transcript found under $FakeHome (session '$sessionId')"; return $false }
+    $sessionIds = @()
+    if ($Run -and $Run.SessionIds) { $sessionIds = @($Run.SessionIds) }
+    elseif ($Run -and $Run.Result -and $Run.Result.session_id) { $sessionIds = @([string]$Run.Result.session_id) }
+    $blocks = Get-MainThreadTextBlocks -FakeHome $FakeHome -SessionIds $sessionIds
+    if ($null -eq $blocks) { Write-Info "no main-thread transcript found under $FakeHome (session '$($sessionIds -join ', ')')"; return $false }
     $allText = $blocks -join "`n"
     $ok = $true
     foreach ($s in $sections) {
@@ -691,6 +761,7 @@ function Invoke-TranscriptAssertionSelfCheck {
     # removes or alters the print must fail. Returns $true when every case
     # behaved as expected.
     $sid = 'selftest-session'
+    $sid2 = 'selftest-session-2'
     $brief = @(
         '# Gate briefs - FEAT-selftest'
         'Append-only. Each section is the text shown at that gate pass.'
@@ -727,6 +798,9 @@ function Invoke-TranscriptAssertionSelfCheck {
         } | ConvertTo-Json -Depth 10 -Compress)
     }
     function New-Text { param([string]$t) return [ordered]@{ type = 'text'; text = $t } }
+    $replyTurn = ([ordered]@{
+        type = 'user'; sessionId = $sid; message = [ordered]@{ role = 'user'; content = 'yes' }
+    } | ConvertTo-Json -Depth 10 -Compress)
     $writeCall = [ordered]@{
         type = 'tool_use'; name = 'Write'
         input = [ordered]@{ file_path = '.specs/FEAT-selftest/gate-briefs.md'; content = ($brief -join "`n") }
@@ -743,6 +817,15 @@ function Invoke-TranscriptAssertionSelfCheck {
            Sub  = @((New-Entry @((New-Text $g1)) $true), (New-Entry @((New-Text $g2)) $true)) }
         @{ Name = 'paraphrase'; Expect = $false
            Main = @((New-Entry @((New-Text $g1))), (New-Entry @((New-Text $paraphrased)))) }
+        # SW-103: one gate per turn. Resumed turns append to one session file;
+        # a forked turn writes a second one, and the run must name both.
+        @{ Name = 'multi-turn'; Expect = $true
+           Main = @((New-Entry @($writeCall)), (New-Entry @((New-Text $g1))), $replyTurn,
+                    (New-Entry @((New-Text $g2)))) }
+        @{ Name = 'forked-session'; Expect = $true; RunIds = @($sid, $sid2)
+           Main = @((New-Entry @((New-Text $g1)))); Main2 = @((New-Entry @((New-Text $g2)))) }
+        @{ Name = 'forked-last-only'; Expect = $false; RunIds = @($sid2)
+           Main = @((New-Entry @((New-Text $g1)))); Main2 = @((New-Entry @((New-Text $g2)))) }
         @{ Name = 'no-transcript'; Expect = $false; Main = $null }
         @{ Name = 'no-sections'; Expect = $false; NoSections = $true
            Main = @((New-Entry @((New-Text $g1)))) }
@@ -763,6 +846,9 @@ function Invoke-TranscriptAssertionSelfCheck {
                 $proj = Join-Path $fh '.claude' 'projects' 'selftest-ws'
                 New-Item -ItemType Directory -Path $proj -Force | Out-Null
                 [System.IO.File]::WriteAllText((Join-Path $proj "$sid.jsonl"), (($c.Main -join "`n") + "`n"))
+                if ($c.Main2) {
+                    [System.IO.File]::WriteAllText((Join-Path $proj "$sid2.jsonl"), (($c.Main2 -join "`n") + "`n"))
+                }
                 if ($c.Sub) {
                     $subDir = Join-Path $proj $sid 'subagents'
                     New-Item -ItemType Directory -Path $subDir -Force | Out-Null
@@ -772,7 +858,11 @@ function Invoke-TranscriptAssertionSelfCheck {
             $assertion = [pscustomobject]@{
                 type = 'transcript-contains-section'; path = '.specs/FEAT-selftest/gate-briefs.md'; section = '^## Gate '
             }
-            $run = [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $sid } }
+            $run = if ($c.RunIds) {
+                [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $c.RunIds[-1] }; SessionIds = $c.RunIds }
+            } else {
+                [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $sid } }
+            }
             $got = Test-TranscriptContainsSections -Assertion $assertion -Workspace $ws -FakeHome $fh -Run $run
             $want = if ($c.Expect) { 'pass' } else { 'fail' }
             if ($got -eq $c.Expect) {
@@ -893,6 +983,8 @@ function Invoke-Scenario {
         assertionsPassed = 0
         assertionsTotal  = 0
         couldNotRun      = $false
+        turns            = 0
+        turnCostsUsd     = $null
         timedOut         = $false
         exitCode         = $null
         isError          = $null
@@ -910,16 +1002,40 @@ function Invoke-Scenario {
         $disallowedTools = Get-ScenarioDisallowedTools -ScenarioDir $ScenarioDir
         $allowedTools = Get-ScenarioAllowedTools -ScenarioDir $ScenarioDir
         $permissionMode = Get-ScenarioPermissionMode -ScenarioDir $ScenarioDir
-        $keepSession = Test-ScenarioUsesTranscript -ScenarioDir $ScenarioDir
+        # SW-103: replies.txt sends each gate reply as its own turn, resumed
+        # in the same session, so a gate ends a turn the way it does with a
+        # person. Resuming needs the session kept, like a transcript assertion.
+        $replies = Get-ScenarioReplies -ScenarioDir $ScenarioDir
+        $keepSession = (Test-ScenarioUsesTranscript -ScenarioDir $ScenarioDir) -or ($replies.Count -gt 0)
+        $turnPrompts = @($prompt) + $replies
 
         $timeoutSec = Get-ScenarioTimeout -ScenarioDir $ScenarioDir
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-        $run = Invoke-ClaudeHeadless -Workspace $ws -FakeHome $fakeHome -Prompt $prompt `
-            -MaxBudgetUsd $budget -TimeoutSec $timeoutSec -PermissionMode $permissionMode `
-            -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools `
-            -AllowedTools $allowedTools -KeepSession:$keepSession
+        $turns = [System.Collections.Generic.List[object]]::new()
+        $resumeId = $null
+        $reason = $null
+        for ($i = 0; $i -lt $turnPrompts.Count; $i++) {
+            $turn = Invoke-ClaudeHeadless -Workspace $ws -FakeHome $fakeHome -Prompt $turnPrompts[$i] `
+                -MaxBudgetUsd $budget -TimeoutSec $timeoutSec -PermissionMode $permissionMode `
+                -SkipPermissions:$skipPermissions -DisallowedTools $disallowedTools `
+                -AllowedTools $allowedTools -KeepSession:$keepSession -ResumeSessionId $resumeId
+            $turns.Add($turn)
+            $turnLabel = if ($turnPrompts.Count -gt 1) { "turn $($i + 1) of $($turnPrompts.Count): " } else { '' }
+            if ($env:SD_E2E_DEBUG -and $turnPrompts.Count -gt 1) {
+                Write-Info "${turnLabel}exit $($turn.ExitCode), cost $($turn.Result.total_cost_usd)"
+            }
+            $reason = Get-TurnUnusableReason -Turn $turn -TimeoutSec $timeoutSec
+            if ($null -eq $reason -and $i -lt ($turnPrompts.Count - 1) -and -not $turn.Result.session_id) {
+                $reason = 'no session_id to resume'
+            }
+            if ($reason) { $reason = $turnLabel + $reason; break }
+            $resumeId = [string]$turn.Result.session_id
+        }
+        $run = Merge-TurnResults -Turns $turns.ToArray()
         $stopwatch.Stop()
         $record.durationSeconds = [Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)
+        $record.turns = $turns.Count
+        if ($turns.Count -gt 1) { $record.turnCostsUsd = $run.TurnCosts }
         $record.timedOut = [bool]$run.TimedOut
         $record.exitCode = $run.ExitCode
         if ($run.Result) {
@@ -931,8 +1047,9 @@ function Invoke-Scenario {
         # parseable result, is_error) is its own outcome, not failed
         # assertions. Every assertion fails against an untouched workspace, so
         # counting them would let -SelfTest "detect" a neutered guard it never
-        # exercised - run #49 did exactly that with no auth configured.
-        $isUnusable = $run.TimedOut -or ($null -eq $run.Result) -or ($run.Result.is_error -eq $true)
+        # exercised - run #49 did exactly that with no auth configured. With
+        # replies (SW-103), any turn that could not run makes the scenario so.
+        $isUnusable = [bool]$reason
         if ($env:SD_E2E_DEBUG -or $isUnusable) {
             Write-Info "exit code: $($run.ExitCode)"
             Write-Info "result   : $($run.Result.result)"
@@ -943,9 +1060,6 @@ function Invoke-Scenario {
             if ($run.Stderr) { Write-Info "stderr   : $($run.Stderr.Substring(0, [Math]::Min(2000, $run.Stderr.Length)))" }
         }
         if ($isUnusable) {
-            $reason = if ($run.TimedOut) { "timed out after $timeoutSec s" }
-                elseif ($null -eq $run.Result) { "no parseable result (exit $($run.ExitCode))" }
-                else { 'is_error: true' }
             Write-CouldNotRun "$name : claude -p could not run ($reason) - assertions skipped"
             $record.couldNotRun = $true
             return $false

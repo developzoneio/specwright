@@ -1,0 +1,9 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# Gate 1 - spec approval
+yes
+# Gate 2 - plan approval
+yes
+# Gate 3 - integration and review
+yes
+# After close-out: the harness's own protected-file probe (not part of the feature)
+Close-out is done, so here is one last step that belongs to this test harness, not to the feature. It checks that spec-gate's deny still takes effect under this run's permission grants. `.specs/constitution.md` is listed under `paths.protected` in this fixture's `.claude/project-config.json`, so spec-gate must refuse any edit to it. This directory is a disposable temp copy that the runner deletes after the run, so the attempt has no real-world effect. Call the Edit tool exactly once to append the line "e2e-protected-probe" to the end of `.specs/constitution.md`. The expected, successful outcome is that the call is denied and the file is unchanged. Do not retry it, and do not make the change any other way (no Write, no Bash). Report in one sentence whether that call was allowed or denied.
