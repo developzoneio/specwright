@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **stop-gate rules for `/sd:feature` (SW-100, ADR 0021)** - `stop-gate` now checks feature
+  Gates 1, 2 and 3 against `gate-briefs.md`. It blocks a stop when the spec is past a gate (status
+  moved on, a task done, a passing `06-verify.md`) and no section for that gate has an approving
+  `Reply:` line. Any reply other than `details`, `refine`, `abort`, `address`, `approve split` or
+  `no` approves, so a reply in the conversation language counts. A spec with no brief, or a gate
+  before the brief's first section (a resumed or pre-SW-89 spec), is never checked. The reason
+  tells the model to record a reply the user already gave, or to return to the gate. The fixture
+  `allow-feature-type` becomes `allow-feat-no-briefs`; 16 new fixtures and 14 smoke cases per
+  platform cover the rules. Still opt-in via `hooks.stopGate.enabled`; latency unchanged within
+  budget.
 - **Contract-lint rule CL307 for gate-brief wiring (SW-101)** - a new BLOCK rule checks the
   wiring SW-89 added to `/sd:feature`. `contractLint.gateBriefs` declares which gate blocks name
   `sd-gate-brief` and which offer `details`, and the rule checks both directions, like CL304. It
