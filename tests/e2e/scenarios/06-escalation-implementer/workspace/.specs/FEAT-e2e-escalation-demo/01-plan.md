@@ -9,6 +9,8 @@ own test in `tests/todo-service.test.js`.
 
 ## Model escalation
 
-`T01` is hand-marked `Estimated complexity: L` so `ESC-FEAT-04` fires for it; `T02` is `S` /
-`trivial` so neither `ESC-FEAT-04` nor `ESC-FEAT-04b` fires. The scenario's project-config sets
-`models.escalation.ceiling` to `sonnet`, which must not cap a `haiku -> sonnet` escalation.
+`T01` is hand-marked `Estimated complexity: L` so `ESC-FEAT-04` fires for it; `T02` writes neither
+`Estimated complexity` nor `Reversibility` (lean format, ADR 0023), so both read as their default
+(`M` / `trivial`) and neither `ESC-FEAT-04` nor `ESC-FEAT-04b` fires. The scenario's
+project-config sets `models.escalation.ceiling` to `sonnet`, which must not cap a
+`haiku -> sonnet` escalation.

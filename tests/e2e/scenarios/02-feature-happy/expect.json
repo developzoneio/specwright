@@ -3,6 +3,8 @@
   { "type": "file-exists", "path": ".specs/FEAT-todo-count/01-plan.md" },
   { "type": "file-exists", "path": ".specs/FEAT-todo-count/02-tasks.md" },
   { "type": "file-matches", "path": ".specs/FEAT-todo-count/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-todo-count/01-plan.md", "pattern": "(?m)^## (Phased overview|Coverage map)\\s*$" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-todo-count/02-tasks.md", "pattern": "(?m)^-\\s*\\**(Layer|Step type)\\**\\s*:" },
   { "type": "file-exists", "path": ".specs/FEAT-todo-count/06-verify.md" },
   { "type": "file-matches", "path": ".specs/FEAT-todo-count/06-verify.md", "pattern": "(?im)^result:\\s*pass\\s*$" },
   { "type": "file-exists", "path": ".specs/FEAT-todo-count/gate-briefs.md" },

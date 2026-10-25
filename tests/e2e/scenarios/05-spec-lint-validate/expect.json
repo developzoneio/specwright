@@ -23,5 +23,6 @@
   { "type": "output-contains", "value": "SL052" },
   { "type": "output-contains", "value": "SL053" },
   { "type": "output-contains", "value": "SL054" },
+  { "type": "output-contains", "value": "SL060" },
   { "type": "output-contains", "value": "SL090" }
 ]
