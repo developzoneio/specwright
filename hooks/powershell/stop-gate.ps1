@@ -412,6 +412,12 @@ function Get-Findings {
             if (Test-LineMatch $tasks '^- \*\*Status\*\*:[ \t]*done([^A-Za-z0-9_]|$)') {
                 $adv.Add('a task in 02-tasks.md is done')
             }
+            # An outline in 01-plan.md means Phase 3b may write 02-tasks.md only
+            # after Gate 2 approved it (ADR 0022); a legacy plan has no outline.
+            $plan = Get-DocText -Path (Join-Path $Dir '01-plan.md')
+            if ($hasTasks -and (Test-LineMatch $plan '^## Outline[ \t]*$')) {
+                $adv.Add('02-tasks.md is expanded from the outline')
+            }
             $m = Get-BriefMissing $b 2
             if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Plan approval)' $mis $adv)) }

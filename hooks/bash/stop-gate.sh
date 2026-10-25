@@ -421,6 +421,11 @@ case "${spec_type}" in
             tasks="$(doc_text "${dir}/02-tasks.md")" || tasks=""
             has_line "${tasks}" '^- \*\*Status\*\*:[[:blank:]]*done([^A-Za-z0-9_]|$)' \
                 && push adv "a task in 02-tasks.md is done"
+            # An outline in 01-plan.md means Phase 3b may write 02-tasks.md only
+            # after Gate 2 approved it (ADR 0022); a legacy plan has no outline.
+            plan="$(doc_text "${dir}/01-plan.md")" || plan=""
+            [[ ${has_tasks} -eq 1 ]] && has_line "${plan}" '^## Outline[[:blank:]]*$' \
+                && push adv "02-tasks.md is expanded from the outline"
             brief_missing 2
             add_finding "2 (Plan approval)" "${mis}" "${adv}"
 
