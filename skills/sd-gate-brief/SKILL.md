@@ -147,15 +147,16 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 
 ## The details option
 
-Every gate that carries a brief offers `details`, and Gate 2 (both faces) and Gate 3 offer it
-with an optional target: `details <target>`. A `details` reply is never an approval and never
-advances the workflow. Each one prints, records `Reply: <reply verbatim>` in the open section,
-then asks the same question again. The printout is not appended: it is either already in the
-section or a copy of an artifact that is on disk.
+Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3 offer it with an
+optional target: `details <target>`. Gate Re-plan carries a brief but keeps its own option set,
+which has no `details` (ADR 0018). A `details` reply is never an approval and never advances the
+workflow. Each one prints, records `Reply: <reply verbatim>` in the open section, then asks the
+same question again. The printout is not appended: it is either already in the section or a copy
+of an artifact that is on disk.
 
 | Reply | Prints | Offered at |
 |---|---|---|
-| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate with a brief |
+| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | Gate 1, Gate 2 faces, Gate 3 |
 | `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line | Gate 2 faces, Gate 3 |
 | `details plan` | `01-plan.md`, verbatim | Gate 2 faces, Gate 3 |
 | `details risks` | the risks section of `01-plan.md` and the `### Risk assessment` section of `03-decisions.md`, verbatim | Gate 2 faces, Gate 3 |
