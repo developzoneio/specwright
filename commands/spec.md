@@ -304,7 +304,7 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 | `SL053` | Stored relation is `blocked-by` - an input alias, so the field was hand-edited | 🟠 WARN |
 | `SL054` | Duplicate entry in `linked_specs` | 🟠 WARN |
 | `SL055` | Spec status `done` but `06-verify.md` is missing or records `result: fail` | 🟠 WARN |
-| `SL060` | Task block in `02-tasks.md` has no `Pattern refs` field | 🟠 WARN |
+| `SL060` | Task block in `02-tasks.md` has a `Files` entry marked `(new)` / `(new symbol)` and no `Pattern refs` field | 🟠 WARN |
 | `SL061` | Port-spec task's `Pattern refs` citation does not match the snapshot-member-range shape `<path>:<first>-<last>` | 🔴 BLOCK |
 | `SL062` | Citation matches the shape but its path does not start with `04-artifacts/source/` | 🔴 BLOCK |
 | `SL063` | Citation names a path absent from `04-artifacts/source/MANIFEST.md` | 🔴 BLOCK |
@@ -364,11 +364,13 @@ costs a future reader but leaves nothing untrue and breaks nothing - `SL090` is 
 today, and it is deliberately never a failure: a spec that genuinely deferred nothing must not be
 made to answer for an empty table.
 
-`SL060` is WARN by that same test: a task with no `Pattern refs` leaves the registry truthful and
-is fixed by re-planning the spec. It is deliberately **not** BLOCK - in the only corpus measured,
-every task authored after the field shipped already carried it (22 of 22), while the two specs
-without it predate the field entirely. Blocking would fail old specs for a rule they could not
-have followed, and would gain nothing on new ones.
+`SL060` is WARN by that same test: a task with a `(new)`/`(new symbol)` `Files` entry and no
+`Pattern refs` leaves the registry truthful and is fixed by re-planning the spec. It is
+deliberately **not** BLOCK - in the only corpus measured, every task authored after the field
+shipped already carried it (22 of 22), while the two specs without it predate the field entirely.
+Blocking would fail old specs for a rule they could not have followed, and would gain nothing on
+new ones. A task whose `Files` carries no such marker is never checked at all (ADR 0023): the
+field is conditional, not required, and an absent field there reads as `none`.
 
 `SL067` is WARN by the same test. The tolerant reader in `sd-atomic-task-format` "Check-off marker"
 still resolves every drifted marker to a definite checked/unchecked state, so resume behavior stays
@@ -401,9 +403,12 @@ correctly authored tasks, which is worse than not running the check at all.
 A field's value runs to the next field label, not to the next newline - `Acceptance` and
 `Pattern refs` are routinely multi-line with nested bullets.
 
-Report one `SL060` per offending task block, citing the task heading (e.g. `02-tasks.md` `T01`).
-A block that writes `Pattern refs: none` is **compliant** - the explicit `none` is the assertion
-the rule is asking for. Only an absent field is a finding.
+A block is a candidate for `SL060` only when its `Files` value has an entry whose trailing
+parenthetical annotation starts with `new` (case-insensitive: `(new)`, `(new symbol)`) - a task
+with no such entry is never checked. Report one `SL060` per offending candidate block, citing the
+task heading (e.g. `02-tasks.md` `T01`). A candidate block that writes `Pattern refs: none` is
+**compliant** - the explicit `none` is the assertion the rule is asking for. Only an absent field
+on a candidate block is a finding.
 
 Report one `SL067` per offending task block, citing the task heading and the offending line. A
 block is a finding when its `Status` value (read case-insensitively, per the grammar above) is
@@ -423,7 +428,10 @@ never fails a legacy spec: a plan with no `## Outline` is never checked against 
 Runs only when `01-plan.md` has a `## Outline` table **and** `02-tasks.md` exists. Parse the table
 per the "Outline row" section of the `sd-atomic-task-format` skill, and the task blocks with the
 same tolerant **Field label grammar** used for `SL060`. Compare `Files` and `Covers` as sets: split
-on commas, trim whitespace and backticks, ignore order and case.
+on commas, trim whitespace and backticks, drop a trailing parenthetical annotation (`(new)`,
+`(new symbol)`) from each `Files` entry, and ignore order and case. A block's `Files` entry
+legitimately carries a marker the approved outline row does not - dropping it before the
+comparison keeps a marked task from reading as a divergence.
 
 Report one `SL068` for each of these, citing the outline row or the task heading:
 
