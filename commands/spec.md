@@ -69,7 +69,8 @@ Behavior:
    - Frontmatter (id, type, status, created, jira/severity if present).
    - First H2 (title or "Why").
    - Status of each phase artifact: which of `00-spec.md`, `01-plan.md`, `02-tasks.md`, `03-decisions.md`, `04-artifacts/`, `05-retro.md`, `06-verify.md` (written by `/sd:verify`; gates the `done` transition), `gate-briefs.md` (the append-only record of what each gate showed; `/sd:feature` only, per **sd-gate-brief**) exist.
-3. If `02-tasks.md` exists, show task completion count `N/M`.
+3. If `02-tasks.md` exists, show task completion count `N/M`. Otherwise, if `01-plan.md` has a
+   `## Outline` table, show `outline: <n> tasks, not expanded`.
 4. Print folder URL: `file://<absolute path>`.
 
 ---
@@ -249,12 +250,17 @@ Behavior:
    - Placeholder discipline (see "Placeholder tokens" below).
    - Expected files present per status:
      - status >= `in-progress` -> `01-plan.md` and `02-tasks.md` exist (feature, refactor, and
-       port only; bug, perf, and rca do not produce plan/tasks artifacts).
+       port only; bug, perf, and rca do not produce plan/tasks artifacts). One state is exempt from
+       the `02-tasks.md` half: a feature spec at `in-progress` whose `01-plan.md` has a
+       `## Outline` table. Gate 2 approved its outline and `/sd:feature` Phase 3b has not expanded
+       it yet (ADR 0022). At `done` both files are required.
      - status == `done` -> `05-retro.md` exists with at least one entry.
    - Index row matches frontmatter status.
    - Transition history is legal (see "Transition replay" below).
    - Links resolve and are symmetric (see "Link integrity" below).
    - Task-block content, when `02-tasks.md` exists (see "Task-block checks" below).
+   - Outline agreement, when `01-plan.md` has a `## Outline` table and `02-tasks.md` exists (see
+     "Outline checks" below).
    - Port task-block content, when `02-tasks.md` exists and `type` is `port` (see "Port task-block
      checks" below).
    - Port-spec table integrity, when `type` is `port` (see "Port-spec checks" below).
@@ -306,6 +312,7 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 | `SL065` | Port-spec task's `Acceptance` field carries no `Licensed deviations:` line | 🔴 BLOCK |
 | `SL066` | A `Licensed deviations:` list cites a deviation ID absent from the spec's `## Deviation table` | 🔴 BLOCK |
 | `SL067` | Task check-off marker is non-canonical: `Status` value is not `open`/`done`, or the heading carries a check-off prefix (`[x]`, `[ ]`, `✅`) | 🟠 WARN |
+| `SL068` | Task blocks disagree with the approved `## Outline` in `01-plan.md` and no `Revised-by` explains it: an outline row with no block, a block whose `Files` or `Covers` set differs from its row, or a block with no row | 🔴 BLOCK |
 | `SL070` | Task carries `Revised-by: R<n>` but `01-plan.md` has no matching `## Revisions` entry `R<n>` | 🔴 BLOCK |
 | `SL071` | A `## Revisions` entry `R<n>` names an `Affected task` that does not carry `Revised-by: R<n>` (or does not exist) | 🔴 BLOCK |
 | `SL072` | Revision numbering is non-contiguous, duplicated, or a prior entry was rewritten (append-only violated) | 🔴 BLOCK |
@@ -319,8 +326,9 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 `SL061`-`SL066` are the **port task-block** band - the anti-drift contract every port task must
 carry (a snapshot-member-range `Pattern refs` citation and a licensed-deviation ID list in
 `Acceptance`), checked at validate time instead of only at `/sd:port` Phase 6 execution.
-`SL067` is the **check-off marker** rule and applies to every spec type. `SL068`-`SL069` remain
-**reserved** for further task-block content rules. Claim from this band rather than extending
+`SL067` is the **check-off marker** rule and applies to every spec type. `SL068` is the **outline
+agreement** rule (`/sd:feature`, ADR 0022). `SL069` remains **reserved** for a further task-block
+content rule. Claim from this band rather than extending
 another one - `SL05x` is link integrity and has nothing to do with task content.
 
 `SL070`-`SL079` are the **revision-log integrity** band (the `sd-replan-loop` `## Revisions` log in
@@ -404,6 +412,28 @@ anything other than `open` or `done`, **or** its heading carries a check-off pre
 `Status` line and a plain heading is **compliant** (legacy, reads as unchecked). The check-off
 semantics themselves are defined in `sd-atomic-task-format` "Check-off marker"; do not restate them
 here.
+
+`SL068` is BLOCK: a task list that contradicts the outline Gate 2 approved, with no revision record
+for the change, is a registry that **lies** about what was approved - and the approved outline is
+the only plan-time snapshot the registry keeps, so this is the one silent edit validate can see. It
+never fails a legacy spec: a plan with no `## Outline` is never checked against one.
+
+### Outline checks
+
+Runs only when `01-plan.md` has a `## Outline` table **and** `02-tasks.md` exists. Parse the table
+per the "Outline row" section of the `sd-atomic-task-format` skill, and the task blocks with the
+same tolerant **Field label grammar** used for `SL060`. Compare `Files` and `Covers` as sets: split
+on commas, trim whitespace and backticks, ignore order and case.
+
+Report one `SL068` for each of these, citing the outline row or the task heading:
+
+- an outline row whose task ID has no block in `02-tasks.md`, unless an `### R<n>` entry in
+  `## Revisions` lists that ID under `Affected tasks`;
+- a block whose `Files` or `Covers` set differs from its outline row, unless the block carries
+  `Revised-by`;
+- a block whose task ID has no outline row, unless the block carries `Revised-by`.
+
+`SL070`-`SL073` then check that each `Revised-by` named here is backed by its entry.
 
 ### Port task-block checks
 
