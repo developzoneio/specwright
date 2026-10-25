@@ -70,13 +70,15 @@ read it before filling them. **sd-spec-templates** covers what else the template
 ## Mode 2: `TASK = plan`
 
 Inputs (required): SPEC, IMPACT
-Inputs (optional): MODE, REPLAN_SCOPE, REVISION
+Inputs (optional): MODE, REPLAN_SCOPE, REVISION, STEP
 
-Inputs: `SPEC` (path to `00-spec.md`), `IMPACT` (path to `03-decisions.md` from code-explorer), optionally `MODE` (`feature` | `refactor`). A scoped re-plan invocation (see below) passes `REPLAN_SCOPE` and `REVISION` instead of `SPEC`/`IMPACT`.
+Inputs: `SPEC` (path to `00-spec.md`), `IMPACT` (path to `03-decisions.md` from code-explorer), optionally `MODE` (`feature` | `refactor`). A scoped re-plan invocation (see below) passes `REPLAN_SCOPE` and `REVISION` instead of `SPEC`/`IMPACT`. `/sd:feature` passes `STEP` (`outline` | `expand`) to plan in two steps - see "Two-step feature plan" below; with no `STEP` you plan in one step, as `/sd:refactor` does.
 
-Outputs (Write both):
+Outputs (Write both, in one step):
 - `.specs/<SPEC_ID>/01-plan.md` - phased plan: Foundation -> Behavior -> Wiring -> Polish (feature), or Sequencing -> Batching (refactor).
 - `.specs/<SPEC_ID>/02-tasks.md` - atomic task list.
+
+With `STEP = outline` you write only `01-plan.md`; with `STEP = expand` you write only `02-tasks.md`.
 
 ### `01-plan.md` structure
 
@@ -84,6 +86,33 @@ Outputs (Write both):
 - Sequencing rationale (why this order; what is on the critical path).
 - Risks (what could go wrong, mitigation per risk).
 - For refactor mode: parallel-batch groupings, with disjoint-file-set proofs.
+- With `STEP = outline`: the `## Outline` table, last in the file (see below).
+
+### Two-step feature plan (`STEP`)
+
+`/sd:feature` splits Mode 2 in two invocations (ADR 0022), so the plan is approved - and any
+decompose decided - before a full task block exists.
+
+- **`STEP = outline`** (Phase 3a). Write `01-plan.md` with its approach, alternatives, rationale and
+  risks, ending with the `## Outline` table: one row per task (ID, title, Files, Covers), per the
+  "Outline row" section of **sd-atomic-task-format**. List every file a task will touch, tests
+  included - the layer count at Gate 2 is derived from these paths. Cross-check that every SC and
+  AC ID appears in some row's `Covers`. Do **not** write `02-tasks.md`. Then run the "Complexity
+  self-assessment" below on the outline and end with the `GATE_BRIEF` block.
+- **`STEP = expand`** (Phase 3b, after Gate 2 approved the outline). Read the `## Outline` table and
+  expand every row into a full task block per "`02-tasks.md` task format" below. Keep each row's ID
+  and title in the heading, and its `Files` and `Covers` sets unchanged; derive `Layer` from the
+  row's `Files` as **sd-spec-templates** describes. Write `02-tasks.md` with a **single Write** once
+  every block is ready - never an empty or partial file, because the workflow resumes from whether
+  it exists. Never edit `01-plan.md`: the approved outline is immutable.
+- **Material divergence during `expand`.** If a row cannot be carried out as approved - it needs a
+  different `Files` or `Covers` set, has to be split, merged or dropped, or a task is missing (per
+  **sd-replan-loop**) - write nothing. Return `STATUS = needs-input` naming the affected row IDs
+  and the proposed delta; the main thread runs Gate Re-plan. When it re-invokes you with
+  `STEP = expand`, `REPLAN_SCOPE` and `REVISION`, append the `## Revisions` entry (Phase:
+  `expand`) and write the whole `02-tasks.md`: rows outside the scope as approved, scoped tasks per
+  the delta, each marked `Revised-by: <REVISION>`.
+- `STEP = expand` returns a one-line summary (path and task count) and no `GATE_BRIEF` block.
 
 ### `02-tasks.md` task format (MANDATORY)
 
@@ -115,13 +144,14 @@ For every task that creates a new file or introduces a new public symbol:
 
 ### Complexity self-assessment (feature plan only)
 
-After writing `01-plan.md` and `02-tasks.md`, measure the plan you just wrote against the decompose
-thresholds in the **sd-spec-templates** skill ("Complexity estimate"). A plan is **over-threshold**
-when **any** hold: tasks **> 8**, spans **> 2** production layers/subsystems (distinct `Layer`
-values, **excluding `Tests` and `Config`**, which cross-cut every change), impact surface **> 8**
-files (from `IMPACT`), or **any** unresolved Open question remains. Count tasks with the tolerant
-heading grammar (`sd-atomic-task-format`) - never a naive `^### T<NN>` regex, which undercounts
-drifted real specs.
+After writing the plan, measure it against the decompose thresholds in the **sd-spec-templates**
+skill ("Complexity estimate"). With `STEP = outline`, measure the outline; with no `STEP`, measure
+the `02-tasks.md` you just wrote. A plan is **over-threshold** when **any** hold: tasks **> 8**,
+spans **> 2** production layers/subsystems (distinct layers - derived from the outline rows'
+`Files`, or the task blocks' `Layer` values - **excluding `Tests` and `Config`**, which cross-cut
+every change), impact surface **> 8** files (from `IMPACT`), or **any** unresolved Open question
+remains. Count task blocks with the tolerant heading grammar (`sd-atomic-task-format`) - never a
+naive `^### T<NN>` regex, which undercounts drifted real specs.
 
 Then, in your return to the main thread:
 
@@ -133,7 +163,8 @@ Then, in your return to the main thread:
    (partition the parent's - no SC/AC covered twice, none dropped), and a proposed
    `FEAT-<parent-arg>-<child-slug>` ID. State the dependency order between children as
    `depends-on` edges. The main thread runs the Gate Complexity approval and creates the children;
-   you only propose. Do not write the child specs yourself in this return.
+   you only propose. Do not write the child specs yourself in this return. With `STEP = outline`,
+   no task block has been written, and none will be for a parent that splits.
 3. **Over threshold but legitimately atomic (no clean split)** - some work is simply large and
    cohesive; a forced split would produce worse specs than one honest plan (a real case: a
    hand-decomposed corpus child still ran 12 tasks). Return `STATUS = needs-input` flagging
@@ -197,7 +228,8 @@ the spec is the durable record of what Gate 1 approves. For `gate: plan` and `ga
 list only the decisions the plan adds - check each one against the approved `SPEC` you already
 read, and leave out any decision it settles, per the skill's "Plan approval" rule. Word every
 field in English per the skill's "User-facing text" rule; the main thread owns the conversation
-language. A scoped re-plan returns no block.
+language. With `STEP = outline`, the `task:` lines come from the outline rows. A scoped re-plan and
+a `STEP = expand` call return no block.
 
 ---
 

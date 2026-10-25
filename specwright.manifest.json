@@ -510,8 +510,8 @@
       "two drift. CL602 compares them both ways (id set, and command/agent/from/to per id), CL603",
       "and CL604 check the tiers, and CL601 checks each row's command names its id - a row is",
       "live only when its command references it. 'phase' is the phase the escalated invocation",
-      "runs in, so ESC-FEAT-03b (reached at Gate 2, re-running Phase 3) reads 3; its leading",
-      "digits must equal the id's. Declared, not derived: the skill's table is prose a model",
+      "runs in, so ESC-FEAT-03b (decided at Gate 2, escalating the Phase 3b expansion) reads 3;",
+      "its leading digits must equal the id's. Declared, not derived: the skill's table is prose a model",
       "reads, and deriving this from it would compare the table against itself.",
       "The band is switched on by the skill existing on disk, never by these keys: removing",
       "them fails CL602 instead of silently disabling the checks."

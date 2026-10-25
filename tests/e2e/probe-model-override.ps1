@@ -42,8 +42,9 @@
                over Gate 2's layer threshold. Two turns: turn 1 stops at
                Gate 2; if it showed Face B, turn 2 resumes the session
                (--resume) with `no-split` (run) or `approve split` (control).
-               Expect: run has an sd-spec-architect call at the default and a
-               re-invoked one with model=opus served on claude-opus-*;
+               Expect: run has an sd-spec-architect call at the default (the
+               Phase 3a outline) and a Phase 3b expansion with model=opus
+               served on claude-opus-* (ADR 0022);
                control has no model on any sd-spec-architect call.
                If turn 1 shows Face A the case is inconclusive, not Verdict B.
 
@@ -382,7 +383,7 @@ and wait for a real person. At Gate 1 (spec approval), present the gate as instr
 
 Run Phase 2 and Phase 3 exactly as written, including each phase's step 0 model escalation
 check. Stop as soon as Gate 2 has been presented, whichever face it shows. Do not answer Gate 2,
-do not re-invoke Phase 3, and do not start Phase 4. Report which subagents ran and at which model
+do not start Phase 3b, and do not start Phase 4. Report which subagents ran and at which model
 in your last message.
 '@
 
@@ -494,8 +495,8 @@ including any model escalation rule it names. Do not stop and wait for a real pe
 
 $feat03bRunTurn2 = 'no-split this is one cohesive due-date feature; the three layers change together' + $feat03bFraming + @'
 
-If that branch re-invokes Phase 3 and the new plan shows Gate 2 again, stop there. Stop before
-Phase 4: do not implement any task. Report which subagents ran and at which model in your last
+Run that branch through the Phase 3b expansion of the approved outline. Stop before Phase 4: do
+not implement any task. Report which subagents ran and at which model in your last
 message.
 '@
 
@@ -579,8 +580,8 @@ $cases = @(
         RunCheck = {
             param($rows)
             @(
-                @{ Name = 'sd-spec-architect (model none or sonnet) served sonnet (turn-1 plan)'; Pass = (Test-Row $rows 'sd-spec-architect' @('', 'sonnet') 'claude-sonnet*') },
-                @{ Name = 'sd-spec-architect model=opus served opus (no-split re-plan)'; Pass = (Test-Row $rows 'sd-spec-architect' @('opus') 'claude-opus*') }
+                @{ Name = 'sd-spec-architect (model none or sonnet) served sonnet (turn-1 outline)'; Pass = (Test-Row $rows 'sd-spec-architect' @('', 'sonnet') 'claude-sonnet*') },
+                @{ Name = 'sd-spec-architect model=opus served opus (no-split expansion)'; Pass = (Test-Row $rows 'sd-spec-architect' @('opus') 'claude-opus*') }
             )
         }
         CtlCheck = {

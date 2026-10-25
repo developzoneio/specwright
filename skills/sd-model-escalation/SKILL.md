@@ -61,8 +61,8 @@ story that wires them, mirrored row for row in the engine manifest's
 | Rule ID | Workflow | Where | Condition | Agent | From | To |
 |---|---|---|---|---|---|---|
 | `ESC-FEAT-02` | `/sd:feature` | Phase 2 step 0, before the impact map | spec `complexity` (`00-spec.md` frontmatter) is `L` | `sd-code-explorer` | `haiku` | `sonnet` |
-| `ESC-FEAT-03` | `/sd:feature` | Phase 3 step 0, before the plan | spec `complexity` is `L` | `sd-spec-architect` | `sonnet` | `opus` |
-| `ESC-FEAT-03b` | `/sd:feature` | Gate 2 Face B, on `no-split` | `ESC-FEAT-03` did not fire for this plan (the `L` estimate under-called it); re-invoke Phase 3 once | `sd-spec-architect` | `sonnet` | `opus` |
+| `ESC-FEAT-03` | `/sd:feature` | Phase 3a step 0, before the outline | spec `complexity` is `L` | `sd-spec-architect` | `sonnet` | `opus` |
+| `ESC-FEAT-03b` | `/sd:feature` | Phase 3b step 0, before the expansion | Gate 2 approved the outline through Gate Complexity's `no-split` | `sd-spec-architect` | `sonnet` | `opus` |
 | `ESC-FEAT-04` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Estimated complexity` (`02-tasks.md` task block) is `L` | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-FEAT-04b` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Reversibility` is `hard`, and `ESC-FEAT-04` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-BUG-03` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | spec `severity` (`00-spec.md` frontmatter) is `P0` or `P1` | `sd-debugger` | `sonnet` | `opus` |
@@ -82,9 +82,14 @@ Why each row exists:
 
 - `ESC-FEAT-02` - a create-time `L` is exactly the multi-subsystem case where the shallow haiku
   impact map degrades.
-- `ESC-FEAT-03` - single-pass planning is where large scope degrades non-linearly.
-- `ESC-FEAT-03b` - the user accepted one oversized plan instead of a split; that plan must come
-  from the escalated architect, so a plan written at the default is re-done once, escalated.
+- `ESC-FEAT-03` - planning is where large scope degrades non-linearly, and since ADR 0022 the
+  planning decisions - approach, task partition, decompose - are made in the Phase 3a outline. The
+  Phase 3b expansion of an outline Gate 2 approved stays at the default unless `ESC-FEAT-03b` fires.
+- `ESC-FEAT-03b` - the user accepted one oversized plan instead of a split; its task blocks must
+  come from the escalated architect. It escalates the expansion, not a second outline: re-running
+  Phase 3a would rewrite the outline the user just approved, which is immutable. The two rows
+  escalate two different invocations, so a spec sized `L` that is approved through `no-split` gets
+  one line for each.
 - `ESC-FEAT-04` - an `L` task is by definition one that "requires a design decision at
   implementation time" (**sd-atomic-task-format**); that decision is what the haiku implementer
   is not sized for.
@@ -231,8 +236,8 @@ Evaluate in order; the first rule that decides, decides.
 2. **`models.escalation.ceiling` caps the ladder.** A row whose `To` is above the ceiling reaches
    the ceiling instead - never below the row's `From`, because escalation never lowers a model.
    A capped escalation is not a skipped one: it is logged with the `capped` suffix. When the cap
-   leaves the tier unchanged and the row's action is a re-invocation (`ESC-FEAT-03b`,
-   `ESC-PERF-04`), the re-invocation is not run - it would reproduce the same output - but the
+   leaves the tier unchanged and the row's action is a re-invocation (`ESC-PERF-04`), the
+   re-invocation is not run - it would reproduce the same output - but the
    capped line is still written.
 3. **Otherwise the trigger table applies.** A row fires when its condition holds at its `Where`
    point; a row whose condition does not hold writes nothing.

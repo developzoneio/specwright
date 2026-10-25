@@ -9,7 +9,8 @@ step 4 (commands cannot load skills via frontmatter) and names only where each r
 
 Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
 brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means reply text, the
-closing summary, phase narration), Jira SW-99. Measured "before":
+closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `details` from the
+outline), Jira SW-92. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -93,7 +94,9 @@ Lines, in order:
    face.
 3. When `N > 3`: `<N - 3> more defaults taken - reply details to list them.`
 4. `Risk: <one line>` - the most likely way this goes wrong, or `Risk: none found.`
-5. Gate 2 faces only: the task table, one row per task, in task order:
+5. Gate 2 faces only: the task table, one row per task, in task order. When `01-plan.md` has a
+   `## Outline` (ADR 0022), the rows come from it: the outline row's ID and title, and as main
+   file the first production path in its `Files`.
 
 ```text
 | Task | What it does | Main file |
@@ -157,12 +160,14 @@ of an artifact that is on disk.
 | Reply | Prints | Offered at |
 |---|---|---|
 | `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | Gate 1, Gate 2 faces, Gate 3 |
-| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line | Gate 2 faces, Gate 3 |
+| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line; before Phase 3b has written `02-tasks.md`, the `## Outline` table's header, separator and that task's row from `01-plan.md`, verbatim | Gate 2 faces, Gate 3 |
 | `details plan` | `01-plan.md`, verbatim | Gate 2 faces, Gate 3 |
 | `details risks` | the risks section of `01-plan.md` and the `### Risk assessment` section of `03-decisions.md`, verbatim | Gate 2 faces, Gate 3 |
 
 A target that names nothing at this gate (an unknown task ID, a target the gate does not offer)
-prints one line naming the valid targets, then asks again. Spec approval offers a bare `details`
+prints one line naming the valid targets, then asks again. A task ID is valid at a Gate 2 face when
+it names an outline row or, for a plan with no outline, a task block. `details` never points at a
+`02-tasks.md` that does not exist. Spec approval offers a bare `details`
 only: no plan, task list or impact analysis exists yet.
 
 ## Agent return blocks
@@ -182,7 +187,7 @@ END_GATE_BRIEF
 ```
 
 `decision:` repeats once per decision (none when there are none); `task:` repeats once per task
-and appears only for `plan` and `complexity`.
+and appears only for `plan` and `complexity`, one per outline row when the plan has an outline.
 
 `sd-reviewer` ends a `holistic` review with one block. The main thread adds the test and lint
 summary it measured itself.
