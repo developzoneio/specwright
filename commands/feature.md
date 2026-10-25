@@ -204,9 +204,10 @@ Runs once Gate 2 has approved the outline: status `in-progress`, `## Outline` in
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT = .specs/FEAT-<arg>/03-decisions.md`
 2. Spec-architect expands every outline row into a full task block in
-   `.specs/FEAT-<arg>/02-tasks.md`, formatted per the **sd-atomic-task-format** skill (11 required
-   fields, including `Pattern refs`; the architect applies this format, do not re-specify it here),
-   keeping each row's ID, title, `Files` and `Covers`. It never edits the `## Outline` table.
+   `.specs/FEAT-<arg>/02-tasks.md`, formatted per the **sd-atomic-task-format** skill (5 core
+   fields plus `Pattern refs`/`Estimated complexity`/`Reversibility` where the skill's defaults say
+   to write them; the architect applies this format, do not re-specify it here), keeping each
+   row's ID, title, `Files` and `Covers`. It never edits the `## Outline` table.
 3. **Material divergence?** If the architect finds a row that cannot be expanded as approved (per
    **sd-replan-loop**), it writes no `02-tasks.md` and returns `STATUS = needs-input` with the
    affected rows and a proposed delta. Enter **Gate Re-plan** below with `Phase: expand`. Never edit
@@ -224,14 +225,16 @@ For each unchecked task:
 1. **Pre-flight**: re-read `00-spec.md`, the specific task block, and the constitution sections cited under the spec's "Constitution check".
 2. **Model escalation check, then the implementer.** Before this task's first implementer call,
    apply rules `ESC-FEAT-04` and `ESC-FEAT-04b` of **sd-model-escalation** (read in Phase 0).
-   Trigger inputs: the task block's `Estimated complexity` and `Reversibility` fields. The decision
-   also covers this task's re-invocations in step 5; its retro line precedes the task's step 7 line.
+   Trigger inputs: the task block's `Estimated complexity` and `Reversibility` fields (absent
+   reads as the default, per **sd-atomic-task-format**). The decision also covers this task's
+   re-invocations in step 5; its retro line precedes the task's step 7 line.
    **Invoke `sd-implementer`** (model: default, or as resolved above) with:
    - `TASK_DETAILS = <full task block>`
    - `SPEC_REF = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT_REF = .specs/FEAT-<arg>/03-decisions.md`
    - `WORKFLOW_TYPE = feature`
-3. Implementer edits only files in `Files`. Writes a test if `Test` references a non-existent test file.
+3. Implementer edits only files in `Files`. Writes a test if the witness test named in
+   `Acceptance` (or a legacy `Test` field) does not yet exist.
 4. **Run the task's test** in isolation via `commands.test` from project-config (scoped to the new test if possible).
 5. **Self-check** (main thread, NO reviewer subagent):
    - Did implementer stay within `Files` list? If not -> revert, re-invoke.

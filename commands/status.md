@@ -129,11 +129,14 @@ For each spec directory found, from `02-tasks.md`:
 - **Tasks**: count `### T<NN>` headings, tolerant of the `✅`-prefixed variant (`### ✅ T01`) per
   `docs/adr/0002-complexity-triage-decomposition.md`'s own warning that a naive `^### T<NN>`
   counter silently reads a checked-off task as zero.
-- **Layers**: count distinct `Layer:` field values across the spec's task blocks, **excluding
-  `Tests`/`Config`** per ADR 0002's own exclusion rule, so this count stays comparable to the
-  threshold it is calibrating. Field values are read with the tolerant grammar in
-  `skills/sd-atomic-task-format/SKILL.md` (bullet `-`/`*`, `**` optional, colon inside or outside
-  the emphasis) - do not write a narrower matcher here.
+- **Layers**: a lean task block (ADR 0023) carries no `Layer` field, so derive the layer of each
+  distinct `Files` path the same way Gate 2 does - map it to `paths.layers` of project-config, or,
+  when that list is `[]` or names no match, to the constitution's declared layer the path belongs
+  to - then count the distinct layers, **excluding `Tests`/`Config`** per ADR 0002's own exclusion
+  rule, so this count stays comparable to the threshold it is calibrating. A legacy block that
+  still carries a `Layer:` field value may be read directly instead. Field values are read with
+  the tolerant grammar in `skills/sd-atomic-task-format/SKILL.md` (bullet `-`/`*`, `**` optional,
+  colon inside or outside the emphasis) - do not write a narrower matcher here.
 - **Files**: count distinct paths across the spec's `Files:` fields, deduplicated within the spec.
 
 From the already-loaded `events.jsonl` (fixed key order, same exact-substring counting as Phase 1):

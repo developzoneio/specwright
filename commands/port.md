@@ -305,8 +305,8 @@ the same question; the empty-diff proof is never skipped.
      Deviation table, counted once. Threshold: **> 8**, mirroring the feature-plan task threshold's
      shape.
    - **Rationale**, recorded verbatim in `01-plan.md` under `## Complexity triage (port mode)`: the
-     existing decompose thresholds count impacted files and distinct `Layer` values. In a port the
-     impacted-file count equals the donor's file count by construction, and the layer spread is
+     existing decompose thresholds count impacted files and distinct production layers. In a port
+     the impacted-file count equals the donor's file count by construction, and the layer spread is
      inherited from the donor, so both trip on nearly every port regardless of how much judgment the
      work needs. The quantity that actually scales with judgment is the number of departures from
      the donor form - a 40-file mechanical mirror with two deviations is easier than a 3-file port
@@ -321,8 +321,9 @@ the same question; the empty-diff proof is never skipped.
    - `TASK = plan`
    - `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT = .specs/PORT-<slug>-<YYYYMMDD>/03-decisions.md`
-3. **Port task-block requirements.** Every block carries the 11 required fields of
-   **sd-atomic-task-format**; three are constrained in port mode:
+3. **Port task-block requirements.** Every block carries the 5 core fields of
+   **sd-atomic-task-format** plus `Pattern refs` (always, per port mode); three fields are
+   constrained in port mode:
    - **`Pattern refs` points at the snapshot member range**, never prose and never a host sibling.
      Format: `` `04-artifacts/source/<snapshot path>:<first>-<last>` - member <ordinal>
      `<Member>`; reproduce structurally. `` Resolve the range through `MANIFEST.md`'s `Member

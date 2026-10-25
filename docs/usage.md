@@ -60,7 +60,7 @@ Spec-driven feature workflow.
 
 **Spec ID**: `FEAT-<arg>`. State machine on re-invocation: detected state -> resume at next phase.
 
-Phase 2 records the codebase's precedents and conventions (nearest similar implementations, naming patterns, existing utilities) alongside the impact map. Phase 3 tasks then carry `Pattern refs` - `file:line` citations of precedent code the implementer must read before writing, so new code mirrors the existing structure.
+Phase 2 records the codebase's precedents and conventions (nearest similar implementations, naming patterns, existing utilities) alongside the impact map. Phase 3 tasks that create a new file or introduce a new public symbol then carry `Pattern refs` - `file:line` citations of precedent code the implementer must read before writing, so new code mirrors the existing structure. An edit-only task carries no `Pattern refs` field at all.
 
 The architect writes a spec-level `complexity` estimate (`S` | `M` | `L`) at Phase 1. Gate 2 then measures the actual plan: under the decompose thresholds (> 8 tasks, > 2 production layers excluding Tests/Config, > 8 impacted files, or an unresolved Open question) it is the normal plan approval with **zero added friction**; over them it becomes a HARD **Gate Complexity** that refuses one oversized plan and forces a split into medium child specs (`FEAT-<arg>-<slug>`, linked to the parent umbrella). A create-time `L` estimate also escalates the impact and planning models, per the `sd-model-escalation` skill (tunable or disabled via `models.escalation` in project-config). Still 3 hard gates - complexity triage is a second face of Gate 2, not a fourth gate.
 

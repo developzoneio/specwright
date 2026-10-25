@@ -160,7 +160,7 @@ The split exists for three reasons:
 |---|---|---|
 | `sd-severity-taxonomy` | `sd-reviewer` | Severity levels + per-severity rules + mandatory output markdown. |
 | `sd-hypothesis-tree` | `sd-debugger` | Enumerate / verify protocol, the 5 mental models, score formula `(L × I) / C`, proximate-vs-root ladder. |
-| `sd-atomic-task-format` | `sd-spec-architect`, `sd-implementer` | The task block (11 required fields, including `Pattern refs`) + canonical enums (`Step type`, `Complexity`, `Reversibility`). |
+| `sd-atomic-task-format` | `sd-spec-architect`, `sd-implementer` | The task block (5 core fields, plus `Pattern refs`/`Estimated complexity`/`Reversibility` written only off their defaults - ADR 0023) + canonical enums (`Complexity`, `Reversibility`). |
 | `sd-evidence-citation` | `sd-code-explorer`, `sd-debugger`, `sd-reviewer`, `sd-docs-writer` | `file:line` discipline, snippet length, evidence taxonomy, grouping. |
 | `sd-spec-templates` | `sd-spec-architect` | Per-template authoring rules; which cross-phase fields to leave empty. |
 | `sd-pattern-discipline` | `sd-spec-architect`, `sd-implementer`, `sd-reviewer` | Pattern discovery and adherence: precedent sampling, `Pattern refs` authoring/following, conformance review. |
@@ -443,8 +443,8 @@ Every workflow writes to a structured folder under `.specs/<ID>/`:
 ```
 .specs/FEAT-INV-2501/
 ├── 00-spec.md        Why / What / Success criteria / Spawned specs / Constitution check
-├── 01-plan.md        Phased plan; /sd:feature's task outline (ADR 0022); append-only revisions
-├── 02-tasks.md       Atomic tasks (11 required fields, incl. Pattern refs)
+├── 01-plan.md        Approach/decisions/risks; /sd:feature's task outline (ADR 0022); append-only revisions
+├── 02-tasks.md       Atomic tasks (5 core fields, plus Pattern refs etc. off their defaults - ADR 0023)
 ├── 03-decisions.md   Impact analysis from sd-code-explorer + debugger output
 ├── 04-artifacts/     Evidence: logs, queries, traces, baselines, ticket snapshots, donor snapshots
 ├── 05-retro.md       Append-only log: status transitions, surprises, follow-ups

@@ -17,6 +17,7 @@ absence of a runner is recorded here, not hidden.
 | `dangling-marker/` | BLOCK - `T02` carries `Revised-by: R1` but `01-plan.md` has no `## Revisions` entry at all | `SL070` |
 | `one-sided/` | BLOCK - `R1` lists `Affected tasks: T02` but `T02` carries no `Revised-by: R1` marker | `SL071` |
 | `broken-history/` | BLOCK - revisions jump `R1` -> `R3` (a gap); the log was not appended contiguously | `SL072` |
+| `lean-revision/` | PASS - the same shape as `valid-revision/`, authored in the lean 5-core-field format (ADR 0023): `T02` writes no `Pattern refs` and still places `Revised-by: R1` directly before `Status` | none |
 
 Notes for a reader running the check by hand:
 

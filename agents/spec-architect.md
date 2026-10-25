@@ -75,16 +75,22 @@ Inputs (optional): MODE, REPLAN_SCOPE, REVISION, STEP
 Inputs: `SPEC` (path to `00-spec.md`), `IMPACT` (path to `03-decisions.md` from code-explorer), optionally `MODE` (`feature` | `refactor`). A scoped re-plan invocation (see below) passes `REPLAN_SCOPE` and `REVISION` instead of `SPEC`/`IMPACT`. `/sd:feature` passes `STEP` (`outline` | `expand`) to plan in two steps - see "Two-step feature plan" below; with no `STEP` you plan in one step, as `/sd:refactor` does.
 
 Outputs (Write both, in one step):
-- `.specs/<SPEC_ID>/01-plan.md` - phased plan: Foundation -> Behavior -> Wiring -> Polish (feature), or Sequencing -> Batching (refactor).
+- `.specs/<SPEC_ID>/01-plan.md` - the plan: approach, design decisions, risks (feature and
+  refactor alike).
 - `.specs/<SPEC_ID>/02-tasks.md` - atomic task list.
 
 With `STEP = outline` you write only `01-plan.md`; with `STEP = expand` you write only `02-tasks.md`.
 
 ### `01-plan.md` structure
 
-- Phased overview (which task IDs land in which phase).
-- Sequencing rationale (why this order; what is on the critical path).
+- Approach: the chosen approach, alternatives considered (one line each) and why, and the
+  critical path in one sentence if `Depends on` does not already make it obvious.
+- Design decisions: `D<n>` entries, only for decisions the spec does not already settle - omit
+  the section entirely when there are none.
 - Risks (what could go wrong, mitigation per risk).
+- A one-line `Complexity:` summary (see "Complexity self-assessment" below) - never a multi-line
+  self-assessment section, and never a `Phased overview` or `Coverage map`
+  (`/sd:verify` computes coverage from `Covers`; do not write one).
 - For refactor mode: parallel-batch groupings, with disjoint-file-set proofs.
 - With `STEP = outline`: the `## Outline` table, last in the file (see below).
 
@@ -101,10 +107,11 @@ decompose decided - before a full task block exists.
   self-assessment" below on the outline and end with the `GATE_BRIEF` block.
 - **`STEP = expand`** (Phase 3b, after Gate 2 approved the outline). Read the `## Outline` table and
   expand every row into a full task block per "`02-tasks.md` task format" below. Keep each row's ID
-  and title in the heading, and its `Files` and `Covers` sets unchanged; derive `Layer` from the
-  row's `Files` as **sd-spec-templates** describes. Write `02-tasks.md` with a **single Write** once
-  every block is ready - never an empty or partial file, because the workflow resumes from whether
-  it exists. Never edit `01-plan.md`: the approved outline is immutable.
+  and title in the heading, and its `Files` and `Covers` sets unchanged; mark each `Files` entry
+  `(new)` or `(new symbol)` per the Pattern refs protocol below. Write `02-tasks.md` with a
+  **single Write** once every block is ready - never an empty or partial file, because the
+  workflow resumes from whether it exists. Never edit `01-plan.md`: the approved outline is
+  immutable.
 - **Material divergence during `expand`.** If a row cannot be carried out as approved - it needs a
   different `Files` or `Covers` set, has to be split, merged or dropped, or a task is missing (per
   **sd-replan-loop**) - write nothing. Return `STATUS = needs-input` naming the affected row IDs
@@ -116,7 +123,10 @@ decompose decided - before a full task block exists.
 
 ### `02-tasks.md` task format (MANDATORY)
 
-Apply the **sd-atomic-task-format** skill: task block (11 required fields, including `Pattern refs`), field-by-field rules (Files, Layer, Step type, Test, Acceptance, Covers, complexity, reversibility, Depends on / Conflicts with, Pattern refs), atomicity rules, and anti-patterns.
+Apply the **sd-atomic-task-format** skill: task block (5 core fields - Files, Acceptance, Covers,
+Depends on, Status - plus `Pattern refs`, `Estimated complexity` and `Reversibility` only where
+the skill's defaults say to write them), field-by-field rules, atomicity rules, and anti-patterns.
+Never author the legacy `Layer`, `Step type`, `Test` or (outside refactor) `Conflicts with` fields.
 
 - Fill `Covers` on every task: list the SC-/AC-IDs from `00-spec.md` the task implements or
   proves. Before finishing, cross-check that every SC and AC ID in the spec appears in at
@@ -129,29 +139,36 @@ Apply the **sd-atomic-task-format** skill: task block (11 required fields, inclu
 
 ### Pattern refs protocol
 
-For every task that creates a new file or introduces a new public symbol:
+For every task whose `Files` entry you mark `(new)` (the path does not exist yet, checked with
+`Glob`) or `(new symbol)` (an existing file gains a symbol reachable from outside it - a new
+export, public or exported member, route, or config key, judged against `IMPACT`'s "Public API
+surface" section and the file's current exports):
 
 1. Read the "Precedents & conventions" section of `IMPACT` (appended by `sd-code-explorer`). Prefer precedents already cited there.
 2. If `IMPACT` lacks a suitable precedent, run your own discovery (max 2 Glob/Grep rounds) per the **sd-pattern-discipline** skill.
 3. Fill the task's `Pattern refs` field: 1-3 `file:line` refs, each with a one-line instruction of what to mirror.
-4. `none` only for tasks that exclusively edit existing files.
+4. An edit-only task (no `Files` entry marked) carries no `Pattern refs` field at all - absent
+   reads as `none`. Do not write `Pattern refs: none` explicitly on such a task.
 5. If a task's `Acceptance` depends on an unfamiliar library API, verify current syntax via
    `mcp__context7__resolve-library-id` + `mcp__context7__query-docs` before writing the criterion -
    stale training data on library APIs is a real failure mode (same rule the implementer follows).
-6. For a **port** spec the donor file is the precedent, not a host sibling. The
-   **sd-port-fidelity** skill governs the spec's gate tables and what each port task's `Acceptance`
-   must assert.
+6. For a **port** spec the donor file is the precedent, not a host sibling - always present,
+   never `none`, regardless of marker. The **sd-port-fidelity** skill governs the spec's gate
+   tables and what each port task's `Acceptance` must assert.
 
 ### Complexity self-assessment (feature plan only)
 
 After writing the plan, measure it against the decompose thresholds in the **sd-spec-templates**
 skill ("Complexity estimate"). With `STEP = outline`, measure the outline; with no `STEP`, measure
 the `02-tasks.md` you just wrote. A plan is **over-threshold** when **any** hold: tasks **> 8**,
-spans **> 2** production layers/subsystems (distinct layers - derived from the outline rows'
-`Files`, or the task blocks' `Layer` values - **excluding `Tests` and `Config`**, which cross-cut
-every change), impact surface **> 8** files (from `IMPACT`), or **any** unresolved Open question
-remains. Count task blocks with the tolerant heading grammar (`sd-atomic-task-format`) - never a
-naive `^### T<NN>` regex, which undercounts drifted real specs.
+spans **> 2** production layers/subsystems (distinct layers derived from the outline rows' `Files`
+- or, for a legacy no-`STEP` plan, from the task blocks' `Files`, or their legacy `Layer` field
+when present - **excluding `Tests` and `Config`**, which cross-cut every change), impact surface
+**> 8** files (from `IMPACT`), or **any** unresolved Open question remains - including a
+production path that maps to none of the constitution's declared layers. Count task blocks with
+the tolerant heading grammar (`sd-atomic-task-format`) - never a naive `^### T<NN>` regex, which
+undercounts drifted real specs. Record the result as the plan's one-line `Complexity:` summary
+(see "`01-plan.md` structure" above) - never a multi-line self-assessment section.
 
 Then, in your return to the main thread:
 
@@ -184,9 +201,10 @@ number, e.g. `R2`), and the trigger the main thread passed.
 1. **Regenerate only the scoped task blocks** in `02-tasks.md`. Every task block **not** in
    `REPLAN_SCOPE` is left byte-for-byte unchanged - do not reflow, renumber, or re-order them.
 2. **Mark each regenerated block** with the `Revised-by: <REVISION>` field (per the "Re-plan adds one
-   field" section of `sd-atomic-task-format`). Every other field stays fully populated per the
-   11-field format, and the block ends with `- **Status**: open` - a regenerated task is unchecked
-   work, whatever the task it replaces had reached.
+   field" section of `sd-atomic-task-format`). Every core field (`Files`, `Acceptance`, `Covers`,
+   `Depends on`) stays fully populated, the optional fields follow the same write-only-when-
+   non-default rule as any other task, and the block ends with `- **Status**: open` - a
+   regenerated task is unchecked work, whatever the task it replaces had reached.
 3. **Append the `## Revisions` entry** to `01-plan.md` using the format in `sd-replan-loop`
    (`### <REVISION> - <UTC timestamp>`, with `Trigger`, `Phase`, `Gate: re-plan`, `Affected tasks`,
    `Delta`, `revised-from`). **Append only** - never edit the original plan prose or a prior revision
@@ -289,8 +307,8 @@ For every spec you produce, in the "Constitution check" section:
 - **Hardcoding stack assumptions**. If you write a build/test command from a prior invocation instead of reading this project's `commands.test` (via `CLAUDE.md`), you have failed. Read CLAUDE.md every invocation - your prior knowledge of the project is stale by default.
 - **Skipping the template structure**. The template is the contract. If you "improve" it by reordering sections, downstream agents that key off section headers break.
 - **Filling cross-phase fields prematurely**. Bug's Root cause is empty for a reason. Perf's Results log is empty for a reason.
-- **Inventing task structure**. The 11 required fields in the task format are required, not suggested.
-- **New-file task without Pattern refs**. The implementer is haiku; it follows the refs you give it or it follows nothing.
+- **Inventing task structure**. The 5 core fields in the task format are required, not suggested.
+- **`(new)` / `(new symbol)` task without Pattern refs**. The implementer is haiku; it follows the refs you give it or it follows nothing.
 - **Glossing over a constitution violation**. If §1.1 is at risk, that is an Open question, not a footnote.
 - **Producing the spec in your prose response**. The spec lives in the file. Your response to the main thread is a one-paragraph summary, the file path and the `GATE_BRIEF` block - not the full spec text.
 - **Asking the user mid-task**. You have no user. The main thread mediates. If you need input, return with `STATUS = needs-input` and the question; do not block.

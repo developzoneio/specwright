@@ -403,19 +403,26 @@ $feat03Mutate = {
         -Pattern '"ceiling":\s*"sonnet"' -Replacement '"ceiling": "opus"'
 }
 
+# Lean format (ADR 0023): T01's Estimated complexity line is removed entirely,
+# not rewritten, so the field reads as its default (M) rather than S - an
+# explicit S and an absent field must escalate identically (neither fires).
 $t01ToS = {
     param($ws)
     Set-FileText -Path (Join-Path $ws $specRel '02-tasks.md') `
-        -Pattern '(?m)^- \*\*Estimated complexity\*\*: L\s*$' -Replacement '- **Estimated complexity**: S'
+        -Pattern '(?m)^- \*\*Estimated complexity\*\*: L\r?\n' -Replacement ''
 }
 
-# T01 at S and Reversibility hard; T02 keeps its trivial. The pattern is
-# scoped to the T01 block by the lazy match up to the first Reversibility line.
+# T01 at the default complexity (M, via $t01ToS above) and Reversibility hard;
+# T02 is untouched and stays at its own defaults. The lean fixture carries no
+# Reversibility line on T01 to rewrite, so this inserts one instead, scoped to
+# the T01 block by the lazy match up to its Pattern refs line (the canonical
+# field order places Reversibility before Pattern refs).
 $t01Hard = {
     param($ws)
     & $t01ToS $ws
     Set-FileText -Path (Join-Path $ws $specRel '02-tasks.md') `
-        -Pattern '(?s)(### T01 .*?- \*\*Reversibility\*\*: )trivial' -Replacement '${1}hard'
+        -Pattern '(?s)(### T01 .*?)- \*\*Pattern refs\*\*:' -Replacement '${1}- **Reversibility**: hard
+- **Pattern refs**:'
 }
 
 # feat03b: one cohesive feature that must touch all three production layers of

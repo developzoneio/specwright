@@ -66,11 +66,12 @@ For every task that creates a new file or introduces a new public symbol:
 - Deviation from an explicit Pattern ref -> WARN, anchored to the task block.
 - Convention drift with no Pattern ref and no constitution anchor -> SUGGEST.
 - A new utility duplicating an existing one -> WARN, citing both `file:line`.
-- Never BLOCK solely because a task lacks a `Pattern refs` field. The field is required on every
-  task, but a missing one is a spec-authoring defect, not a defect in the code under review - it
-  belongs to `/sd:spec validate` as `SL060` (WARN), and older specs predate the requirement
-  entirely. Reviewing the code against the nearest sibling file is the right response; failing the
-  review is not.
+- Never BLOCK solely because a task lacks a `Pattern refs` field. The field is required only when
+  a task creates a new file or introduces a new public symbol (marked `(new)` / `(new symbol)` on
+  the task's `Files` entry, per **sd-atomic-task-format**); a missing one on such a task is a
+  spec-authoring defect, not a defect in the code under review - it belongs to `/sd:spec validate`
+  as `SL060` (WARN), and older specs predate the requirement entirely. Reviewing the code against
+  the nearest sibling file is the right response; failing the review is not.
 
 ---
 

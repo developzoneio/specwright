@@ -1,6 +1,6 @@
 ### T01 - Add a widget factory
 
-- **Files**: src/Widgets/WidgetFactory.cs
+- **Files**: src/Widgets/WidgetFactory.cs (new)
 - **Layer**: Application
 - **Step type**: foundation
 - **Test**: test/Widgets/WidgetFactoryTests.cs

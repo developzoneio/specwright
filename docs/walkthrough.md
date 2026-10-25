@@ -232,42 +232,40 @@ expanded:
 
 ```
 T01 - Add WebhookSubscription entity + EF configuration
-  Files: src/Domain/Notifications/WebhookSubscription.cs,
-         src/Infrastructure/Persistence/Configurations/WebhookSubscriptionConfig.cs
-  Layer: Domain + Infrastructure
+  Files: src/Domain/Notifications/WebhookSubscription.cs (new),
+         src/Infrastructure/Persistence/Configurations/WebhookSubscriptionConfig.cs (new)
   ...
 
 T02 - Add subscription create/list endpoints
-  Files: src/WebServer/Controllers/NotificationsController.cs,
-         src/Application/Notifications/CreateSubscriptionHandler.cs,
-         src/Application/Notifications/ListSubscriptionsQuery.cs
-  Layer: Presentation + Application
+  Files: src/WebServer/Controllers/NotificationsController.cs (new symbol),
+         src/Application/Notifications/CreateSubscriptionHandler.cs (new),
+         src/Application/Notifications/ListSubscriptionsQuery.cs (new)
   ...
 
 T03 - Add threshold-breach detector
-  Files: src/Application/Inventory/LowStockDetector.cs,
+  Files: src/Application/Inventory/LowStockDetector.cs (new),
          src/Application/Inventory/UpdateStockHandler.cs
-  Layer: Application
   ...
 
 T04 - Add webhook delivery client with HMAC signing
-  Files: src/Infrastructure/Webhooks/WebhookClient.cs,
-         src/Infrastructure/Webhooks/HmacSigner.cs
-  Layer: Infrastructure
+  Files: src/Infrastructure/Webhooks/WebhookClient.cs (new),
+         src/Infrastructure/Webhooks/HmacSigner.cs (new)
   ...
 
 T05 - Wire LowStockDetector to WebhookClient via event bus
   Files: src/Application/Inventory/UpdateStockHandler.cs,
-         src/Application/Events/LowStockEventHandler.cs
-  Layer: Application
+         src/Application/Events/LowStockEventHandler.cs (new)
   Estimated complexity: L
   ...
 
 T06 - Integration test: end-to-end stock-drop -> webhook fire
-  Files: tests/integration/Notifications/LowStockWebhookFlow.cs
-  Layer: Tests
+  Files: tests/integration/Notifications/LowStockWebhookFlow.cs (new)
   ...
 ```
+
+The task block carries 5 core fields - `Files`, `Acceptance`, `Covers`, `Depends on`, `Status` -
+plus `Pattern refs` wherever a `Files` entry is marked `(new)` or `(new symbol)` (ADR 0023). Only
+T05 writes `Estimated complexity`; the rest read as the default `M`.
 
 Gate 2:
 

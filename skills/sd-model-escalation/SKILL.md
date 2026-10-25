@@ -63,16 +63,16 @@ story that wires them, mirrored row for row in the engine manifest's
 | `ESC-FEAT-02` | `/sd:feature` | Phase 2 step 0, before the impact map | spec `complexity` (`00-spec.md` frontmatter) is `L` | `sd-code-explorer` | `haiku` | `sonnet` |
 | `ESC-FEAT-03` | `/sd:feature` | Phase 3a step 0, before the outline | spec `complexity` is `L` | `sd-spec-architect` | `sonnet` | `opus` |
 | `ESC-FEAT-03b` | `/sd:feature` | Phase 3b step 0, before the expansion | Gate 2 approved the outline through Gate Complexity's `no-split` | `sd-spec-architect` | `sonnet` | `opus` |
-| `ESC-FEAT-04` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Estimated complexity` (`02-tasks.md` task block) is `L` | `sd-implementer` | `haiku` | `sonnet` |
-| `ESC-FEAT-04b` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Reversibility` is `hard`, and `ESC-FEAT-04` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
+| `ESC-FEAT-04` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Estimated complexity` (`02-tasks.md` task block) is `L` - an absent field reads as its default `M` and does not fire | `sd-implementer` | `haiku` | `sonnet` |
+| `ESC-FEAT-04b` | `/sd:feature` | Phase 4 step 2, once per task, before the implementer | task `Reversibility` is `hard` - an absent field reads as its default `trivial` and does not fire - and `ESC-FEAT-04` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-BUG-03` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | spec `severity` (`00-spec.md` frontmatter) is `P0` or `P1` | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-BUG-03b` | `/sd:bug` | Phase 3 step 0, once per enumeration round, before `TASK = enumerate` | `03-decisions.md` already records two or more exhausted hypothesis trees (Gate 3a reached twice), and `ESC-BUG-03` did not fire | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-BUG-05` | `/sd:bug` | Phase 5 step 3, once per run, before the implementer | spec `severity` (`00-spec.md` frontmatter) is `P0` or `P1` | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-RCA-02` | `/sd:rca` | Phase 2 step 0, once per run, before the first `sd-debugger` call | spec `severity` (`00-spec.md` frontmatter) is `P0` | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-REF-02` | `/sd:refactor` | Phase 2 step 0, before `TASK = impact-map` | `mcp.gitnexus.enabled` (project-config) is not `true` - absent or `false` | `sd-code-explorer` | `haiku` | `sonnet` |
 | `ESC-REF-04` | `/sd:refactor` | Phase 4 step 0, before the plan | the Phase 2 impact analysis in `03-decisions.md` names more than 8 distinct files, or those files fall under more than 2 `paths.layers` entries of project-config | `sd-spec-architect` | `sonnet` | `opus` |
-| `ESC-REF-05` | `/sd:refactor` | Phase 5 step 2, once per task, before the implementer | task `Estimated complexity` (`02-tasks.md` task block) is `L` | `sd-implementer` | `haiku` | `sonnet` |
-| `ESC-REF-05b` | `/sd:refactor` | Phase 5 step 2, once per task, before the implementer | task `Reversibility` is `hard`, and `ESC-REF-05` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
+| `ESC-REF-05` | `/sd:refactor` | Phase 5 step 2, once per task, before the implementer | task `Estimated complexity` (`02-tasks.md` task block) is `L` - an absent field reads as its default `M` and does not fire | `sd-implementer` | `haiku` | `sonnet` |
+| `ESC-REF-05b` | `/sd:refactor` | Phase 5 step 2, once per task, before the implementer | task `Reversibility` is `hard` - an absent field reads as its default `trivial` and does not fire - and `ESC-REF-05` did not fire for this task | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-PERF-04` | `/sd:perf` | Phase 4a step 4, before Gate 4 is re-presented for a hotspot | the Results log holds two or more `reverted` rows for this hotspot, and `ESC-PERF-04` has not fired for this hotspot; re-invoke 4a once | `sd-debugger` | `sonnet` | `opus` |
 | `ESC-PERF-04b` | `/sd:perf` | Phase 4b step 1, once per applied hypothesis, before the implementer | the hypothesis chosen at Gate 4 has `Reversibility: hard` in its risk profile (`03-decisions.md`) | `sd-implementer` | `haiku` | `sonnet` |
 | `ESC-PORT-01` | `/sd:port` | Phase 1 Branch B step 1, before `TASK = port-extract`; also `/sd:explore --port` Phase 2, the donor side of a bridged port | `GITNEXUS_AVAILABLE` is `false` (the closure walk falls back to recursive grep), or `SCOPE` is `module` or `feature` | `sd-code-explorer` | `haiku` | `sonnet` |
@@ -223,6 +223,13 @@ lines already written name it.
 **Two different `complexity` fields.** A spec-level `complexity` (`00-spec.md` frontmatter) and a
 task-level `Estimated complexity` (a `02-tasks.md` task block) are different fields. Every row
 names the one it reads; a row that reads the task field gets its own rule ID.
+
+**Absent task fields read as their defaults.** `Estimated complexity` and `Reversibility` are
+optional in a task block (**sd-atomic-task-format**): a block writes them only when they differ
+from `M` / `trivial`. An absent field is read as that default, so it never fires a row; a task
+trips `ESC-FEAT-04` / `ESC-REF-05` only by writing `L`, and `ESC-FEAT-04b` / `ESC-REF-05b` only by
+writing `hard`. A legacy block that writes every field is read as written - nothing here changes
+how a value that is present is read, only how an absent one is read.
 
 ---
 

@@ -47,7 +47,7 @@ invocation per task; see `commands/feature.md`'s "Why no per-task reviewer?" not
 applies these items across the union of changes, in addition to its own.
 
 - [ ] Each task's `Acceptance` is observably met.
-- [ ] Each task's `Test` exists and passes (verify via Read, not by running - the workflow runs).
+- [ ] Each task's witness test (named in `Acceptance`, or a legacy `Test` field) exists and passes (verify via Read, not by running - the workflow runs).
 - [ ] Only files in each task's `Files` were edited (compare CHANGED_FILES to TASK.Files).
 - [ ] No new layer violation (constitution §1.1).
 - [ ] No forbidden pattern (constitution §6).
@@ -71,7 +71,7 @@ Checklist (in addition to the baseline checklist above, applied across the union
 - [ ] No new constitution exceptions across the union.
 - [ ] New files follow the precedents cited in their tasks' `Pattern refs`; no new utility duplicates an existing one (cite both `file:line`).
 - [ ] Scenario/criterion coverage: every SC-<n> and AC-<n> ID in `00-spec.md` appears in at
-  least one task's `Covers` field in `02-tasks.md`, and each covering task's `Test` exists.
+  least one task's `Covers` field in `02-tasks.md`, and each covering task's witness test exists.
   Report an uncovered ID as a 🔴 BLOCK finding citing the spec line.
 
 This is broader scope - look for emergent issues that a single task's checklist item would miss.
