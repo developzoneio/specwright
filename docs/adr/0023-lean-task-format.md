@@ -113,19 +113,11 @@ than changing the hook.
 
 ## Measured
 
-A scratch re-creation of the SW-88 baseline's M and S scenarios (`docs/spikes/SW-88-feature-baseline.md`
-Appendix A), re-run through the lean format, plus the matched comparison kept at
-`examples/lean-task-format/FEAT-todo-priority/` (the SW-88/SW-92 fixture-project feature, re-authored
-by hand to the lean shape without re-running the workflow):
-
-| Metric | SW-88 M (11-field) | SW-92 M (outline, 11-field) | SW-93 M (lean) |
-|---|---|---|---|
-| `01-plan.md` lines | 157 | 76 | *(see Step 3 run)* |
-| `02-tasks.md` lines | 244 | 144 | *(see Step 3 run)* |
-
-| Metric | SW-88 S (11-field) | SW-93 S (lean) |
-|---|---|---|
-| `01-plan.md` + `02-tasks.md` lines | 88 | *(see Step 3 run)* |
+A fresh `/sd:feature` run of the SW-88 baseline's M and S scenarios through the lean format would
+give the directly comparable number to SW-88's own 401 (M) and 88 (S) lines - this ADR defers that
+run (it bills a live headless session) and records the hand-authored comparison below instead,
+kept at `examples/lean-task-format/FEAT-todo-priority/` (the SW-88/SW-92 fixture-project feature,
+re-authored by hand to the lean shape without re-running the workflow):
 
 | Metric | Legacy (`fixture-project`) | Lean (`examples/lean-task-format/`) |
 |---|---|---|
@@ -133,10 +125,12 @@ by hand to the lean shape without re-running the workflow):
 | `02-tasks.md` lines | 234 | 66 |
 | Total | 405 | 123 |
 
-The hand-authored comparison is a 70% cut (123 of 405 lines) for that feature - well past the
-ticket's 50% acceptance criterion measured against SW-88. It is illustrative, not the acceptance
-measurement itself: a fresh `/sd:feature` run against the SW-88 scenarios is the actual Step 3
-proof, recorded in the PR once run.
+The hand-authored comparison is a 70% cut (123 of 405 lines) for that one feature (the
+`fixture-project` todo-priority feature, not an SW-88 scenario) - illustrative of the format
+change's effect, not the acceptance measurement itself. The ticket's 50%-vs-SW-88 criterion is
+decided by a fresh `/sd:feature` run against the SW-88 M and S scenarios; deferred (it bills a
+live headless session) per the engineer's decision recorded in this PR, and left as a follow-up
+to run before or after merge.
 
 ## Consequences
 
