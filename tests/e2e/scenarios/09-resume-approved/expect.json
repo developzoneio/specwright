@@ -2,7 +2,9 @@
   { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-approved/03-decisions.md", "pattern": "(?m)^## Impact analysis \\(sd-code-explorer\\)\\s*$" },
   { "type": "file-not-matches", "path": ".specs/FEAT-e2e-resume-approved/03-decisions.md", "pattern": "(?ms)^## Impact analysis \\(sd-code-explorer\\).*^## Impact analysis \\(sd-code-explorer\\)" },
   { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-approved/05-retro.md", "pattern": "(?m)^[-*\\s]*`?escalation: sd-code-explorer haiku -> sonnet \\(trigger: ESC-FEAT-02\\)`?\\s*$" },
-  { "type": "file-exists", "path": ".specs/FEAT-e2e-resume-approved/02-tasks.md" },
+  { "type": "file-not-exists", "path": ".specs/FEAT-e2e-resume-approved/02-tasks.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-approved/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-approved/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
   { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-approved/00-spec.md", "pattern": "(?m)^status:\\s*approved\\s*$" },
   { "type": "file-not-matches", "path": "src/application/todo-service.js", "pattern": "countTodos\\s*\\(|countDone\\s*\\(" }
 ]

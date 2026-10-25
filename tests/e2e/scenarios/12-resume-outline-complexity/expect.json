@@ -1,0 +1,9 @@
+[
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-outline-split/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-not-exists", "path": ".specs/FEAT-e2e-outline-split/02-tasks.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-outline-split/gate-briefs.md", "pattern": "(?m)^## Gate 2 - Complexity \\(pass 1\\)\\s*$" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-outline-split/gate-briefs.md", "pattern": "(?m)^## Gate 2 - Plan approval" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-outline-split/00-spec.md", "pattern": "(?m)^status:\\s*approved\\s*$" },
+  { "type": "file-not-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-outline-split-" },
+  { "type": "file-not-matches", "path": "src/application/todo-service.js", "pattern": "listOverdue\\s*\\(" }
+]
