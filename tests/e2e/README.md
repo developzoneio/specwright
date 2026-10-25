@@ -68,7 +68,7 @@ dependency; it never shows up as a failed scenario assertion.
 - **One** way to authenticate `claude`. **No API key is needed**: a Claude subscription works. See
   [Auth](#auth) below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
-  `02-feature-happy`, `06`-`10`).
+  `02-feature-happy`, `06`-`10`, `12`).
 - Nothing extra for hooks on Linux or macOS. The fixture's committed `settings.json` calls
   `powershell`, which those systems lack, so the runner rewrites each workspace copy's hook
   commands to `pwsh` when not on Windows (SW-81). Without that, every hook exits 127, which Claude
@@ -610,6 +610,26 @@ The run also surfaced a fixture defect: the seeded timeline cited
 the debugger ranked three hypotheses as blocked on missing evidence. No assertion reads that file,
 so the pass stands. The artifact is now `demo-host-restart.txt`. Avoid `.log` names in fixture
 trees.
+
+### Outline-first plan scenarios (SW-92)
+
+ADR 0022 splits `/sd:feature` Phase 3 into an outline (3a), Gate 2, and an expansion (3b). `09` and
+`10` now assert that Gate 2 is presented with a `## Outline` in `01-plan.md` and **no**
+`02-tasks.md`. `12-resume-outline-complexity` seeds an impact-mapped spec that crosses all three
+production layers and carries an unresolved Open question. That makes Gate Complexity fire
+deterministically, and the scenario asserts the `## Gate 2 - Complexity` section with no
+`02-tasks.md` written: decompose is decided before any task block exists.
+
+Run on 2026-10-25, `claude` 2.1.306, Windows, subscription auth (`CLAUDE_CODE_OAUTH_TOKEN`), one
+`-Case` at a time:
+
+| Scenario | Assertions | Result |
+|---|---|---|
+| `09-resume-approved` | 8/8 | pass |
+| `10-resume-impact-mapped` | 8/8 | pass |
+| `12-resume-outline-complexity` | 7/7 | pass |
+| `08-resume-checkoff` (legacy single-step plan) | 8/8 | pass |
+| `02-feature-happy` | 18/23, then 23/23 | first run stopped before Gate 3 (no transcript kept to diagnose); the re-run with `SD_E2E_TRANSCRIPT=1` passed |
 
 ### Resume-from-approved scenarios (SW-74)
 

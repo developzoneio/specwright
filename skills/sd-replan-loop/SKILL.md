@@ -23,6 +23,11 @@ wrong plan surfaced at **batch review**: an implementer found a spec decision wa
 the task, corrected the spec, and left one sentence in the retro - no gate, no append-only record.
 The re-plan gate must be reachable from **both** the Execute phase and the review phase.
 
+`/sd:feature` adds a third entry point (ADR 0022): its Phase 3b expands the task outline that Gate 2
+approved into full task blocks, and expansion can show that an approved row cannot be carried out
+as written. That is a plan-invalidating discovery too, and it goes through this gate before any
+task block is written.
+
 ---
 
 ## What counts as a plan-invalidating discovery
@@ -36,6 +41,10 @@ implementation adjustment. Trigger the loop when:
 - A task is now known to be missing, redundant, or mis-sequenced given what execution revealed.
 - The batch review (feature Phase 5, refactor Phase 6) finds the plan itself is wrong - the classic
   case: a spec/plan decision that only proves incorrect once the code is written.
+- `/sd:feature` Phase 3b finds a **material divergence** from the approved outline (`## Outline` in
+  `01-plan.md`, per `sd-atomic-task-format` "Outline row"): a row whose expanded block needs a
+  different `Files` set or `Covers` set, a row that has to be split, merged or dropped, or a task the
+  outline lacks. Rewording a title or filling the block's other fields is expansion, not divergence.
 
 Do **not** trigger the loop for work that stays inside one task's contract (a rename, a helper reuse,
 a test tweak). That is ordinary implementation, handled by the implementer's own scope. Re-planning
@@ -65,8 +74,14 @@ and waits for explicit user approval; silence is not approval, and there is no o
    rewrites only those task blocks, marks each with `Revised-by: R<n>` (per `sd-atomic-task-format`),
    and leaves every other task block byte-for-byte unchanged.
 
+   From `/sd:feature` Phase 3b, `02-tasks.md` does not exist yet. The invocation also passes
+   `STEP = expand`: the architect writes the whole file in one pass, expands every row outside
+   `REPLAN_SCOPE` exactly as the outline approved it, and writes the affected tasks per the approved
+   delta, each marked `Revised-by: R<n>`. The `## Outline` table itself is never edited.
+
 4. **Resume.** Re-enter the Execute phase at the first affected (now regenerated) task. Already-passed
-   tasks that the revision did not touch stay checked.
+   tasks that the revision did not touch stay checked. From Phase 3b, the Execute phase starts at
+   its first task, as it would after any expansion.
 
 ---
 
@@ -82,7 +97,7 @@ here. Create the `## Revisions` header on the first revision.
 ### R1 - <UTC ISO 8601 timestamp>
 
 - Trigger: <the discovery that invalidated the plan - one or two lines>
-- Phase: <execute | review>
+- Phase: <execute | review | expand>
 - Gate: re-plan
 - Affected tasks: <T## list>
 - Delta: <what changed in those tasks and why>
@@ -107,7 +122,8 @@ Rules:
 
 - **Never re-plan a `done` spec.** The loop runs only while the spec is `in-progress`. In-progress
   specs are mutable by definition; this protocol never touches a `done` (or `archived`) spec.
-- **The original plan prose is intact.** Only the `## Revisions` section grows.
+- **The original plan prose is intact.** Only the `## Revisions` section grows. That includes the
+  approved `## Outline` table: a divergence from it is recorded here, never by editing a row.
 - **Regenerated task blocks are replaced in place** in `02-tasks.md`; their history lives in the
   `## Revisions` log and the `revised-from` pointer, not in stale text left behind.
 

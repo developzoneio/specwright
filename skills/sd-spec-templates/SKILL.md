@@ -86,7 +86,8 @@ Rubric for the estimate:
 | `M` | Up to 2 layers, ≈5-8 tasks, one boundary crossing. The regime the engine plans well. |
 | `L` | Spans > 2 production layers/subsystems, likely > 8 tasks, or carries unresolved Open questions at plan time. Candidate for decomposition. |
 
-**Decompose thresholds (measured at Gate 2).** A plan is over-threshold when **any** of these hold:
+**Decompose thresholds (measured at Gate 2, from the outline).** A plan is over-threshold when
+**any** of these hold:
 
 - estimated/authored tasks **> 8**
 - spans **> 2** production layers/subsystems — count the distinct `Layer` values across tasks, but
@@ -101,6 +102,15 @@ parent + child), with nothing in between — `> 8` sits in that canyon, so mediu
 the genuinely large trip the gate. The Tests/Config exclusion is set from the same corpus: the
 3-4-task mediums touch `Application` + `Domain` + `Tests`, so a naive layer count would have tripped
 the gate on exactly the specs that must pass with zero friction.
+
+**Measure the outline, not the task blocks.** Since ADR 0022, `/sd:feature` measures these
+thresholds on the Phase 3a task outline (`## Outline` in `01-plan.md`, per **sd-atomic-task-format**
+"Outline row"), before any task block exists, so a decompose costs no task blocks. Tasks are the
+outline rows. Layers are derived from each row's `Files`: map each production path to the layer it
+falls under in `paths.layers` of project-config, or, when that list is `[]` or names no match, to
+the constitution's declared layer the path belongs to; then count the distinct layers, still
+excluding `Tests` and `Config`. Phase 3b copies the same layer into each expanded block's `Layer`
+field. A legacy plan with no outline is measured on its task blocks, as before.
 
 **Count tasks with the tolerant grammar, never a naive regex.** When measuring the task count, use
 the **Field label / heading grammar** the way `sd-atomic-task-format` describes — live specs write

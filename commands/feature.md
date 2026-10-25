@@ -1,5 +1,5 @@
 ---
-description: Spec-driven feature workflow. Spec -> impact -> plan (complexity triage) -> execute -> batch review -> close. 3 hard gates.
+description: Spec-driven feature workflow. Spec -> impact -> outline (complexity triage) -> expand -> execute -> batch review -> close. 3 hard gates.
 argument-hint: <JIRA-ID or slug>
 ---
 
@@ -19,9 +19,11 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
 |---|---|---|
 | No `.specs/FEAT-<arg>/` dir | `not-found` | Start Phase 1 |
 | `00-spec.md` exists, status=`draft` | `draft` | Present spec for Gate 1 |
-| status=`approved`, no `02-tasks.md`, no `## Impact analysis (sd-code-explorer)` in `03-decisions.md` | `approved` | Start Phase 2 |
-| status=`approved`, no `02-tasks.md`, impact analysis present | `impact-mapped` | Start Phase 3 |
+| status=`approved`, no `02-tasks.md`, no `## Outline` in `01-plan.md`, no `## Impact analysis (sd-code-explorer)` in `03-decisions.md` | `approved` | Start Phase 2 |
+| status=`approved`, no `02-tasks.md`, no `## Outline` in `01-plan.md`, impact analysis present | `impact-mapped` | Start Phase 3a |
+| status=`approved`, `01-plan.md` has `## Outline`, no `02-tasks.md` | `outline-drafted` | Present outline for Gate 2 |
 | status=`approved`, `02-tasks.md` exists | `plan-drafted` | Present plan for Gate 2 |
+| status=`in-progress`, `01-plan.md` has `## Outline`, no `02-tasks.md` | `outline-approved` | Start Phase 3b |
 | `02-tasks.md` exists, unchecked tasks remain | `in-progress` | Resume Phase 4 at next unchecked task |
 | All tasks checked, no integration pass | `tasks-complete` | Start Phase 5 |
 | status=`done` | `done` | Print summary, exit |
@@ -33,6 +35,11 @@ section of the **sd-atomic-task-format** skill - the one definition; do not inve
 rows are evaluated only while status is `in-progress`: a `done` or `archived` spec resolves from its
 frontmatter first and is never resumed from its task markers.
 
+`## Outline` is the task outline heading Phase 3a writes (ADR 0022). A spec planned in one step,
+before the outline existed, never has it: the two outline rows never match it, and every other row
+reads exactly as it did. Such a spec at `plan-drafted` presents its plan for Gate 2 from
+`02-tasks.md` as before.
+
 ---
 
 ## Phase 0 - Bootstrap (always runs)
@@ -43,7 +50,7 @@ frontmatter first and is never resumed from its task markers.
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Determine state from table above.
 3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 2 step 0, Phase 3 step 0, Gate 2 `no-split` and Phase 4 step 2; this file
+   applied at Phase 2 step 0, Phase 3a step 0, Phase 3b step 0 and Phase 4 step 2; this file
    names only rule IDs and trigger inputs. If that file is unreadable, STOP: "specwright install
    incomplete - model escalation skill not found under `~/.claude/skills/sd/`. Re-run the
    installer."
@@ -98,20 +105,25 @@ No gate here - impact analysis is informational. User reviews it in Phase 3.
 
 ---
 
-## Phase 3 - Plan + tasks
+## Phase 3 - Plan: outline, then expand
+
+Phase 3 plans in two steps (ADR 0022). Phase 3a writes the plan and a task outline; Gate 2 approves
+the outline - and decides any decompose - before a single full task block exists. Phase 3b then
+expands the approved outline into `02-tasks.md`. Phase 3b adds no gate.
+
+### 3a. Outline
 
 0. **Model escalation check.** Apply rule `ESC-FEAT-03` of **sd-model-escalation** (read in
    Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
 1. Invoke `sd-spec-architect` (model: default, or as resolved by step 0) with:
    - `TASK = plan`
+   - `STEP = outline`
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT = .specs/FEAT-<arg>/03-decisions.md`
-2. Spec-architect produces:
-   - `.specs/FEAT-<arg>/01-plan.md` (approach, alternatives considered, rationale).
-   - `.specs/FEAT-<arg>/02-tasks.md` with atomic tasks, each formatted per the
-     **sd-atomic-task-format** skill (11 required fields, including `Pattern refs`; the architect applies
-     this format, do not re-specify it here).
-   - It also self-assesses the plan against the decompose thresholds and returns either a normal
+2. Spec-architect produces `.specs/FEAT-<arg>/01-plan.md`: approach, alternatives considered,
+   rationale, risks, and the `## Outline` table - one row per task (ID, title, Files, Covers), per
+   the "Outline row" section of the **sd-atomic-task-format** skill. It writes no `02-tasks.md`.
+   - It also self-assesses the outline against the decompose thresholds and returns either a normal
      report (under threshold) or `STATUS = needs-input` carrying a **decompose proposal** or a
      **no-split** flag (over threshold). See its "Complexity self-assessment" section.
 3. **Do not set status yet** - the Gate 2 branch below decides whether this spec executes its own
@@ -120,26 +132,28 @@ No gate here - impact analysis is informational. User reviews it in Phase 3.
 ### ⛔ Gate 2 - Plan approval (with complexity triage)
 
 STOP. This gate has two faces. Which one you present is decided by the architect's self-assessment
-from Phase 3 step 2 - **not** by adding a separate always-on gate. A spec **under** the decompose
+from Phase 3a step 2 - **not** by adding a separate always-on gate. A spec **under** the decompose
 thresholds sees only the normal plan approval below, with **zero added friction**.
 
 Either face starts the same way: the main thread writes the Gate 2 brief to
 `.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block (the plan face or the
-complexity face, per **sd-gate-brief**), then shows it verbatim. `details <target>` on either face prints what the target names (no
+complexity face, per **sd-gate-brief**; its task rows come from the outline), then shows it verbatim. `details <target>` on either face prints what the target names (no
 target, a task ID, `plan` or `risks`) per **sd-gate-brief** and asks the same question again.
 
 **Face A - normal plan approval** (plan is under threshold). Show the plan brief. Ask:
 
 > Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>) (yes / refine <feedback> / details <target> / abort)
 
-- `yes` -> set status=`in-progress` in `00-spec.md` and `index.md`; proceed to Phase 4.
-- `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop.
+- `yes` -> set status=`in-progress` in `00-spec.md` and `index.md`; proceed to Phase 3b (a legacy
+  plan that already has `02-tasks.md` proceeds to Phase 4).
+- `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop back through Phase 3a.
 - `details <target>` -> print what the target names, then ask again.
 - `abort` -> set status=`archived`, exit.
 
-**Face B - Gate Complexity (HARD)** (plan is over threshold: tasks > 8; spans > 2 production
-layers/subsystems - distinct `Layer` values excluding `Tests`/`Config`, which cross-cut every
-change; impact surface > 8 files; or an unresolved Open question remains). The workflow **refuses to
+**Face B - Gate Complexity (HARD)** (plan is over threshold, measured on the outline: tasks > 8;
+spans > 2 production layers/subsystems - distinct layers derived from the rows' `Files` excluding
+`Tests`/`Config`, which cross-cut every change, per **sd-spec-templates**; impact surface > 8
+files; or an unresolved Open question remains). The workflow **refuses to
 execute one oversized plan.** Show the complexity brief, which carries the architect's proposal,
 and STOP.
 
@@ -161,21 +175,43 @@ If the architect returned a **decompose proposal**, ask:
   Then make the **parent an umbrella record**: set parent status=`archived` in `00-spec.md` and
   `index.md` (it spawned its children; it does not execute its own oversized plan), and append to
   `05-retro.md` a one-line note naming the children it spawned and why it decomposed. The parent's
-  `00-spec.md`, `01-plan.md`, `02-tasks.md` are left intact as the historical record - **immutable,
-  never edited to match the split**. Print the child IDs and tell the user to run `/sd:feature
+  `00-spec.md` and `01-plan.md` (with its outline; and `02-tasks.md`, for a legacy plan) are left
+  intact as the historical record - **immutable, never edited to match the split**. No task block
+  is written for a split parent. Print the child IDs and tell the user to run `/sd:feature
   <child-arg>` on each, respecting the dependency order. Exit this workflow.
 - `no-split <reason>` -> the user judges the work legitimately atomic (large but cohesive, no clean
-  partition). Apply rule `ESC-FEAT-03b` of **sd-model-escalation** - trigger input: whether
-  `ESC-FEAT-03` fired for this plan in Phase 3 step 0. Then treat as Face A `yes`: set
-  status=`in-progress`, proceed to Phase 4. Log the no-split decision and its reason to
-  `05-retro.md`.
-- `refine` -> `sd-spec-architect` `TASK = refine`; loop back through the self-assessment.
+  partition). Treat as Face A `yes`: set status=`in-progress`, proceed to Phase 3b, whose step 0
+  escalates the expansion. Log the no-split decision and its reason to `05-retro.md`.
+- `refine` -> `sd-spec-architect` `TASK = refine`; loop back through Phase 3a and its self-assessment.
 - `details <target>` -> print what the target names, then ask again.
 - `abort` -> set status=`archived`, exit.
 
 If the architect returned a **no-split** flag itself (over threshold but it found no clean split),
 present that reasoning and ask the same question - the user still owns the call between forcing a
 split and accepting the escalated single plan.
+
+### 3b. Expand (no gate)
+
+Runs once Gate 2 has approved the outline: status `in-progress`, `## Outline` in `01-plan.md`, no
+`02-tasks.md`.
+
+0. **Model escalation check.** Apply rule `ESC-FEAT-03b` of **sd-model-escalation**. Trigger
+   input: whether Gate 2 was approved through `no-split` (the `Reply:` line of the last
+   `## Gate 2 - Complexity` section in `gate-briefs.md`, or the no-split line in `05-retro.md`).
+1. Invoke `sd-spec-architect` (model: default, or as resolved by step 0) with:
+   - `TASK = plan`
+   - `STEP = expand`
+   - `SPEC = .specs/FEAT-<arg>/00-spec.md`
+   - `IMPACT = .specs/FEAT-<arg>/03-decisions.md`
+2. Spec-architect expands every outline row into a full task block in
+   `.specs/FEAT-<arg>/02-tasks.md`, formatted per the **sd-atomic-task-format** skill (11 required
+   fields, including `Pattern refs`; the architect applies this format, do not re-specify it here),
+   keeping each row's ID, title, `Files` and `Covers`. It never edits the `## Outline` table.
+3. **Material divergence?** If the architect finds a row that cannot be expanded as approved (per
+   **sd-replan-loop**), it writes no `02-tasks.md` and returns `STATUS = needs-input` with the
+   affected rows and a proposed delta. Enter **Gate Re-plan** below with `Phase: expand`. Never edit
+   the approved outline, and never write a diverging block without that gate.
+4. Proceed to Phase 4. No gate here: Gate 2 approved what each block carries.
 
 ---
 
@@ -217,8 +253,8 @@ Move to next task. Repeat until all tasks checked.
 
 ### Gate Re-plan (HARD) - adaptive re-plan on a plan-invalidating discovery
 
-Reachable from Phase 4 (self-check above) **and** Phase 5b (a batch-review finding that the plan
-itself is wrong). Follow the **sd-replan-loop** skill; the protocol is defined there once and shared
+Reachable from Phase 3b (a material divergence from the approved outline), Phase 4 (self-check
+above) **and** Phase 5b (a batch-review finding that the plan itself is wrong). Follow the **sd-replan-loop** skill; the protocol is defined there once and shared
 with `/sd:refactor`. In brief:
 
 1. STOP. The main thread writes the Re-plan brief (trigger, affected tasks, proposed delta) to
@@ -231,8 +267,10 @@ with `/sd:refactor`. In brief:
 2. Invoke `sd-spec-architect` with `TASK = plan`, `REPLAN_SCOPE = <affected task IDs>`,
    `REVISION = R<n>` (next contiguous number). It appends the `## Revisions` entry to `01-plan.md`
    (append-only; the original plan prose is never edited), regenerates ONLY the affected task blocks
-   in `02-tasks.md`, and marks each `Revised-by: R<n>`.
-3. Resume Phase 4 at the first regenerated task. Tasks the revision did not touch stay checked.
+   in `02-tasks.md`, and marks each `Revised-by: R<n>`. From Phase 3b it also passes `STEP = expand`
+   and writes the whole `02-tasks.md`, per **sd-replan-loop**.
+3. Resume Phase 4 at the first regenerated task (from Phase 3b, at the first task). Tasks the
+   revision did not touch stay checked.
 
 This gate runs only while the spec is `in-progress` - it never re-plans a `done` spec. It adds no new
 top-level gate to the workflow's count: it fires only on a plan-invalidating discovery, exactly as
@@ -332,8 +370,8 @@ Treat findings:
   threshold; a spec under threshold sees the normal plan approval with zero added friction. This is
   why the workflow still has 3 hard gates - do not describe it as 4.
 - **Gate Re-plan is a conditional gate, not a fourth always-on gate.** Like Gate Complexity, it
-  fires ONLY on a specific trigger - a plan-invalidating discovery in Phase 4 or a plan-is-wrong
-  BLOCK in Phase 5. A run that never hits one never sees it. It is HARD when it does fire (explicit
+  fires ONLY on a specific trigger - a material divergence from the outline in Phase 3b, a
+  plan-invalidating discovery in Phase 4 or a plan-is-wrong BLOCK in Phase 5. A run that never hits one never sees it. It is HARD when it does fire (explicit
   approval, no override), and it never re-plans a `done` spec. The protocol lives in the
   `sd-replan-loop` skill; `02-tasks.md` is re-planned only through it - never by a silent hand-edit.
   Any revision is recorded append-only in `01-plan.md`'s `## Revisions` log with the original plan
@@ -346,6 +384,9 @@ Treat findings:
   its brief to `.specs/FEAT-<arg>/gate-briefs.md` before showing it. The brief shape and language,
   the decision cap, the `details` targets and the rule for every line the user reads live in the
   skill and are not restated here.
+- **An approved outline is immutable.** Once Gate 2 approves the `## Outline` table in `01-plan.md`,
+  it is never edited. Phase 3b expands it as approved; a material divergence goes through Gate
+  Re-plan and is recorded in `## Revisions`. Phase 3b adds no gate to the count.
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.

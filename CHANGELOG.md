@@ -10,6 +10,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Outline-first plan for `/sd:feature` (SW-92, ADR 0022)** - Phase 3 now has two steps. In
+  Phase 3a the architect writes `01-plan.md` with a `## Outline` table: one row per task, with ID,
+  title, `Files` and `Covers`. Gate 2 approves that outline on both faces, so decompose is decided
+  before any full task block exists. Complexity triage measures the outline and derives layers
+  from `Files`. In Phase 3b the architect expands the approved outline into `02-tasks.md` in one
+  write, with no new gate. A material divergence from the outline goes through Gate Re-plan
+  (`Phase: expand`); the outline itself is never edited. Changes:
+  - **Gates:** the gate count stays 3.
+  - **State machine:** two new resume states, `outline-drafted` and `outline-approved`. Legacy
+    specs resolve to the same states as before.
+  - **Escalation:** `ESC-FEAT-03` escalates the outline. `ESC-FEAT-03b` now escalates the
+    expansion after `no-split` instead of re-running the plan.
+  - **Gate 2 brief:** `details <task ID>` prints the task's outline row until `02-tasks.md`
+    exists.
+  - **`/sd:spec`:** new rule `SL068` (BLOCK) flags task blocks that disagree with the approved
+    outline without a `Revised-by`. `SL020` accepts an `in-progress` feature that has an outline
+    but no `02-tasks.md` yet. `show` reports an outline that has not been expanded.
+  - **Hooks:** `stop-gate` FEAT-G2 counts "`02-tasks.md` expanded from the outline" as evidence
+    that Gate 2 was passed. `session-context` gives a phase hint for both outline states. Both
+    hooks change in bash and PowerShell.
+  - **Tests:**
+    - 6 hook fixtures, plus 4 `tests/outline-agreement/` conformance cases.
+    - e2e `02`, `09` and `10` assert the outline. `09` and `10` also assert that Gate 2 is
+      presented with no `02-tasks.md`.
+    - New scenario `12-resume-outline-complexity` proves Gate Complexity fires with no task block
+      written.
 - **stop-gate rules for `/sd:feature` (SW-100, ADR 0021)** - `stop-gate` now checks feature
   Gates 1, 2 and 3 against `gate-briefs.md`. It blocks a stop when the spec is past a gate (status
   moved on, a task done, a passing `06-verify.md`) and no section for that gate has an approving

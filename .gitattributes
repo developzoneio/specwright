@@ -33,6 +33,11 @@ tests/task-format/** text eol=lf
 # byte-level comparison. Pinned for the same reason as the fixtures above.
 tests/revision-log/** text eol=lf
 
+# tests/outline-agreement/** are SL068 outline-agreement fixtures (SW-92). They
+# compare the ## Outline table in 01-plan.md with the blocks in 02-tasks.md;
+# pinned for the same reason as the revision-log fixtures above.
+tests/outline-agreement/** text eol=lf
+
 # tests/hooks/fixtures/**/_metrics/events.jsonl are pre-seeded rotation inputs
 # (SW-15). The rotation trigger compares the file's raw byte size against
 # maxSizeKb*1024, so a CRLF checkout on Windows would change the seed's size.

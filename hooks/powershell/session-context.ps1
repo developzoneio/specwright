@@ -275,20 +275,42 @@ function Get-TaskProgress {
     return $result
 }
 
-# A type-agnostic hint of where the workflow stands, from the status and the
-# task file alone. It is a hint: the workflow command's own state machine is
-# the authority, which is why the block also names the command to re-invoke.
+# True when 01-plan.md carries the `## Outline` table that /sd:feature Phase 3a
+# writes (ADR 0022). A plan written in one step has none.
+function Test-HasOutline {
+    param([string]$PlanFile)
+    try {
+        $lines = @(Get-Content -LiteralPath $PlanFile -Encoding UTF8 -ErrorAction Stop)
+    } catch {
+        return $false
+    }
+    foreach ($l in $lines) {
+        if ($l -cmatch '^## Outline[ \t]*$') { return $true }
+    }
+    return $false
+}
+
+# A type-agnostic hint of where the workflow stands, from the status, the
+# task file and the plan's outline. It is a hint: the workflow command's own
+# state machine is the authority, which is why the block also names the
+# command to re-invoke.
 function Get-PhaseHint {
     param([string]$Status, [string]$SpecFolder)
     $tasksFile = Join-Path $SpecFolder '02-tasks.md'
     $hasTasks = Test-Path -LiteralPath $tasksFile -PathType Leaf
+    $planFile = Join-Path $SpecFolder '01-plan.md'
     switch -CaseSensitive ($Status) {
         'draft' { return 'open gate: spec approval' }
         'approved' {
             if ($hasTasks) { return 'open gate: plan approval' }
+            if (Test-HasOutline -PlanFile $planFile) { return 'open gate: plan approval' }
             return 'spec approved'
         }
         'in-progress' {
+            # Gate 2 approved the outline; Phase 3b has not expanded it yet.
+            if (-not $hasTasks -and (Test-HasOutline -PlanFile $planFile)) {
+                return 'plan approved - expanding tasks'
+            }
             # bug, perf and rca keep no task list; their phase lives in the
             # spec's own sections, which only the workflow command reads.
             if (-not $hasTasks) { return 'in progress - no task list' }

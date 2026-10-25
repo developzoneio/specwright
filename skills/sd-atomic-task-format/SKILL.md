@@ -90,6 +90,36 @@ speculatively.
 
 ---
 
+## Outline row
+
+`/sd:feature` plans in two steps (ADR 0022): Phase 3a writes a **task outline**, Gate 2 approves
+it, and Phase 3b expands each row into a full task block. The outline is a `## Outline` table in
+`01-plan.md`, below the plan prose and above any `## Revisions` section. One row per task, in task
+order:
+
+```markdown
+## Outline
+
+| Task | Title | Files | Covers |
+|---|---|---|---|
+| T01 | <imperative title> | <comma-separated relative paths> | <SC-/AC-ID list | none> |
+```
+
+- `Task`, `Title`, `Files` and `Covers` mean exactly what the same fields of the task block mean,
+  and follow the same field rules below. The expanded block copies the row's ID and title into its
+  heading, and its `Files` and `Covers` must name the same sets as the row.
+- `Files` is complete at outline time: every file the task will touch, test files included. The
+  production layers the plan spans are derived from these paths (see **sd-spec-templates**,
+  "Decompose thresholds"), so a missing path under-counts the plan at Gate 2.
+- Every SC and AC ID in `00-spec.md` appears in at least one row's `Covers`.
+- Once Gate 2 approves the outline it is **immutable**: never edited, reordered or re-expanded in
+  place. A row that cannot be expanded as approved is a material divergence and goes through Gate
+  Re-plan (**sd-replan-loop**); the resulting blocks carry `Revised-by`.
+- `/sd:spec validate` checks rows and blocks against each other (`SL068`). A spec with no
+  `## Outline` (planned in one step, before ADR 0022) is never checked against one.
+
+---
+
 ## Check-off marker
 
 `/sd:feature`, `/sd:port` and `/sd:refactor` resume from whether a task is **checked**. This

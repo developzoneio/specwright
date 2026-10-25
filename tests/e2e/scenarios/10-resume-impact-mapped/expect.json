@@ -2,7 +2,9 @@
   { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-mapped/03-decisions.md", "pattern": "(?m)^## Impact analysis \\(sd-code-explorer\\)\\s*$" },
   { "type": "file-not-matches", "path": ".specs/FEAT-e2e-resume-mapped/03-decisions.md", "pattern": "(?ms)^## Impact analysis \\(sd-code-explorer\\).*^## Impact analysis \\(sd-code-explorer\\)" },
   { "type": "file-not-matches", "path": ".specs/FEAT-e2e-resume-mapped/05-retro.md", "pattern": "ESC-FEAT-02" },
-  { "type": "file-exists", "path": ".specs/FEAT-e2e-resume-mapped/02-tasks.md" },
+  { "type": "file-not-exists", "path": ".specs/FEAT-e2e-resume-mapped/02-tasks.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-mapped/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-mapped/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
   { "type": "file-matches", "path": ".specs/FEAT-e2e-resume-mapped/00-spec.md", "pattern": "(?m)^status:\\s*approved\\s*$" },
   { "type": "file-not-matches", "path": "src/application/todo-service.js", "pattern": "countTodos\\s*\\(|countDone\\s*\\(" }
 ]

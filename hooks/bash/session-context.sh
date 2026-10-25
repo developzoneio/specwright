@@ -285,21 +285,34 @@ task_progress() {
     return 0
 }
 
-# A type-agnostic hint of where the workflow stands, from the status and the
-# task file alone. It is a hint: the workflow command's own state machine is
-# the authority, which is why the block also names the command to re-invoke.
+# True when 01-plan.md carries the `## Outline` table that /sd:feature Phase 3a
+# writes (ADR 0022). A plan written in one step has none.
+has_outline() {
+    [[ -f "$1" ]] || return 1
+    tr -d '\r' < "$1" 2>/dev/null | grep -qE '^## Outline[[:blank:]]*$' 2>/dev/null
+}
+
+# A type-agnostic hint of where the workflow stands, from the status, the
+# task file and the plan's outline. It is a hint: the workflow command's own
+# state machine is the authority, which is why the block also names the
+# command to re-invoke.
 phase_hint() {
-    local status="$1" folder="$2" tasks="$2/02-tasks.md" hint
+    local status="$1" folder="$2" tasks="$2/02-tasks.md" plan="$2/01-plan.md" hint
     case "${status}" in
         draft)
             printf '%s' 'open gate: spec approval' ;;
         approved)
-            if [[ -f "${tasks}" ]]; then
+            if [[ -f "${tasks}" ]] || has_outline "${plan}"; then
                 printf '%s' 'open gate: plan approval'
             else
                 printf '%s' 'spec approved'
             fi ;;
         in-progress)
+            # Gate 2 approved the outline; Phase 3b has not expanded it yet.
+            if [[ ! -f "${tasks}" ]] && has_outline "${plan}"; then
+                printf '%s' 'plan approved - expanding tasks'
+                return 0
+            fi
             # bug, perf and rca keep no task list; their phase lives in the
             # spec's own sections, which only the workflow command reads.
             task_progress "${tasks}"

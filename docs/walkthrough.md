@@ -223,9 +223,12 @@ The code-explorer maps impact:
 - Watch: webhook retry timing on transient subscriber failures.
 ```
 
-### Phase 3 - Plan + tasks
+### Phase 3 - Outline, then tasks
 
-The architect produces `01-plan.md` and `02-tasks.md`. Six atomic tasks:
+The architect first writes `01-plan.md`: the approach, the risks and a task outline - one row per
+task with its ID, title, `Files` and `Covers`. Gate 2 approves that outline (ADR 0022). Only then
+does the architect expand each row into a full block in `02-tasks.md`. Six atomic tasks, shown
+expanded:
 
 ```
 T01 - Add WebhookSubscription entity + EF configuration
@@ -274,6 +277,7 @@ Approve plan FEAT-INV-2501 for execution? (yes / refine / abort)
 > yes
 
 Status: approved -> in-progress.
+Phase 3b - expanding the approved outline into 02-tasks.md (no gate).
 ```
 
 ### Phase 4 - Execute (no per-task reviewer)
@@ -408,7 +412,7 @@ For this run, approximate cost (illustrative):
 |---|---|---|---|
 | Phase 1 spec (architect, 1 call) | sonnet | $0.40 | Includes JIRA fetch context |
 | Phase 2 impact (explorer, 1 call) | haiku | $0.06 | Read-only navigation |
-| Phase 3 plan (architect, 1 call) | sonnet | $0.30 | 6-task plan + sequencing |
+| Phase 3 plan (architect, 2 calls) | sonnet | $0.30 | 6-row outline + sequencing, then expansion |
 | Phase 4 execute (implementer x5, no reviewer) | haiku | $0.30 | Self-check by main thread |
 | Phase 4 T05 (`Estimated complexity: L`, escalated by `ESC-FEAT-04`) | sonnet | $0.20 | One invocation; T06 is back on haiku |
 | Phase 5 batch review (reviewer x1 + 1 re-review after fix) | sonnet | $0.25 | Single holistic pass + fix cycle |
