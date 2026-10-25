@@ -68,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   included. The gate count stays 3. `/sd:spec status` lists the new file, and e2e
   `02-feature-happy` asserts it.
 
+### Fixed
+- **`sd-gate-brief` no longer offers `details` at Gate Re-plan (SW-104)** - the skill now says
+  only Gates 1, 2 and 3 offer `details`, matching ADR 0018 and `contractLint.gateBriefs`.
+
 ## [1.7.0] - 2026-10-01
 
 ### Prompt size report
