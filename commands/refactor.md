@@ -144,9 +144,11 @@ If user picks (2) explicit exception, document the threshold reduction in `05-re
    - `IMPACT = .specs/REF-<slug>-<YYYYMMDD>/03-decisions.md`
    - `MODE = refactor`
 2. Architect writes `01-plan.md` (sequencing) and `02-tasks.md`. Each task follows the
-   **sd-atomic-task-format** skill (11 required fields, including `Pattern refs`, plus the skill's
-   "Refactor mode" `Parallel batch` field - do not re-specify the format here). Tasks sharing a
-   batch number must have disjoint file sets and no `Depends on` / `Conflicts with` relationship.
+   **sd-atomic-task-format** skill (5 core fields, `Conflicts with` required in refactor mode,
+   plus `Pattern refs`/`Estimated complexity`/`Reversibility` where its defaults say to write
+   them, plus the skill's "Refactor mode" `Parallel batch` field - do not re-specify the format
+   here). Tasks sharing a batch number must have disjoint file sets and no `Depends on` /
+   `Conflicts with` relationship.
 
 ### ⛔ Gate 4 - Plan approval
 
@@ -166,8 +168,9 @@ For each batch (up to 3 tasks in parallel):
 2. For each task in the batch:
    - **Model escalation check.** Before this task's first implementer call, apply rules
      `ESC-REF-05` and `ESC-REF-05b` of **sd-model-escalation** (read in Phase 0). Trigger inputs:
-     the task block's `Estimated complexity` and `Reversibility` fields. The decision also covers
-     this task's re-invocations when Gate 5 sends a red batch back for a fix.
+     the task block's `Estimated complexity` and `Reversibility` fields (absent reads as the
+     default, per **sd-atomic-task-format**). The decision also covers this task's re-invocations
+     when Gate 5 sends a red batch back for a fix.
    - Invoke `sd-implementer` (model: default, or as resolved above) with:
      - `TASK_DETAILS = <task block>`
      - `SPEC_REF = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`

@@ -21,7 +21,7 @@ If a task feels like two changes, STOP and tell the main thread.
 1. **Read `CLAUDE.md`** for stack, conventions, forbidden patterns, build/test/lint commands.
 2. **Read `.specs/constitution.md`** sections cited in the spec's "Constitution check".
 3. **Read the `SPEC_REF`** (`00-spec.md`).
-4. **Read the `TASK_DETAILS`** block carefully. The 11 required fields (Files, Layer, Step type, Test, Acceptance, Covers, Depends on, Conflicts with, Estimated complexity, Reversibility, Pattern refs) are the contract — see **sd-atomic-task-format** skill for definitions, including the field label grammar (label matching is case-insensitive, `**` optional, colon inside or outside the emphasis). A legacy task with no `Pattern refs` field is still read as `Pattern refs: none` — do not refuse it.
+4. **Read the `TASK_DETAILS`** block carefully. The core fields (Files, Acceptance, Covers, Depends on, Status) are always present; `Estimated complexity`, `Reversibility` and `Pattern refs` appear only when they differ from their defaults (`M`, `trivial`, `none`) — see **sd-atomic-task-format** skill for the full field list and the field label grammar (label matching is case-insensitive, `**` optional, colon inside or outside the emphasis). An absent `Estimated complexity`/`Reversibility`/`Pattern refs` field is read as its default — do not refuse the task over it. A legacy task may also carry `Layer`, `Step type`, `Test` and (refactor) `Conflicts with` — read them as written; never expect them on a lean task.
 5. **Read each file in `TASK_DETAILS.Files`** before editing it. Never edit a file you have not just read.
 6. **Read every file cited in `TASK_DETAILS.Pattern refs`** (cap: 3) before creating or editing anything. These are the precedents your output must mirror — see **sd-pattern-discipline** skill.
 7. **If `IMPACT_REF` is provided** (evidence/analysis file, e.g. `03-decisions.md`) and the task creates a new file but has no Pattern refs, read ONLY the "Precedents & conventions" section of it. Do not read the whole file.
@@ -50,8 +50,9 @@ If `TASK_DETAILS` is missing, malformed, or vague ("update the service") -> STOP
 
 ### Acceptance discipline
 - The task's `Acceptance` is observable. Your code must achieve it.
-- The task's `Test` is the witness. Run it after the edit; it must pass.
-- If acceptance and test seem to disagree, STOP and surface to main thread.
+- The witness test is the file named in `Acceptance` (or in a legacy `Test` field, when present).
+  Run it after the edit; it must pass.
+- If acceptance and the witness test seem to disagree, STOP and surface to main thread.
 
 ### No opportunism
 - Bug nearby? Document in retro, do not fix. Spawn a separate BUG-* spec if it's serious.
@@ -74,7 +75,8 @@ Inputs (required): TASK_DETAILS, SPEC_REF
 Inputs (optional): IMPACT_REF
 
 - New behavior is expected.
-- New tests in `Test` field expected to be authored as part of the task.
+- A new witness test (named in `Acceptance`, or a legacy `Test` field) is expected to be authored
+  as part of the task.
 - Public API additions are fine if the spec calls for them.
 
 ### `WORKFLOW_TYPE = bug`
@@ -122,7 +124,8 @@ Inputs (optional): IMPACT_REF
 - If the snapshot form cannot work in the host without a change the task does not license, STOP
   and return `STATUS = needs-clarification` naming the conflict. A missing deviation row is a
   planning defect, never something to invent.
-- A task whose `Step type` is `test` writes only test files; the production tree stays untouched.
+- A task whose `Files` are all test paths writes only test files; the production tree stays
+  untouched.
 
 ---
 
@@ -134,14 +137,14 @@ For every task, follow this order:
 - Read CLAUDE.md, constitution, SPEC_REF, TASK_DETAILS (already done in "Always do first").
 - Read each file in `TASK_DETAILS.Files`.
 - Read each file cited in `TASK_DETAILS.Pattern refs` (already done in "Always do first").
-- Read the test file(s) in `TASK_DETAILS.Test` if they exist.
+- Read the witness test file(s) - named in `Acceptance`, or `TASK_DETAILS.Test` on a legacy task
+  - if they exist.
 
 ### 2. Verify task is well-defined
 Self-check:
 - Is `Acceptance` observable? (yes/no)
 - Are `Files` paths that exist or can validly be created? (yes/no)
-- Does `Test` reference a real test file or one we'll author? (yes/no)
-- Does `Layer` match a layer declared in CLAUDE.md / constitution? (yes/no)
+- Does the witness test name a real test file, or one we'll author? (yes/no)
 
 If any is "no" -> STOP. `STATUS = needs-clarification`.
 
@@ -167,7 +170,7 @@ Do this in your head (or via sequential-thinking if complex). Do not produce a p
 
 - [ ] Only files in `TASK_DETAILS.Files` were edited (verify with `git diff` if available).
 - [ ] Acceptance criterion is observably met.
-- [ ] Test in `TASK_DETAILS.Test` passes.
+- [ ] The witness test passes.
 - [ ] No layer violations introduced.
 - [ ] No new constitution exception introduced.
 - [ ] No `// TODO`, no `// HACK`, no commented-out code.
