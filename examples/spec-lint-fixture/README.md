@@ -53,6 +53,13 @@ in `02-tasks.md`. Every task block in the clean half cites an in-range snapshot 
 correct `Licensed deviations:` line; the broken half isolates one seeded defect per task (six
 tasks, six rules) so each finding is independently traceable.
 
+`clean/FEAT-CLEAN-005` and `broken/FEAT-BROKEN-017` are a fourth matched pair, for the narrowed
+`SL060` rule (SW-93, ADR 0023): identical spec, outline and plan, both authored entirely in the
+lean 5-core-field task format. The clean half's one task marks its `Files` entry `(new)` and
+cites `Pattern refs`; the broken half carries the same `(new)` marker and no `Pattern refs` field.
+Any change that makes `SL060` fire on the clean half, or stay silent on the broken half, has
+broken the conditional rule.
+
 ---
 
 ## Expected findings in `broken/`
@@ -94,6 +101,7 @@ can be traced to an intentional seed rather than an accident.
 | `PORT-BROKEN-016` | `SL064` (T04) | BLOCK | `Pattern refs` range (100-120) falls outside the manifest's recorded 10-70 |
 | `PORT-BROKEN-016` | `SL065` (T05) | BLOCK | `Acceptance` carries no `Licensed deviations:` line |
 | `PORT-BROKEN-016` | `SL066` (T06) | BLOCK | `Licensed deviations: D99` - `D99` is not in the Deviation table |
+| `FEAT-BROKEN-017` | `SL060` (T01) | WARN | `Files` entry marked `(new)`, no `Pattern refs` field |
 | _(tree-wide)_ | `SL032` | BLOCK | `BUG-GHOST-006` row in `index.md` has no folder |
 
 `FEAT-BROKEN-011` is the one spec that seeds two rules on purpose. An illegal `status` cannot
@@ -124,12 +132,14 @@ of the rules, which is precisely the drift that SW-1 and SW-3 exist to prevent. 
 trade-off is decided, this fixture makes the acceptance criterion **reproducible**, not
 **enforced**.
 
-**Rule coverage is partial: 31 of the 44 rules are seeded.** `SL061`-`SL066` (port task-block) are
-seeded directly in this fixture (`PORT-CLEAN-004` / `PORT-BROKEN-016` above). `SL067` (task
-check-off marker), the `SL07x` revision-log band and the `SL08x` port-fidelity band are exercised
-by their own fixtures instead - see `tests/task-format/fixtures/checkoff-*.md` for `SL067` and
-`tests/revision-log/fixtures/` for `SL07x`; `SL08x` has no fixture anywhere yet, a pre-existing gap
-this ticket does not close. Not seeded in this fixture, and why:
+**Rule coverage is partial: 32 of the 44 rules are seeded.** `SL061`-`SL066` (port task-block) are
+seeded directly in this fixture (`PORT-CLEAN-004` / `PORT-BROKEN-016` above), and `SL060` (the
+narrowed lean-task-format rule, SW-93) by `FEAT-CLEAN-005` / `FEAT-BROKEN-017`. `SL067` (task
+check-off marker), the `SL068` outline-agreement rule, the `SL07x` revision-log band and the
+`SL08x` port-fidelity band are exercised by their own fixtures instead - see
+`tests/task-format/fixtures/checkoff-*.md` for `SL067`, `tests/outline-agreement/fixtures/` for
+`SL068` and `tests/revision-log/fixtures/` for `SL07x`; `SL08x` has no fixture anywhere yet, a
+pre-existing gap this ticket does not close. Not seeded in this fixture, and why:
 
 | Rule | Why not seeded |
 |---|---|
