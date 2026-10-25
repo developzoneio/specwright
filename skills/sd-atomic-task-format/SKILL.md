@@ -5,44 +5,68 @@ Used by `sd-spec-architect` when authoring `02-tasks.md` and by `sd-implementer`
 
 ---
 
-## Task block (11 required fields)
+## Task block (5 core fields, the rest only when they say something)
 
 ```markdown
 ### T<NN> - <imperative title>
 
-- **Files**: <comma-separated relative paths>
-- **Layer**: <Domain | Application | Infrastructure | Presentation | Tests | Config>
-- **Step type**: <foundation | behavior | wiring | polish | test>
-- **Test**: <which test file(s) cover this task>
-- **Acceptance**: <observable criterion>
+- **Files**: <comma-separated relative paths; mark a created file `(new)`, a file gaining a public symbol `(new symbol)`>
+- **Acceptance**: <1-3 lines: the observable outcome, and the test file that witnesses it>
 - **Covers**: <SC-/AC-ID list, e.g. SC-1, AC-2 | none>
-- **Depends on**: <T## | none>
-- **Conflicts with**: <T## list | none>
-- **Estimated complexity**: <S | M | L>
-- **Reversibility**: <trivial | moderate | hard>
-- **Pattern refs**: <1-3 file:line precedent citations + what to mirror | none>
+- **Depends on**: <T## list | none>
+- **Estimated complexity**: <S | L>
+- **Reversibility**: <moderate | hard>
+- **Pattern refs**: <1-3 file:line precedent citations + what to mirror>
 - **Status**: open
 ```
 
-The last line, `Status`, is the **check-off marker** - execution state, not part of the task's
-contract. See "Check-off marker" below; it is not counted among the 11 required fields.
+Five fields are **core** and appear on every block: `Files`, `Acceptance`, `Covers`, `Depends on`
+and `Status`. A block missing one of the first four is malformed. `Status` is the **check-off
+marker** - execution state, not contract; see "Check-off marker" below.
 
-All 11 fields are **required**, not optional. A task block missing any of them is malformed.
+The other fields are written **only when they carry information** (ADR 0023). An absent field is
+not a finding; it reads as the default below:
 
-`Pattern refs` is required on **every** task - the old "only when the task creates a new file or a
-new public symbol" condition is gone. A task with no precedent worth citing writes
-`Pattern refs: none` **explicitly**. The point of the field is the assertion: `none` says the
-architect looked and found nothing, while an absent field says nothing at all, and the two are not
-the same claim.
+| Field | Write it when | Absent reads as |
+|---|---|---|
+| `Estimated complexity` | the task is not `M` | `M` |
+| `Reversibility` | the task is not `trivial` | `trivial` |
+| `Pattern refs` | a `Files` entry carries a `(new)` or `(new symbol)` marker; on a port task, always | `none` |
 
-Reading legacy specs stays lenient. A block authored before this rule, with the field absent, is
-read as `Pattern refs: none` so existing `.specs/` folders keep working. `/sd:spec validate`
-reports the omission as `SL060` (WARN) - it does not block, and nothing downstream refuses the
-task.
+So a task trips the **sd-model-escalation** rows that read these fields only by writing `L` or
+`hard`, never by leaving a field out.
 
-### Refactor mode adds one field
+The witness test is named in `Acceptance`, not in a field of its own. Phases are not a field either:
+order is `Depends on`, and the layer of each path is derived from `Files` (see **sd-spec-templates**,
+"Decompose thresholds").
 
-`/sd:refactor` tasks append one more field after `Pattern refs`:
+### Legacy blocks
+
+A block authored before ADR 0023 carries 11 fields: the five above plus `Layer`, `Step type`,
+`Test`, `Conflicts with`, and `Estimated complexity` / `Reversibility` / `Pattern refs` written on
+every task. Such a block stays valid and is read as written:
+
+- A legacy `Test` field names the witness test. Readers use it when present, and the test path in
+  `Acceptance` otherwise.
+- `Layer` and `Step type` are ignored. Layers come from `Files`; where a legacy block carries
+  `Layer`, a reader that counts layers may use it instead.
+- `Conflicts with` is ignored outside refactor mode.
+- A legacy block with no `Pattern refs` reads as `Pattern refs: none`. It has no markers, so
+  `SL060` never fires on it.
+
+Never author the legacy fields on a new block.
+
+### Refactor mode adds two fields
+
+`/sd:refactor` tasks carry two more fields. `Conflicts with` is required there, and comes after
+`Depends on`:
+
+```markdown
+- **Conflicts with**: <T## list | none>
+```
+
+`Parallel batch` comes after `Pattern refs`, or after `Depends on` / `Conflicts with` and any
+complexity or reversibility line when `Pattern refs` is absent:
 
 ```markdown
 - **Parallel batch**: <batch number | "solo">
@@ -50,12 +74,12 @@ task.
 
 Tasks sharing a batch number have disjoint file sets and no `Depends on` / `Conflicts with`
 relationship between them - they are safe to execute in parallel. `solo` means the task cannot
-be batched with any other. Other workflow types (feature, bug, perf) do not use this field.
+be batched with any other. Other workflow types (feature, bug, perf, port) use neither field.
 
 ### Port mode constrains two fields
 
-`/sd:port` tasks (authored by `sd-spec-architect` against a `PORT-` spec) narrow two of the 11
-required fields rather than adding a new one:
+`/sd:port` tasks (authored by `sd-spec-architect` against a `PORT-` spec) narrow two fields rather
+than adding a new one:
 
 - **`Pattern refs`** is never `none`. Every port task cites 1-3 snapshot member ranges in the
   shape `04-artifacts/source/<path>:<first>-<last>`, never a host sibling path and never prose -
@@ -82,7 +106,7 @@ in refactor mode):
 - **Revised-by**: <R## - the revision entry in 01-plan.md that regenerated this task>
 ```
 
-`Revised-by` is **conditional, not one of the 11 required fields**: it is present only on a task the
+`Revised-by` is **conditional, not one of the 5 core fields**: it is present only on a task the
 re-plan gate regenerated, and absent on every task authored in the original Plan phase. It ties the
 task to its `## Revisions` entry in `01-plan.md`; `/sd:spec validate` checks the two agree in both
 directions (`SL070`-`SL073`). A task authored at Plan phase never carries it - do not add it
@@ -117,6 +141,9 @@ order:
   Re-plan (**sd-replan-loop**); the resulting blocks carry `Revised-by`.
 - `/sd:spec validate` checks rows and blocks against each other (`SL068`). A spec with no
   `## Outline` (planned in one step, before ADR 0022) is never checked against one.
+- A row carries no `(new)` / `(new symbol)` marker - that marker is authored on the expanded
+  block's `Files` field, not the outline row. `SL068` drops a block's trailing parenthetical
+  before comparing its `Files` set to the row's, so a marker never reads as a divergence.
 
 ---
 
@@ -131,17 +158,17 @@ section is the only definition of what that means - commands reference it and ne
 - **Status**: <open | done>
 ```
 
-- It is the **last line** of the block - after `Pattern refs`, and after `Parallel batch` /
-  `Revised-by` when those are present.
+- It is the **last line** of the block - after every other field present (`Pattern refs`,
+  `Conflicts with`, `Parallel batch`, `Revised-by`), whichever of them the block carries.
 - `sd-spec-architect` writes `- **Status**: open` on **every** task it authors, including tasks a
   re-plan regenerates. "Unchecked" is then an assertion on the page, not an absence.
 - The main thread **checks off** a task by rewriting that one line to `- **Status**: done`. Nothing
   else in the block changes. `sd-implementer` never edits `02-tasks.md`.
-- Unlike the 11 contract fields, `Status` is the one value that changes after planning. It records
-  execution state, so it is not one of the 11 required fields.
+- Unlike the 5 core contract fields, `Status` is the one value that changes after planning. It
+  records execution state, so it is not one of them.
 
 **Why a field and not a heading prefix** (`### [x] T01 - ...`, the form a model picks unprompted):
-the heading is the task's identity. `T<NN>` is cited by `Depends on`, `Conflicts with`,
+the heading is the task's identity. `T<NN>` is cited by `Depends on`, refactor's `Conflicts with`,
 `Revised-by`, `/sd:spec validate` findings, `05-retro.md` lines and `/sd:status` counters.
 Rewriting the heading on check-off is the exact drift ADR 0002 recorded: `### ✅ T01` read as zero
 tasks by a naive counter. A field keeps the heading stable and reuses the field label grammar
@@ -220,54 +247,74 @@ uses this one rule. Do not write a per-field matcher.
 ## Field rules
 
 ### Files
-Must exist (for edits) or be a new file path consistent with project conventions. Use `Glob` to verify before writing.
-
-### Layer
-Must come from the constitution's declared layers. Do not invent layer names. If a layer is not in `constitution.md`, flag as an Open question.
-
-### Step type
-| Value | Meaning |
-|---|---|
-| `foundation` | New abstractions, types, interfaces, DB schema — no behavior yet |
-| `behavior` | Business logic, event handlers, domain rules |
-| `wiring` | DI registration, configuration, middleware, glue code |
-| `polish` | Naming, comments, docs, dead-code removal |
-| `test` | Test files only — no production code change |
+Must exist (for edits) or be a new file path consistent with project conventions. Use `Glob` to
+verify before writing. Mark a path `Glob` does not find as `path (new)`; mark an existing path
+that gains a symbol reachable from outside the file (a new export, public or exported member,
+route, or config key) as `path (new symbol)` - judge the latter against the impact map's "Public
+API surface" section and the file's current exports. Either marker makes `Pattern refs` required
+(see below). An edit to an existing file with no such symbol carries no marker. The layer each
+path belongs to is derived from `Files`, not authored on the task - see **sd-spec-templates**,
+"Decompose thresholds", and the constitution's declared layers for the Open-question rule when a
+path maps to none of them.
 
 ### Acceptance
-Must be **observable**: a passing test, a 201 response, a method called exactly once. "Feels right" or "code is cleaner" are not acceptable. Every acceptance criterion must be verifiable without running the full app (unit/integration test preferred). On a port task, also carries a `Licensed deviations:` line - see "Port mode constrains two fields" below.
+Must be **observable**: a passing test, a 201 response, a method called exactly once. "Feels
+right" or "code is cleaner" are not acceptable. Cap it at 1-3 lines: the observable outcome, and
+the test file that witnesses it (that path doubles as the legacy `Test` field - see "Legacy
+blocks" above). No code, and no prescribed identifiers - no symbol or signature names; the
+implementer takes names from `Pattern refs` precedents and the spec. Every acceptance criterion
+must be verifiable without running the full app (unit/integration test preferred). On a port
+task, also carries a `Licensed deviations:` line - see "Port mode constrains two fields" below;
+those nested bullets are extra and do not count toward the 1-3 lines.
 
 ### Covers
 
 Comma-separated scenario (SC-<n>) and success-criterion (AC-<n>) IDs from `00-spec.md` that
-this task implements or proves. `none` is allowed only for pure wiring/polish tasks that
-advance no criterion directly. Every ID referenced must exist in the spec; every SC and AC in
-the spec must be covered by at least one task - `/sd:verify` fails the spec otherwise. Specs
-authored before this field existed (no SC/AC IDs) are handled by `/sd:verify`'s generic
-checks; treat a missing field as `Covers: none` when reading legacy `02-tasks.md` files.
-Spec types whose templates carry no SC-/AC-IDs (refactor, bug, perf, rca) use `Covers: none`
-for every task - the coverage requirement (VF010/VF011) applies only to specs whose
-`00-spec.md` declares SC-/AC-IDs, currently feature specs.
+this task implements or proves. `none` is allowed only for a task that advances no criterion
+directly. Every ID referenced must exist in the spec; every SC and AC in the spec must be
+covered by at least one task - `/sd:verify` fails the spec otherwise. Specs authored before this
+field existed (no SC/AC IDs) are handled by `/sd:verify`'s generic checks; treat a missing field
+as `Covers: none` when reading legacy `02-tasks.md` files. Spec types whose templates carry no
+SC-/AC-IDs (refactor, bug, perf, rca) use `Covers: none` for every task - the coverage
+requirement (VF010/VF011) applies only to specs whose `00-spec.md` declares SC-/AC-IDs, currently
+feature specs.
 
 ### Estimated complexity
+Write it only when the task is not `M` - an absent field reads as `M`.
+
 | Value | Guideline |
 |---|---|
 | `S` | ≤ 30 lines changed, single file, single concept |
-| `M` | 30–100 lines, up to 3 files, one concern crossing a boundary |
+| `M` (default) | 30–100 lines, up to 3 files, one concern crossing a boundary |
 | `L` | > 100 lines OR multiple files OR requires design decision at implementation time |
 
 ### Reversibility
+Write it only when the task is not `trivial` - an absent field reads as `trivial`.
+
 | Value | Meaning |
 |---|---|
-| `trivial` | Can be undone with a single revert / delete |
+| `trivial` (default) | Can be undone with a single revert / delete |
 | `moderate` | Requires a few file reverts; no downstream migrations |
 | `hard` | Data migration, public API change, or multi-service impact |
 
-### Depends on / Conflicts with
-Drive sequencing and batch planning. Tasks that **conflict** cannot run in the same parallel batch. Tasks that **depend on** a prior task cannot start until that task's acceptance criterion is met.
+### Depends on
+Drives sequencing. A task that **depends on** a prior task cannot start until that task's
+acceptance criterion is met. `none` when no prior task must complete first.
+
+### Conflicts with (refactor only)
+Drives batch planning. Tasks that **conflict** cannot run in the same parallel batch. Required
+on every refactor task (`none` when the task conflicts with nothing); not used outside refactor
+mode.
 
 ### Pattern refs
-1-3 `file:line` citations of precedent code the implementer reads BEFORE writing, each with a one-line instruction of what to mirror (e.g. "mirror handler structure and registration", "reuse this helper - do not duplicate"). Required on every task; write `none` explicitly when there is genuinely no precedent to cite, which should be rare outside pure polish work. Verify each cited file exists before writing the ref. Discovery and adherence rules live in the **sd-pattern-discipline** skill.
+1-3 `file:line` citations of precedent code the implementer reads BEFORE writing, each with a
+one-line instruction of what to mirror (e.g. "mirror handler structure and registration", "reuse
+this helper - do not duplicate"). Write it only when a `Files` entry carries a `(new)` or
+`(new symbol)` marker - an absent field on a task with no such marker reads as `none`, and that is
+the common case for an edit-only task. An explicit `none` on a marked task is legal but
+discouraged: the implementer then has no precedent to mirror. Verify each cited file exists
+before writing the ref. Port mode always requires it (never `none`) - see "Port mode constrains
+two fields" above. Discovery and adherence rules live in the **sd-pattern-discipline** skill.
 
 ---
 
@@ -283,13 +330,20 @@ Drive sequencing and batch planning. Tasks that **conflict** cannot run in the s
 
 - Bundling interface + behavior + test into a single task — these are three tasks.
 - Using vague acceptance criteria ("works correctly", "looks good").
+- Writing Acceptance as pseudocode, or naming symbols/signatures it should leave to Pattern refs.
 - Listing files you haven't verified exist (for edits) or naming conventions don't match.
-- Inventing layer names not declared in the constitution.
-- Leaving `Depends on` / `Conflicts with` empty when sequential or conflicting relationships exist.
-- Authoring a new-file task with `Pattern refs: none` - the implementer has no precedent to mirror.
+- Marking an edit-only `Files` entry `(new)` or `(new symbol)`, or leaving a genuinely new file or
+  new public symbol unmarked - either misstates what `SL060` should check.
+- Leaving refactor's `Conflicts with` empty when a conflicting relationship exists, or using it
+  outside refactor mode.
+- Authoring a `(new)` / `(new symbol)` task with `Pattern refs: none` - the implementer has no
+  precedent to mirror.
 - Citing Pattern refs you did not verify exist.
-- Omitting `Pattern refs` instead of writing `none`. Silence is not an assertion; `SL060` flags it.
+- Writing `Estimated complexity: M` or `Reversibility: trivial` explicitly - they are the
+  defaults; write the field only when the value differs.
 - Checking off a task by editing its heading (`### [x] T01`, `### ✅ T01`) or appending a list
   checkbox. The only check-off is `Status: done` - see "Check-off marker". `SL067` flags the rest.
 - Burying a precedent in prose beside the block instead of putting it in the field. `sd-implementer`
   reads `TASK_DETAILS`, not the surrounding narrative - a ref outside the field does not reach it.
+- Authoring `Layer`, `Step type` or `Test` on a new task - these are legacy fields; see "Legacy
+  blocks" above.

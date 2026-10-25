@@ -90,9 +90,10 @@ Rubric for the estimate:
 **any** of these hold:
 
 - estimated/authored tasks **> 8**
-- spans **> 2** production layers/subsystems — count the distinct `Layer` values across tasks, but
-  **exclude `Tests` and `Config`**: they cross-cut nearly every change, so counting them would make
-  an ordinary 2-layer feature (e.g. `Application` + `Domain` + `Tests`) read as 3 and over-fire
+- spans **> 2** production layers/subsystems — count the distinct layers the task `Files` span
+  (see "Measure the outline, not the task blocks" below), but **exclude `Tests` and `Config`**:
+  they cross-cut nearly every change, so counting them would make an ordinary 2-layer feature
+  (e.g. `Application` + `Domain` + `Tests`) read as 3 and over-fire
 - impact surface **> 8** files (from `03-decisions.md`)
 - **any** unresolved Open question remains at plan time
 
@@ -109,8 +110,11 @@ thresholds on the Phase 3a task outline (`## Outline` in `01-plan.md`, per **sd-
 outline rows. Layers are derived from each row's `Files`: map each production path to the layer it
 falls under in `paths.layers` of project-config, or, when that list is `[]` or names no match, to
 the constitution's declared layer the path belongs to; then count the distinct layers, still
-excluding `Tests` and `Config`. Phase 3b copies the same layer into each expanded block's `Layer`
-field. A legacy plan with no outline is measured on its task blocks, as before.
+excluding `Tests` and `Config`. A path that maps to none of the constitution's declared layers is
+an Open question, same as any other. Since ADR 0023 removed the task block's `Layer` field, Phase
+3b derives it the same way instead of copying a value - there is nothing to copy. A legacy plan
+with no outline is measured on its task blocks: read each block's legacy `Layer` field if present,
+else derive from `Files` the same way.
 
 **Count tasks with the tolerant grammar, never a naive regex.** When measuring the task count, use
 the **Field label / heading grammar** the way `sd-atomic-task-format` describes — live specs write

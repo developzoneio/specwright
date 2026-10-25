@@ -88,7 +88,7 @@ and waits for explicit user approval; silence is not approval, and there is no o
 ## The `## Revisions` log (`01-plan.md`)
 
 Append-only. Lives at the **end** of `01-plan.md`, below the original plan prose. The original plan
-text - phased overview, sequencing rationale, risks - is **never edited**; a re-plan only appends
+text - approach, design decisions, risks, outline - is **never edited**; a re-plan only appends
 here. Create the `## Revisions` header on the first revision.
 
 ```markdown
