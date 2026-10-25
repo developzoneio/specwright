@@ -189,7 +189,7 @@ subagent invocation. `/sd:setup` scaffolds this:
     FEAT-INV-2501/              # One folder per spec
       00-spec.md                # Why / What / Success criteria / Constitution check
       01-plan.md                # Implementation plan
-      02-tasks.md               # Atomic tasks with Files / Layer / Acceptance
+      02-tasks.md               # Atomic tasks with Files / Acceptance / Covers / Depends on
       03-decisions.md           # Impact analysis from sd-code-explorer
       04-artifacts/             # Evidence: logs, queries, traces, ticket snapshots
       05-retro.md               # Post-execution retro

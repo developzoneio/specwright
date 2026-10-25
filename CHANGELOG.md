@@ -94,6 +94,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   included. The gate count stays 3. `/sd:spec status` lists the new file, and e2e
   `02-feature-happy` asserts it.
 
+### Changed
+- **Lean task format - five core fields (SW-93, ADR 0023)** - `sd-atomic-task-format`'s task
+  block now requires only `Files`, `Acceptance`, `Covers`, `Depends on` and `Status`. Reconciled
+  with ADR 0022's outline shape rather than redesigned. Changes:
+  - **Optional with a default:** `Estimated complexity` (default `M`) and `Reversibility`
+    (default `trivial`) are written only when they differ from their default. `Pattern refs` is
+    required only when a `Files` entry is marked `(new)` or `(new symbol)` - restoring the rule a
+    prior tightening had relaxed to "every task". An absent field is read as its default, never a
+    finding.
+  - **Removed:** `Layer` and `Step type`. A reader derives a path's layer from `Files` instead of
+    a copied value. `Conflicts with` becomes refactor-only.
+  - **Folded in:** `Test` folds into `Acceptance`'s witness-test path; a legacy `Test` field is
+    still read when present.
+  - **`/sd:spec`:** `SL060` fires only when a `(new)`/`(new symbol)`-marked `Files` entry has no
+    `Pattern refs` - not on every task. `SL068` drops a trailing marker before comparing a block's
+    `Files` to its outline row.
+  - **`/sd:verify`:** `VF020`/`VF021` read the witness test from `Acceptance` when no legacy
+    `Test` field is present.
+  - **Escalation:** `ESC-FEAT-04`/`04b` and `ESC-REF-05`/`05b` state explicitly that an absent
+    `Estimated complexity`/`Reversibility` reads as its default and never fires.
+  - **`01-plan.md`:** drops `Phased overview`, `Sequencing rationale` (folded into `Approach`) and
+    `Coverage map` as authored sections; the multi-row complexity self-assessment becomes one
+    `Complexity:` line.
+  - **Hooks:** no change. `handoff-integrity` already strips a trailing `(...)` note from each
+    `Files` entry, so the new markers were silently compatible; `stop-gate` and `session-context`
+    never read a field this ADR touches.
+  - **Legacy compatibility:** an 11-field block authored before this ADR still parses and is read
+    as written. No legacy fixture gains a new finding.
+  - **Tests:** 5 new `tests/task-format/` fixtures, plus one each under `tests/revision-log/` and
+    `tests/outline-agreement/`, and a `tests/hooks/` handoff-integrity case. `examples/` gains a
+    lean/legacy line-count comparison (`examples/lean-task-format/`) and a fourth
+    `spec-lint-fixture` matched pair for the narrowed `SL060`. e2e `02`, `05`, `06` and `08`
+    exercise the lean format; `07` stays legacy on purpose.
+
 ### Fixed
 - **`sd-gate-brief` no longer offers `details` at Gate Re-plan (SW-104)** - the skill now says
   only Gates 1, 2 and 3 offer `details`, matching ADR 0018 and `contractLint.gateBriefs`.
