@@ -222,8 +222,9 @@ Active spec before compaction (trigger: manual): FEAT-x [status: in-progress]
 ```
 
 The phase hint is type-agnostic: `draft` is the spec-approval gate; `approved` with a
-`02-tasks.md` is the plan-approval gate; `in-progress` counts the `- **Status**:` check-off
-markers. Workflows with no task list (bug, perf, rca) get `in progress - no task list`. It is a
+`02-tasks.md`, or with a `## Outline` in `01-plan.md` (ADR 0022), is the plan-approval gate;
+`in-progress` with an outline and no `02-tasks.md` is `plan approved - expanding tasks`; any other
+`in-progress` counts the `- **Status**:` check-off markers. Workflows with no task list (bug, perf, rca) get `in progress - no task list`. It is a
 hint only: the workflow command's state machine is the authority, which is why the section names
 the command to re-invoke.
 
@@ -352,7 +353,7 @@ evidence missing*, and fires only when both hold:
 | perf Gate 2 | Phase 3+ evidence exists while the baseline artifact, Results log row 0 or the measured `Current observed` is missing |
 | rca Gate 2 (SW-51) | the root cause is written or the status moved on, while `## Hypothesis tree` still holds its `<<PHASE-2:` field |
 | port Gates 1, 2, 3, 6 | later-phase artifacts exist while `MANIFEST.md`/`Frozen: yes`, filled tables, `## Behavior pinning` or `parity/INDEX.md` is missing |
-| feature Gates 1, 2, 3 (SW-100) | the status moved on, a task is done or a passing `06-verify.md` exists, while `gate-briefs.md` has no section for the gate, or no `Reply:` line in it approves (a reply other than `details`, `refine`, `abort`, `address`, `approve split`, `no`). No brief, or a brief that starts after the gate (a resumed or pre-SW-89 spec), checks nothing (ADR 0021) |
+| feature Gates 1, 2, 3 (SW-100) | the status moved on, a task is done, `02-tasks.md` was expanded from an outline (Gate 2, ADR 0022) or a passing `06-verify.md` exists, while `gate-briefs.md` has no section for the gate, or no `Reply:` line in it approves (a reply other than `details`, `refine`, `abort`, `address`, `approve split`, `no`). No brief, or a brief that starts after the gate (a resumed or pre-SW-89 spec), checks nothing (ADR 0021) |
 
 A hit prints `{"decision":"block","reason":"..."}` and exits 0 - Stop's own schema, which blocks
 exactly like exit 2 (ADR 0015). The reason names the spec, the gate, what is missing and the
@@ -442,7 +443,7 @@ Every workflow writes to a structured folder under `.specs/<ID>/`:
 ```
 .specs/FEAT-INV-2501/
 ├── 00-spec.md        Why / What / Success criteria / Spawned specs / Constitution check
-├── 01-plan.md        Phased implementation plan
+├── 01-plan.md        Phased plan; /sd:feature's task outline (ADR 0022); append-only revisions
 ├── 02-tasks.md       Atomic tasks (11 required fields, incl. Pattern refs)
 ├── 03-decisions.md   Impact analysis from sd-code-explorer + debugger output
 ├── 04-artifacts/     Evidence: logs, queries, traces, baselines, ticket snapshots, donor snapshots
@@ -461,8 +462,8 @@ append-only memory, not scratch space:
 | Artifact | Produced by | When | Read by |
 |---|---|---|---|
 | `00-spec.md` | `sd-spec-architect` (create); later sections filled in place by the workflow | Phase 1, then incrementally | every later phase + reviewer |
-| `01-plan.md` | `sd-spec-architect` (plan) | feature / refactor plan phase | `sd-implementer` |
-| `02-tasks.md` | `sd-spec-architect` (plan) | feature / refactor plan phase | `sd-implementer` |
+| `01-plan.md` | `sd-spec-architect` (plan; `STEP = outline` for feature) | feature Phase 3a / refactor plan phase | Gate 2, Phase 3b, `sd-implementer` |
+| `02-tasks.md` | `sd-spec-architect` (plan; `STEP = expand` for feature) | feature Phase 3b, after Gate 2 / refactor plan phase | `sd-implementer` |
 | `03-decisions.md` | `sd-code-explorer` (impact) + `sd-debugger` (hypotheses / verdicts); append-only | impact + investigation phases | `sd-implementer`, `sd-reviewer` |
 | `04-artifacts/` | any agent (logs, baselines, repro evidence, ticket snapshots, donor snapshots) | throughout | any agent + future sessions |
 | `05-retro.md` | main thread (status transitions); append-only | every gate transition | resume logic + future sessions |

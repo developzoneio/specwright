@@ -52,7 +52,8 @@ Spec-driven feature workflow.
 | 0 - Bootstrap | main thread | - |
 | 1 - Spec | `sd-spec-architect` | ⛔ Gate 1 (spec approval) |
 | 2 - Impact | `sd-code-explorer` | - |
-| 3 - Plan + tasks | `sd-spec-architect` | ⛔ Gate 2 (plan approval; complexity triage) |
+| 3a - Outline | `sd-spec-architect` | ⛔ Gate 2 (outline approval; complexity triage) |
+| 3b - Expand | `sd-spec-architect` | none (a divergence from the outline goes through Gate Re-plan) |
 | 4 - Execute | `sd-implementer` per task + main thread self-check | - |
 | 5 - Integration + batch review | main thread + `sd-reviewer` (holistic, once) | ⛔ Gate 3 (integration + review) |
 | 6 - Close-out | main thread | - |
