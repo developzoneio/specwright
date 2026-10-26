@@ -70,16 +70,16 @@ read it before filling them. **sd-spec-templates** covers what else the template
 ## Mode 2: `TASK = plan`
 
 Inputs (required): SPEC, IMPACT
-Inputs (optional): MODE, REPLAN_SCOPE, REVISION, STEP
+Inputs (optional): MODE, REPLAN_SCOPE, REVISION, STEP, LANE
 
-Inputs: `SPEC` (path to `00-spec.md`), `IMPACT` (path to `03-decisions.md` from code-explorer), optionally `MODE` (`feature` | `refactor`). A scoped re-plan invocation (see below) passes `REPLAN_SCOPE` and `REVISION` instead of `SPEC`/`IMPACT`. `/sd:feature` passes `STEP` (`outline` | `expand`) to plan in two steps - see "Two-step feature plan" below; with no `STEP` you plan in one step, as `/sd:refactor` does.
+Inputs: `SPEC` (path to `00-spec.md`), `IMPACT` (path to `03-decisions.md` from code-explorer), optionally `MODE` (`feature` | `refactor`). A scoped re-plan invocation (see below) passes `REPLAN_SCOPE` and `REVISION` instead of `SPEC`/`IMPACT`. `/sd:feature` passes `STEP` (`outline` | `expand`) to plan in two steps - see "Two-step feature plan" below; with no `STEP` you plan in one step, as `/sd:refactor` does. The S lane of `/sd:feature` passes `STEP = outline` with `LANE = s` and no `IMPACT` (Phase 2 is skipped) - see "S-lane outline" below.
 
 Outputs (Write both, in one step):
 - `.specs/<SPEC_ID>/01-plan.md` - the plan: approach, design decisions, risks (feature and
   refactor alike).
 - `.specs/<SPEC_ID>/02-tasks.md` - atomic task list.
 
-With `STEP = outline` you write only `01-plan.md`; with `STEP = expand` you write only `02-tasks.md`.
+With `STEP = outline` you write only `01-plan.md` (with `LANE = s`, plus a `## Discovery` section); with `STEP = expand` you write only `02-tasks.md`.
 
 ### `01-plan.md` structure
 
@@ -126,6 +126,40 @@ decompose decided - before a full task block exists.
   `expand`) and write the whole `02-tasks.md`: rows outside the scope as approved, scoped tasks per
   the delta, each marked `Revised-by: <REVISION>`.
 - `STEP = expand` returns a one-line summary (path and task count) and no `GATE_BRIEF` block.
+- **A fallen-back S spec.** When `01-plan.md` already holds an `## Outline (S-lane draft)` section,
+  `STEP = outline` (full path, with `IMPACT`) treats it as a starting point: reuse its approach and
+  rows where `IMPACT` supports them, then rewrite the whole file. The draft heading must not
+  survive the rewrite.
+
+### S-lane outline (`STEP = outline` with `LANE = s`)
+
+`/sd:feature` Phase 1S (ADR 0024). The spec is still `draft`, nothing is approved, and no `IMPACT`
+exists. Do everything `STEP = outline` says except where this section differs.
+
+- **Bounded discovery.** Before writing, run at most 2 Glob/Grep rounds (a round is one batch of
+  parallel Glob/Grep calls). They cover (a) a precedent for each task whose `Files` entry you will
+  mark `(new)` or `(new symbol)`, per **sd-pattern-discipline**, and (b) for each existing symbol the
+  outline changes, the production files that reference it. Stop at 2 rounds. A changed symbol
+  whose callers they could not enumerate is an Open question, not a reason for a third round. Verify
+  every path you cite with `Glob` or `Read`.
+- **`## Discovery` section.** Write it in `01-plan.md`, before `## Outline`, in about 10 lines:
+  precedents as `file:line` with a one-line instruction of what to mirror, dependents as one path per
+  bullet, and any symbol left unenumerated. It stands in for `IMPACT`: `STEP = expand` reads it where
+  the Pattern refs protocol below says to read `IMPACT`'s precedents.
+- **Measure the S limits**, not the decompose thresholds: apply "S-lane thresholds" in
+  **sd-spec-templates** to the outline, the discovery's dependents and the spec's Open questions.
+  Never write the limit values into the plan; record `Complexity: S lane, within limits` or the
+  breach.
+- **Within limits.** Write the `## Outline` table last, as in `STEP = outline`, and end with a
+  `GATE_BRIEF` block with `gate: s-lane`: decisions from the spec **and** the plan, ranked together,
+  each stated in `00-spec.md` or `01-plan.md`, and one `task:` line per outline row.
+- **Over any limit.** Write the outline under the heading `## Outline (S-lane draft)` - never
+  `## Outline`, which the workflow and the hooks read as "a plan is waiting for approval". Return
+  `STATUS = s-lane-breach` naming each breached limit with its measured value, in the clause form
+  the workflow logs (`tasks 6 > 4`, `layers 2 > 1 (Application, Domain)`, `surface 7 > 4`,
+  `open questions 1`), and end with a `GATE_BRIEF` block with `gate: spec` for the spec alone and no
+  `task:` lines. Propose no decompose: the full path decides that at Gate 2.
+- Never edit `00-spec.md`; its `status` and `complexity` are the main thread's.
 
 ### `02-tasks.md` task format (MANDATORY)
 
@@ -150,7 +184,7 @@ For every task whose `Files` entry you mark `(new)` (the path does not exist yet
 export, public or exported member, route, or config key, judged against `IMPACT`'s "Public API
 surface" section and the file's current exports):
 
-1. Read the "Precedents & conventions" section of `IMPACT` (appended by `sd-code-explorer`). Prefer precedents already cited there.
+1. Read the "Precedents & conventions" section of `IMPACT` (appended by `sd-code-explorer`). Prefer precedents already cited there. On the S lane there is no `IMPACT`: read the plan's `## Discovery` section instead.
 2. If `IMPACT` lacks a suitable precedent, run your own discovery (max 2 Glob/Grep rounds) per the **sd-pattern-discipline** skill.
 3. Fill the task's `Pattern refs` field: 1-3 `file:line` refs, each with a one-line instruction of what to mirror.
 4. An edit-only task (no `Files` entry marked) carries no `Pattern refs` field at all - absent
@@ -165,7 +199,8 @@ surface" section and the file's current exports):
 ### Complexity self-assessment (feature plan only)
 
 After writing the plan, measure it against the decompose thresholds in the **sd-spec-templates**
-skill ("Complexity estimate"). With `STEP = outline`, measure the outline; with no `STEP`, measure
+skill ("Complexity estimate"). With `LANE = s`, measure the S limits instead and follow "S-lane
+outline" above for the return. With `STEP = outline`, measure the outline; with no `STEP`, measure
 the `02-tasks.md` you just wrote. A plan is **over-threshold** when **any** hold: tasks **> 8**,
 spans **> 2** production layers/subsystems (distinct layers derived from the outline rows' `Files`
 - or, for a legacy no-`STEP` plan, from the task blocks' `Files`, or their legacy `Layer` field
@@ -248,7 +283,8 @@ The main thread presents Gate 1 after `create` / `refine` and Gate 2 after `plan
 return, not from the artifacts. End those returns with the `GATE_BRIEF` block defined in the
 **sd-gate-brief** skill ("Agent return blocks"): `gate: spec` for `create` / `refine`
 (`gate: symptom` when the spec is a bug spec), `gate: plan` for an under-threshold plan,
-`gate: complexity` for a `STATUS = needs-input` plan. List every decision a reviewer could veto,
+`gate: complexity` for a `STATUS = needs-input` plan, `gate: s-lane` for an S-lane outline within
+limits (`gate: spec` for `s-lane-breach`). List every decision a reviewer could veto,
 ranked per that skill's "Decision ranking", each with the default you recommend - including the
 open questions you resolved yourself, which are the decisions the user most needs to see. For
 `gate: spec` and `gate: symptom`, state every decision you list in `00-spec.md` itself: the spec
@@ -256,8 +292,9 @@ is the durable record of what Gate 1 approves. For `gate: plan` and `gate: compl
 list only the decisions the plan adds - check each one against the approved `SPEC` you already
 read, and leave out any decision it settles, per the skill's "Plan approval" rule. Word every
 field in English per the skill's "User-facing text" rule; the main thread owns the conversation
-language. With `STEP = outline`, the `task:` lines come from the outline rows. A scoped re-plan and
-a `STEP = expand` call return no block.
+language. With `STEP = outline`, the `task:` lines come from the outline rows. For `gate: s-lane`
+nothing is approved yet, so list the spec's decisions and the plan's together; do not drop a
+decision the spec settles. A scoped re-plan and a `STEP = expand` call return no block.
 
 ---
 
