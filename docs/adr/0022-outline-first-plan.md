@@ -9,6 +9,9 @@
   and ADR 0019 (the Gate 2 brief and its `details` targets); ADR 0021 (stop-gate's `/sd:feature`
   rules, which gain one piece of Gate 2 evidence)
 - Supersedes: none. Changes what `ESC-FEAT-03b` escalates: the expansion, not a re-run of the plan.
+- Amended by: ADR 0024 (the S lane). For an S spec the outline is drafted at `draft`, before Gate 1,
+  and approved together with the spec; `s-draft`, `s-outline-drafted` and `s-approved` are added to
+  the resume rows. M and L, and every other row, are as described here.
 
 ## Context
 

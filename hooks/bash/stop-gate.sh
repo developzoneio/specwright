@@ -367,10 +367,14 @@ count_reply() {
 # (the last non-approving token). Per Re-plan revision n, the same four as
 # brief_rp_n_*; brief_rp_min is the lowest n with a section. brief_start is
 # the rank of the first gate heading. A `### ` subheading does not end a
-# section; any other `## ` heading does.
+# section; any other `## ` heading does. In a feature brief, a `## Gate 1+2`
+# heading (the S lane's combined approval, ADR 0030) opens one section that
+# counts for Gate 1 and Gate 2 at once, ranked as Gate 1, with Gate 1's
+# non-approving tokens.
 read_brief() {
-    local l h g i=0 rank cur='' rx_gate rx_lab rx_rp
+    local l h g i=0 rank cur='' cur2='' rx_gate rx_lab rx_rp rx_gate12
     rx_gate='^## Gate ([0-9]+[[:lower:]]?)([^0-9[:lower:]]|$)'
+    rx_gate12='^## Gate 1\+2([^0-9]|$)'
     rx_rp='^## Gate Re-plan - R([0-9]{1,6})([^0-9]|$)'
     for g in $(brief_order "$2"); do
         i=$((i + 1))
@@ -384,8 +388,15 @@ read_brief() {
         if [[ "${l}" == "## "* ]]; then
             h="${l%"${l##*[![:space:]]}"}"
             cur=''
+            cur2=''
             rank=0
-            if [[ "${h}" == "## Gate Re-plan"* ]]; then
+            if [[ "$2" == feature && "${h}" =~ ${rx_gate12} ]]; then
+                rank="${brief_rank_1}"
+                cur=brief_1
+                cur2=brief_2
+                brief_1_seen=1
+                brief_2_seen=1
+            elif [[ "${h}" == "## Gate Re-plan"* ]]; then
                 # It marks where a brief starts even when the workflow has no
                 # Re-plan rule; its replies count only under a `- R<n>` heading.
                 rank="${brief_rank_R:-0}"
@@ -414,6 +425,10 @@ read_brief() {
             count_reply "${cur}" "$2:R"
         else
             count_reply "${cur}" "$2:${cur#brief_}"
+            # The combined section's reply carries Gate 1's tokens to Gate 2.
+            if [[ -n "${cur2}" ]]; then
+                count_reply "${cur2}" "$2:${cur#brief_}"
+            fi
         fi
     done <<< "$1"
 }

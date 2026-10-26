@@ -318,8 +318,9 @@ fpayload="$(printf '{"session_id":"smoke-stop-feat","cwd":"%s","transcript_path"
 # feat_state <status> <T01 status|''> <06-verify result|''> <briefs>
 # <briefs> is '-' for no gate-briefs.md (a spec from before SW-89), else
 # space-separated gate=reply pairs; an empty reply leaves that section open.
+# The gate key 12 writes the S lane's combined `## Gate 1+2` heading (ADR 0024).
 feat_state() {
-    local g
+    local g n
     rm -f "$fd"/*.md
     printf -- '---\nid: FEAT-SMOKE-2\ntype: feature\nstatus: %s\n---\n' "$1" > "$fd/00-spec.md"
     [[ "$1" != "draft" ]] && printf '# Decisions\n' > "$fd/03-decisions.md"
@@ -328,7 +329,9 @@ feat_state() {
     [[ "$4" == "-" ]] && return 0
     printf '# Gate briefs - FEAT-SMOKE-2\n' > "$fd/gate-briefs.md"
     for g in $4; do
-        printf '\n## Gate %s - smoke (pass 1)\n\nApprove? (yes / abort)\n' "${g%%=*}" >> "$fd/gate-briefs.md"
+        n="${g%%=*}"
+        [[ "${n}" == "12" ]] && n="1+2"
+        printf '\n## Gate %s - smoke (pass 1)\n\nApprove? (yes / abort)\n' "${n}" >> "$fd/gate-briefs.md"
         [[ -n "${g#*=}" ]] && printf '\nReply: %s\n' "${g#*=}" >> "$fd/gate-briefs.md"
     done
     return 0
@@ -362,6 +365,9 @@ feat_case "Gate 3 passed without a reply - blocks" "Gate 3 (Integration and revi
 feat_case "Gate 3 passed with Reply: yes - silent" silent in-progress done pass "1=yes 2=yes 3=yes"
 feat_case "at Gate 3 - silent" silent in-progress done "" "1=yes 2=yes 3="
 feat_case "Gate 3 passed, no brief (pre-SW-89) - silent" silent in-progress done pass "-"
+feat_case "S lane combined approval with Reply: yes - silent" silent in-progress done "" "12=yes"
+feat_case "S lane combined approval without a reply - blocks" "Gate 2 (Plan approval)" in-progress done "" "12="
+feat_case "at the S lane combined approval - silent" silent draft "" "" "12="
 
 section "stop-gate (bash): feature re-fire with stop_hook_active - silent"
 feat_state in-progress done pass "1=yes 2=yes 3="

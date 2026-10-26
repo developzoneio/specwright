@@ -348,6 +348,8 @@ function Set-FeatState {
     $text = "# Gate briefs - FEAT-SMOKE-2`n"
     foreach ($g in ($Briefs -split ' ')) {
         $gate, $reply = $g -split '=', 2
+        # The gate key 12 writes the S lane's combined `## Gate 1+2` heading (ADR 0024).
+        if ($gate -eq '12') { $gate = '1+2' }
         $text += "`n## Gate $gate - smoke (pass 1)`n`nApprove? (yes / abort)`n"
         if ($reply) { $text += "`nReply: $reply`n" }
     }
@@ -381,6 +383,9 @@ Test-FeatCase 'Gate 3 passed without a reply - blocks' 'Gate 3 (Integration and 
 Test-FeatCase 'Gate 3 passed with Reply: yes - silent' 'silent' 'in-progress' 'done' 'pass' '1=yes 2=yes 3=yes'
 Test-FeatCase 'at Gate 3 - silent' 'silent' 'in-progress' 'done' '' '1=yes 2=yes 3='
 Test-FeatCase 'Gate 3 passed, no brief (pre-SW-89) - silent' 'silent' 'in-progress' 'done' 'pass' '-'
+Test-FeatCase 'S lane combined approval with Reply: yes - silent' 'silent' 'in-progress' 'done' '' '12=yes'
+Test-FeatCase 'S lane combined approval without a reply - blocks' 'Gate 2 (Plan approval)' 'in-progress' 'done' '' '12='
+Test-FeatCase 'at the S lane combined approval - silent' 'silent' 'draft' '' '' '12='
 
 Write-Section 'stop-gate (PowerShell): feature re-fire with stop_hook_active - silent'
 Set-FeatState 'in-progress' 'done' 'pass' '1=yes 2=yes 3='

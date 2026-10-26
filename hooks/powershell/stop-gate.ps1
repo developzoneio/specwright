@@ -345,7 +345,10 @@ function New-GateCounter {
 # with a token), Ok (one of them approves), Deny (the last non-approving
 # token). Rp holds the same per Re-plan revision number; RpMin is the lowest
 # number with a section. Start is the rank of the first gate heading. A `### `
-# subheading does not end a section; any other `## ` heading does.
+# subheading does not end a section; any other `## ` heading does. In a
+# feature brief, a `## Gate 1+2` heading (the S lane's combined approval,
+# ADR 0030) opens one section that counts for Gate 1 and Gate 2 at once,
+# ranked as Gate 1, with Gate 1's non-approving tokens.
 function Get-BriefState {
     param([string]$Text, [string]$Type)
     $state = @{ Start = 0; Rank = @{}; Gates = @{}; Rp = @{}; RpMin = 0 }
@@ -356,13 +359,22 @@ function Get-BriefState {
         $state.Gates[$g] = New-GateCounter
     }
     $cur = $null
+    $cur2 = $null
     $curKey = ''
     foreach ($l in ($Text -split "`n")) {
         if ($l.StartsWith('## ')) {
             $h = $l.TrimEnd()
             $cur = $null
+            $cur2 = $null
             $rank = 0
-            if ($h -cmatch '^## Gate Re-plan') {
+            if ($Type -ceq 'feature' -and $h -cmatch '^## Gate 1\+2([^0-9]|$)') {
+                $rank = $state.Rank['1']
+                $cur = $state.Gates['1']
+                $cur2 = $state.Gates['2']
+                $cur.Seen = $true
+                $cur2.Seen = $true
+                $curKey = 'feature:1'
+            } elseif ($h -cmatch '^## Gate Re-plan') {
                 # It marks where a brief starts even when the workflow has no
                 # Re-plan rule; its replies count only under a `- R<n>` heading.
                 if ($state.Rank.ContainsKey('R')) { $rank = $state.Rank['R'] }
@@ -390,11 +402,15 @@ function Get-BriefState {
         if ($l -cnotmatch '^[ \t]*Reply:') { continue }
         $tok = Get-ReplyToken $l
         if (-not $tok) { continue }
-        $cur.Replies = $cur.Replies + 1
-        if ((Get-DenyTokens $curKey) -ccontains $tok) {
-            $cur.Deny = $tok
-        } else {
-            $cur.Ok = $true
+        $isDeny = ((Get-DenyTokens $curKey) -ccontains $tok)
+        foreach ($c in @($cur, $cur2)) {
+            if ($null -eq $c) { continue }
+            $c.Replies = $c.Replies + 1
+            if ($isDeny) {
+                $c.Deny = $tok
+            } else {
+                $c.Ok = $true
+            }
         }
     }
     return $state
