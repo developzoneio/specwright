@@ -300,7 +300,14 @@ phase_hint() {
     local status="$1" folder="$2" tasks="$2/02-tasks.md" plan="$2/01-plan.md" hint
     case "${status}" in
         draft)
-            printf '%s' 'open gate: spec approval' ;;
+            # An outline written before approval is the S lane's combined
+            # spec and outline gate (ADR 0024); a fallen-back S spec keeps its
+            # draft outline under a different heading, so it never matches.
+            if has_outline "${plan}"; then
+                printf '%s' 'open gate: spec and plan approval'
+            else
+                printf '%s' 'open gate: spec approval'
+            fi ;;
         approved)
             if [[ -f "${tasks}" ]] || has_outline "${plan}"; then
                 printf '%s' 'open gate: plan approval'
