@@ -18,6 +18,9 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
 | Condition | State | Action |
 |---|---|---|
 | No `.specs/FEAT-<arg>/` dir | `not-found` | Start Phase 1 |
+| S lane (see below), status=`draft`, no `## Outline` in `01-plan.md` | `s-draft` | Start Phase 1S |
+| S lane, status=`draft`, `01-plan.md` has `## Outline` | `s-outline-drafted` | Present Face S of Gate 1 |
+| S lane, status=`approved`, `01-plan.md` has `## Outline`, no `02-tasks.md`, the last `## Gate 1+2` section of `gate-briefs.md` has an approving `Reply:` line | `s-approved` | Set status=`in-progress` (`00-spec.md`, `index.md`), start Phase 3b |
 | `00-spec.md` exists, status=`draft` | `draft` | Present spec for Gate 1 |
 | status=`approved`, no `02-tasks.md`, no `## Outline` in `01-plan.md`, no `## Impact analysis (sd-code-explorer)` in `03-decisions.md` | `approved` | Start Phase 2 |
 | status=`approved`, no `02-tasks.md`, no `## Outline` in `01-plan.md`, impact analysis present | `impact-mapped` | Start Phase 3a |
@@ -40,6 +43,13 @@ frontmatter first and is never resumed from its task markers.
 before the outline existed, never has it: the two outline rows never match it, and every other row
 reads exactly as it did. Such a spec at `plan-drafted` presents its plan for Gate 2 from
 `02-tasks.md` as before.
+
+**S lane** means: the `complexity` frontmatter of `00-spec.md` is `S` **and** `05-retro.md` has no
+`s-lane: fallback` line (ADR 0024). The three S rows are checked first, before the rows they refine;
+every other row keeps its condition. An M or L spec, and an S spec that is already `approved` or
+later, can match none of them, so they resolve exactly as before. `## Outline` is the exact
+heading: the `## Outline (S-lane draft)` section a fallen-back S spec keeps is not it, so a fallen-back
+spec resolves on the ordinary rows (`draft`, then `approved` -> Phase 2).
 
 ---
 
@@ -74,11 +84,15 @@ reads exactly as it did. Such a spec at `plan-drafted` presents its plan for Gat
 3. Spec-architect produces `.specs/FEAT-<arg>/00-spec.md` with: Why (business value), What (Given/When/Then), Success criteria, Out of scope, Open questions, Constitution check. Cross-references are not authored here - they go in the `linked_specs` frontmatter field via `/sd:spec link`.
 4. If a ticket was fetched, spec-architect also snapshots it (ticket content + related tickets + linked Confluence pages, per its Ticket snapshot protocol) to `.specs/FEAT-<arg>/04-artifacts/ticket/`.
 5. Register in `.specs/index.md` with status=`draft`.
+6. If the spec is on the S lane (see the state machine), continue with Phase 1S below instead of
+   presenting the ordinary Gate 1. The `GATE_BRIEF` block `create` returned is then not used.
 
 ### ⛔ Gate 1 - Spec approval
 
-STOP. The main thread writes the Gate 1 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the
-architect's `GATE_BRIEF` block, per **sd-gate-brief**, then shows it verbatim. Ask:
+STOP. This gate has two faces. Face S (below) is presented for an S spec whose outline stayed within
+the S limits; every other spec sees the ordinary spec approval first. The main thread writes the
+Gate 1 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block, per
+**sd-gate-brief**, then shows it verbatim. Ask:
 
 > Approve spec FEAT-<arg>? (yes / refine <feedback> / details / abort)
 
@@ -87,9 +101,64 @@ architect's `GATE_BRIEF` block, per **sd-gate-brief**, then shows it verbatim. A
 - `details` -> show the collapsed decisions per **sd-gate-brief**, then ask again.
 - `abort` -> set status=`archived`, exit.
 
+**Face S - spec and outline approval (S lane).** Presented instead of the ordinary question above
+when Phase 1S produced an outline within the S limits. The main thread writes the Face S brief to
+`.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block (`gate: s-lane`: spec and
+outline in one brief, task rows from the outline), per **sd-gate-brief**, then shows it verbatim.
+Ask:
+
+> Approve spec and outline for FEAT-<arg>? (<N> tasks, complexity S) (yes / refine <feedback> / details <target> / abort)
+
+- `yes` -> append the `Reply:` line to the section, then change the status with the Edit tool in two
+  steps: `approved`, then `in-progress`, each in `00-spec.md` and `index.md`. Two steps, because
+  `draft` -> `in-progress` is not a legal transition for spec-gate. Proceed to Phase 3b. One reply
+  approves the spec, the outline and every default, shown and collapsed.
+- `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Then run Phase 1S again, because the outline may no longer fit the spec; a breach falls back. The next pass is a new brief section.
+- `details <target>` -> print what the target names (`spec`, a task ID, `plan` or `risks`), then ask again.
+- `abort` -> set status=`archived`, exit.
+
+---
+
+## Phase 1S - S lane (complexity S only)
+
+Applies when the spec is on the S lane (see the state machine). It replaces Phase 2 and Phase 3a for
+this spec and ends at Face S of Gate 1 (ADR 0024). The S limits live in **sd-spec-templates**
+("S-lane thresholds"); this file never restates them. No model escalation rule applies: the rules
+of **sd-model-escalation** that read `complexity` fire on `L`, and this lane runs only for `S`.
+
+<!-- contract-lint: allow CL102 - the S-lane outline passes LANE instead of IMPACT because no impact map exists on this lane, per the S-lane outline section of agents/spec-architect.md -->
+1. Invoke `sd-spec-architect` with:
+   - `TASK = plan`
+   - `STEP = outline`
+   - `LANE = s`
+   - `SPEC = .specs/FEAT-<arg>/00-spec.md`
+2. The architect runs its own bounded discovery, writes `01-plan.md` (a `## Discovery` section and
+   the `## Outline` table) and measures the outline against the S limits. It returns one of:
+   - a normal report with a `GATE_BRIEF` block `gate: s-lane` -> present **Face S** of Gate 1.
+   - `STATUS = s-lane-breach` -> **fall back**, below.
+
+**Fall back to the full path.** The decision is the workflow's and asks the user nothing. The
+architect has already written its outline under `## Outline (S-lane draft)`, so no hook or state row
+mistakes it for a plan waiting for approval. In order:
+
+1. Append one line to `.specs/FEAT-<arg>/05-retro.md` (create the file if missing, never overwrite
+   existing content), with the architect's clauses joined by `; `:
+   `s-lane: fallback to full path - tasks 6 > 4; layers 2 > 1 (Application, Domain)`
+2. Present the **ordinary** Gate 1 from the architect's `GATE_BRIEF` block (`gate: spec`). The status
+   stays `draft`.
+3. The spec then runs the full path: Phase 2, Phase 3a (the architect rewrites `01-plan.md`, using
+   the kept draft outline as a starting point), Gate 2 on either face, Phase 3b. Nothing is kept
+   from the S lane except the retro line and the draft until Phase 3a rewrites it.
+
+The lane is one-way: the retro line keeps the spec off the S rows, so a `refine` at the ordinary
+Gate 1 never re-enters it.
+
 ---
 
 ## Phase 2 - Impact analysis
+
+Skipped on the S lane: an S spec within the S limits has no impact map, and its outline carries a
+`## Discovery` section in its place. A fallen-back S spec runs this phase as any spec does.
 
 0. **Model escalation check.** Apply rule `ESC-FEAT-02` of **sd-model-escalation** (read in
    Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
@@ -113,6 +182,8 @@ the outline - and decides any decompose - before a single full task block exists
 expands the approved outline into `02-tasks.md`. Phase 3b adds no gate.
 
 ### 3a. Outline
+
+Not run for an S spec on the S lane: Phase 1S wrote its outline and Face S of Gate 1 approved it.
 
 0. **Model escalation check.** Apply rule `ESC-FEAT-03` of **sd-model-escalation** (read in
    Phase 0). Trigger input: the `complexity` frontmatter field of `.specs/FEAT-<arg>/00-spec.md`.
@@ -193,8 +264,8 @@ split and accepting the escalated single plan.
 
 ### 3b. Expand (no gate)
 
-Runs once Gate 2 has approved the outline: status `in-progress`, `## Outline` in `01-plan.md`, no
-`02-tasks.md`.
+Runs once Gate 2 has approved the outline - or, on the S lane, Face S of Gate 1 has: status
+`in-progress`, `## Outline` in `01-plan.md`, no `02-tasks.md`.
 
 0. **Model escalation check.** Apply rule `ESC-FEAT-03b` of **sd-model-escalation**. Trigger
    input: whether Gate 2 was approved through `no-split` (the `Reply:` line of the last
@@ -203,7 +274,8 @@ Runs once Gate 2 has approved the outline: status `in-progress`, `## Outline` in
    - `TASK = plan`
    - `STEP = expand`
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
-   - `IMPACT = .specs/FEAT-<arg>/03-decisions.md`
+   - `IMPACT = .specs/FEAT-<arg>/03-decisions.md` (on the S lane no such file exists; the plan's
+     `## Discovery` section stands in for it)
 2. Spec-architect expands every outline row into a full task block in
    `.specs/FEAT-<arg>/02-tasks.md`, formatted per the **sd-atomic-task-format** skill (5 core
    fields plus `Pattern refs`/`Estimated complexity`/`Reversibility` where the skill's defaults say
@@ -232,7 +304,8 @@ For each unchecked task:
    **Invoke `sd-implementer`** (model: default, or as resolved above) with:
    - `TASK_DETAILS = <full task block>`
    - `SPEC_REF = .specs/FEAT-<arg>/00-spec.md`
-   - `IMPACT_REF = .specs/FEAT-<arg>/03-decisions.md`
+   - `IMPACT_REF = .specs/FEAT-<arg>/03-decisions.md` (omit it when that file does not exist, as on
+     the S lane; the task's `Pattern refs` already carry what the implementer needs)
    - `WORKFLOW_TYPE = feature`
 3. Implementer edits only files in `Files`. Writes a test if the witness test named in
    `Acceptance` (or a legacy `Test` field) does not yet exist.
@@ -402,6 +475,11 @@ Close-out does its bookkeeping silently and asks at most one question (step 4).
 - **Gate Complexity is a face of Gate 2, not a fourth gate.** It fires ONLY when the plan is over
   threshold; a spec under threshold sees the normal plan approval with zero added friction. This is
   why the workflow still has 3 hard gates - do not describe it as 4.
+- **Face S is a face of Gate 1, not a fourth gate.** On the S lane Gate 1 approves the spec and the
+  outline in one reply, and it discharges Gate 2 as well: its `## Gate 1+2` brief section is the
+  evidence of both. The count stays 3. An S spec that breaches the S limits falls back to the full
+  path automatically, with no user decision, and the retro line `s-lane: fallback to full path` is
+  its only trace; the full path is then unchanged.
 - **Gate Re-plan is a conditional gate, not a fourth always-on gate.** Like Gate Complexity, it
   fires ONLY on a specific trigger - a material divergence from the outline in Phase 3b, a
   plan-invalidating discovery in Phase 4, a plan-is-wrong BLOCK in Phase 5 or an uncovered
