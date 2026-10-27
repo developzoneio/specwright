@@ -63,11 +63,19 @@
 
     Preflight: before any sandbox is built, the harness checks the claude
     CLI (present, >= the minimum version), that some claude auth is
-    available (CLAUDE_CODE_OAUTH_TOKEN, ~/.claude/.credentials.json, or
-    ANTHROPIC_API_KEY - subscription auth needs no API key), and every
-    requires.txt command of the selected scenarios, and that no ancestor of
-    the sandbox root holds a `.claude/` (SW-73). A missing prerequisite
-    exits 2 with the dependency named, never as a failed assertion.
+    available (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY - subscription
+    auth needs no API key), and every requires.txt command of the selected
+    scenarios, and that no ancestor of the sandbox root holds a `.claude/`
+    (SW-73). A missing prerequisite exits 2 with the dependency named, never
+    as a failed assertion.
+
+    Credentials file (SW-106): ~/.claude/.credentials.json is never copied
+    into a fake home unless -CopyCredentials is passed. A copy forks a
+    single-use OAuth refresh token, so a sandbox run that refreshes it can
+    log out the real CLI (it did during SW-68). With the switch, the file is
+    copied in addition to any auth variable, and removed again from a fake
+    home that SD_E2E_KEEP or SD_E2E_TRANSCRIPT keeps. The authMode in
+    -ResultsFile names what the child claude was actually handed.
 
     Assertion type transcript-contains-section (SW-99) is the one assertion
     that reads the session transcript. It compares ARTIFACT text - the shown
@@ -76,7 +84,10 @@
     scenario that uses it keeps its session (no --no-session-persistence)
     whatever SD_E2E_TRANSCRIPT says, and a missing transcript fails it.
 
-    -SelfTest re-runs the negative scenarios (03, 04) once per guard
+    -SelfTest first checks the auth plan offline (SW-106): an auth variable
+    means no copy, no variable and no switch means exit 2, the switch means a
+    copy. It needs no claude CLI and no auth, and a failure stops the
+    self-test before any paid run. It then re-runs the negative scenarios (03, 04) once per guard
     mutation of spec-gate's installed hook files - an always-allow stub, and
     the real hook with its deny JSON in the pre-SW-80 shape (SW-82) - and
     asserts they now FAIL, proving the harness would catch a regression that
@@ -106,6 +117,7 @@
 param(
     [string]$Case,
     [switch]$SelfTest,
+    [switch]$CopyCredentials,
     [int]$TimeoutSeconds = 600,
     [string]$ResultsFile
 )
@@ -123,6 +135,7 @@ $script:fail = 0
 $script:couldNotRun = 0
 $script:claudeVersion = $null
 $script:authMode = $null
+$script:authPlan = $null
 $script:scenarioResults = [System.Collections.Generic.List[object]]::new()
 
 function Write-Ok   { param([string]$m) Write-Host "  [OK]   $m"; $script:pass++ }
@@ -154,12 +167,55 @@ function Get-CredentialsPath {
     return (Join-Path $HOME '.claude' '.credentials.json')
 }
 
-function Get-AuthMode {
-    # First match wins; the order is the order the README recommends.
-    if (Test-EnvSet 'CLAUDE_CODE_OAUTH_TOKEN') { return 'subscription (CLAUDE_CODE_OAUTH_TOKEN)' }
-    if (Test-Path -LiteralPath (Get-CredentialsPath)) { return 'subscription (~/.claude/.credentials.json)' }
-    if (Test-EnvSet 'ANTHROPIC_API_KEY') { return 'API key (ANTHROPIC_API_KEY)' }
-    return $null
+function Get-AuthPlan {
+    # SW-106: what the child claude will be handed. Reads only whether the
+    # variables are set and whether the credentials file exists - never a
+    # value, never the file's content. Problem is $null, 'no-auth' or
+    # 'file-missing'. Label names the credentials the child receives, so with
+    # both variables set it says the key wins (claude -p prefers it), and it
+    # never claims a file it did not copy.
+    param([bool]$CopyRequested, [string]$FilePath)
+    $hasOAuth = Test-EnvSet 'CLAUDE_CODE_OAUTH_TOKEN'
+    $hasKey = Test-EnvSet 'ANTHROPIC_API_KEY'
+    $fileExists = Test-Path -LiteralPath $FilePath
+    $copyFile = $CopyRequested -and $fileExists
+
+    $label = $null
+    if ($hasKey -and $hasOAuth) {
+        $label = 'API key (ANTHROPIC_API_KEY; CLAUDE_CODE_OAUTH_TOKEN also passed, claude prefers the key)'
+    } elseif ($hasKey) {
+        $label = 'API key (ANTHROPIC_API_KEY)'
+    } elseif ($hasOAuth) {
+        $label = 'subscription (CLAUDE_CODE_OAUTH_TOKEN)'
+    }
+    if ($copyFile) {
+        $suffix = 'copied ~/.claude/.credentials.json (content not inspected)'
+        $label = $(if ($label) { "$label + $suffix" } else { $suffix })
+    }
+
+    $problem = $null
+    if (-not $label) {
+        $problem = $(if ($CopyRequested) { 'file-missing' } else { 'no-auth' })
+    }
+    return [pscustomobject]@{
+        Label            = $label
+        CopyFile         = $copyFile
+        Problem          = $problem
+        KeyShadowsOthers = ($hasKey -and ($hasOAuth -or $copyFile))
+        CopyIgnored      = ($CopyRequested -and -not $fileExists -and $null -eq $problem)
+    }
+}
+
+function Get-NoAuthMessage {
+    param($Plan)
+    if ($Plan.Problem -eq 'file-missing') {
+        return ('-CopyCredentials was passed but ~/.claude/.credentials.json was not found, and no auth variable is set. ' +
+            'Set CLAUDE_CODE_OAUTH_TOKEN (subscription - run `claude setup-token`) or ANTHROPIC_API_KEY (API billing).')
+    }
+    return ('no claude auth found. Set CLAUDE_CODE_OAUTH_TOKEN (subscription - run `claude setup-token`) ' +
+        'or ANTHROPIC_API_KEY (API billing). run-e2e.ps1 no longer copies ~/.claude/.credentials.json by default, ' +
+        'because that can rotate the refresh token and log out your real CLI (SW-68). ' +
+        'Pass -CopyCredentials to opt in.')
 }
 
 function Get-ScenarioRequirements {
@@ -189,16 +245,17 @@ function Assert-Prerequisites {
     }
     Write-Host "[INFO] claude CLI: $($script:claudeVersion)"
 
-    $script:authMode = Get-AuthMode
-    $authMode = $script:authMode
-    if ($null -eq $authMode) {
-        Exit-MissingPrereq ('no claude auth found. Provide one of: ' +
-            'CLAUDE_CODE_OAUTH_TOKEN (subscription - run `claude setup-token`), ' +
-            'a claude.ai login in ~/.claude/.credentials.json (subscription - run `claude` and /login), ' +
-            'or ANTHROPIC_API_KEY (API billing).')
+    $plan = Get-AuthPlan -CopyRequested $CopyCredentials.IsPresent -FilePath (Get-CredentialsPath)
+    $script:authPlan = $plan
+    $script:authMode = $plan.Label
+    if ($plan.Problem) {
+        Exit-MissingPrereq (Get-NoAuthMessage -Plan $plan)
     }
-    Write-Host "[INFO] auth: $authMode"
-    if ((Test-EnvSet 'ANTHROPIC_API_KEY') -and $authMode -like 'subscription*') {
+    Write-Host "[INFO] auth: $($plan.Label)"
+    if ($plan.CopyIgnored) {
+        Write-Host '[WARN] -CopyCredentials was passed but ~/.claude/.credentials.json was not found; nothing is copied.'
+    }
+    if ($plan.KeyShadowsOthers) {
         Write-Host '[WARN] ANTHROPIC_API_KEY is also set; claude -p prefers it, so this run bills the API, not the subscription. Unset it to run on the subscription.'
     }
 
@@ -272,21 +329,89 @@ function New-FakeHome {
         throw "engine install into fake home failed (exit $LASTEXITCODE): $fakeHome"
     }
 
-    # `claude -p` needs org/identity context from .credentials.json even when
-    # billing resolves through ANTHROPIC_API_KEY - an empty HOME alone is not
-    # enough (verified directly: without it, every headless run fails with
-    # "Not logged in" despite a valid API key). Copied fresh into the
-    # throwaway fake home per run and discarded on cleanup; never written
-    # anywhere persistent. When the file is absent, auth comes from an
-    # environment variable instead - the preflight below has already
-    # established that one is present (see Get-AuthMode).
-    $realCreds = Get-CredentialsPath
-    if (Test-Path -LiteralPath $realCreds) {
-        New-Item -ItemType Directory -Path $basePath -Force | Out-Null
-        Copy-Item -LiteralPath $realCreds -Destination (Join-Path $basePath '.credentials.json') -Force
-    }
+    # SW-106: auth comes from an environment variable (CLAUDE_CODE_OAUTH_TOKEN
+    # needs no file; the probes ran that way). The real credentials file is
+    # copied only on -CopyCredentials, because a copy forks the single-use
+    # refresh token and can log out the real CLI. An earlier local run
+    # recorded "Not logged in" for ANTHROPIC_API_KEY with no file at all;
+    # that case is unverified (README "Still unverified").
+    Copy-PlannedCredentials -Plan $script:authPlan -SourcePath (Get-CredentialsPath) -BasePath $basePath | Out-Null
 
     return $fakeHome
+}
+
+function Copy-PlannedCredentials {
+    # Returns $true when the file was copied. A $null plan (not preflighted)
+    # copies nothing.
+    param($Plan, [string]$SourcePath, [string]$BasePath)
+    if (($null -eq $Plan) -or -not $Plan.CopyFile) { return $false }
+    New-Item -ItemType Directory -Path $BasePath -Force | Out-Null
+    Copy-Item -LiteralPath $SourcePath -Destination (Join-Path $BasePath '.credentials.json') -Force
+    return $true
+}
+
+function Invoke-AuthSelfCheck {
+    # -SelfTest, offline (SW-106): the auth plan and the copy step against a
+    # fake credentials file in a temp dir. Auth variables are set to a dummy
+    # marker for each case and restored afterwards; no value is printed.
+    $names = @('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY')
+    $saved = @{}
+    foreach ($n in $names) { $saved[$n] = [Environment]::GetEnvironmentVariable($n) }
+    $root = New-EmptyTempDir -Prefix 'sd-e2e-auth-selftest'
+    $allOk = $true
+    try {
+        $creds = Join-Path $root 'creds.json'
+        Set-Content -LiteralPath $creds -Value 'selftest-not-a-credential'
+        $absent = Join-Path $root 'absent.json'
+        $oauthLabel = 'subscription (CLAUDE_CODE_OAUTH_TOKEN)'
+        $keyLabel = 'API key (ANTHROPIC_API_KEY)'
+        $bothLabel = 'API key (ANTHROPIC_API_KEY; CLAUDE_CODE_OAUTH_TOKEN also passed, claude prefers the key)'
+        $copyOnly = 'copied ~/.claude/.credentials.json (content not inspected)'
+        $cases = @(
+            @{ Name = 'env token, file present, no switch -> no copy'; OAuth = 'x'; Key = $null; Switch = $false
+               Path = $creds; Copy = $false; Problem = $null; Label = $oauthLabel }
+            @{ Name = 'env key, file present, no switch -> no copy'; OAuth = $null; Key = 'x'; Switch = $false
+               Path = $creds; Copy = $false; Problem = $null; Label = $keyLabel }
+            @{ Name = 'both variables -> no copy, label says the key wins'; OAuth = 'x'; Key = 'x'; Switch = $false
+               Path = $creds; Copy = $false; Problem = $null; Label = $bothLabel }
+            @{ Name = 'empty variables count as absent -> exit 2'; OAuth = ''; Key = ''; Switch = $false
+               Path = $creds; Copy = $false; Problem = 'no-auth'; Label = $null }
+            @{ Name = 'no variable, file present, no switch -> exit 2, no copy'; OAuth = $null; Key = $null
+               Switch = $false; Path = $creds; Copy = $false; Problem = 'no-auth'; Label = $null }
+            @{ Name = 'no variable, switch, file present -> copy'; OAuth = $null; Key = $null; Switch = $true
+               Path = $creds; Copy = $true; Problem = $null; Label = $copyOnly }
+            @{ Name = 'no variable, switch, file absent -> exit 2'; OAuth = $null; Key = $null; Switch = $true
+               Path = $absent; Copy = $false; Problem = 'file-missing'; Label = $null }
+            @{ Name = 'env token, switch, file present -> copy, label names both'; OAuth = 'x'; Key = $null
+               Switch = $true; Path = $creds; Copy = $true; Problem = $null; Label = "$oauthLabel + $copyOnly" }
+            @{ Name = 'env token, switch, file absent -> no copy, no exit'; OAuth = 'x'; Key = $null
+               Switch = $true; Path = $absent; Copy = $false; Problem = $null; Label = $oauthLabel }
+        )
+        $i = 0
+        foreach ($c in $cases) {
+            $i++
+            [Environment]::SetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN', $c.OAuth)
+            [Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', $c.Key)
+            $plan = Get-AuthPlan -CopyRequested $c.Switch -FilePath $c.Path
+            $base = Join-Path $root "home-$i" '.claude'
+            $copied = Copy-PlannedCredentials -Plan $plan -SourcePath $c.Path -BasePath $base
+            $onDisk = Test-Path -LiteralPath (Join-Path $base '.credentials.json')
+            $message = $(if ($plan.Problem) { Get-NoAuthMessage -Plan $plan } else { '' })
+            $messageOk = $true
+            if ($c.Problem -eq 'no-auth') {
+                $messageOk = ($message -match 'CLAUDE_CODE_OAUTH_TOKEN') -and ($message -match '-CopyCredentials')
+            } elseif ($c.Problem -eq 'file-missing') {
+                $messageOk = $message -match 'was not found'
+            }
+            $ok = ($plan.CopyFile -eq $c.Copy) -and ($copied -eq $c.Copy) -and ($onDisk -eq $c.Copy) -and
+                ($plan.Problem -eq $c.Problem) -and ($plan.Label -eq $c.Label) -and $messageOk
+            if ($ok) { Write-Ok "self-test auth: $($c.Name)" } else { Write-Bad "self-test auth: $($c.Name)"; $allOk = $false }
+        }
+    } finally {
+        foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $saved[$n]) }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $allOk
 }
 
 function Copy-TreeContents {
@@ -1111,6 +1236,12 @@ function Invoke-Scenario {
             if ($ws) { Remove-Item -LiteralPath $ws -Recurse -Force -ErrorAction SilentlyContinue }
             if ($fakeHome) { Remove-Item -LiteralPath $fakeHome -Recurse -Force -ErrorAction SilentlyContinue }
         } elseif ($ws) {
+            # SW-106: a kept fake home must not hold the copy of the real
+            # credentials file. Only a file this harness copied is removed.
+            if ($fakeHome -and $script:authPlan -and $script:authPlan.CopyFile) {
+                Remove-Item -LiteralPath (Join-Path $fakeHome '.claude' '.credentials.json') -Force `
+                    -ErrorAction SilentlyContinue
+            }
             Write-Info "kept workspace: $ws"
             Write-Info "kept fakeHome : $fakeHome"
             if ($env:SD_E2E_TRANSCRIPT -and $fakeHome) {
@@ -1180,6 +1311,19 @@ if ($SelfTest) {
         }
     }
     $selectedDirs = @($scenarioDirs | ForEach-Object { $_.FullName })
+}
+
+# SW-106: offline, so it runs before the preflight and needs no claude CLI or
+# auth. A failure stops the self-test before any paid run.
+$authSelfOk = $true
+if ($SelfTest) {
+    Write-Host '=== e2e self-test: the auth plan must copy no credentials unless asked, offline ==='
+    $authSelfOk = Invoke-AuthSelfCheck
+    if ($authSelfOk -eq $false) {
+        Write-ResultsFile -Mode 'selftest' -Passed $false
+        exit 1
+    }
+    Write-Host ''
 }
 
 Assert-Prerequisites -ScenarioDirs $selectedDirs
