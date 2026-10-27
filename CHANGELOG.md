@@ -129,6 +129,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`run-e2e.ps1` no longer copies your CLI credentials by default (SW-106)** - it copied the real
+  `~/.claude/.credentials.json` into every fake home whenever the file existed. A copy forks a
+  single-use OAuth refresh token, so a sandbox run that refreshed it could log out the real CLI
+  (it did during SW-68), which is why SW-93 shipped without a live measurement. The harness now
+  mirrors the probes: auth comes from `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`, and the
+  file is copied only with the new `-CopyCredentials` switch, then removed from a fake home that
+  `SD_E2E_KEEP` or `SD_E2E_TRANSCRIPT` keeps. With no variable and no switch the preflight exits 2
+  and says so. `authMode` in `-ResultsFile` now names the credential the child `claude` was
+  handed (it used to say `subscription (~/.claude/.credentials.json)` for a file holding only MCP
+  tokens), and says the key wins when both variables are set. `-SelfTest` checks the plan offline
+  first: a variable means no copy, nothing set means exit 2, the switch means a copy. The nightly
+  is unchanged, since it authenticates from variables only. `ANTHROPIC_API_KEY` alone, with no
+  file, is still unverified.
 - **`sd-gate-brief` no longer offers `details` at Gate Re-plan (SW-104)** - the skill now says
   only Gates 1, 2 and 3 offer `details`, matching ADR 0018 and `contractLint.gateBriefs`.
 

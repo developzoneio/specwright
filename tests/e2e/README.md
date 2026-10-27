@@ -65,8 +65,9 @@ dependency; it never shows up as a failed scenario assertion.
   parity harnesses. See [CONTRIBUTING.md "Test suites and
   prerequisites"](../../CONTRIBUTING.md#test-suites-and-prerequisites) for why.
 - `claude` CLI on `PATH`, **v2.1.196 or later**.
-- **One** way to authenticate `claude`. **No API key is needed**: a Claude subscription works. See
-  [Auth](#auth) below.
+- **One** way to authenticate `claude`, as an environment variable: `CLAUDE_CODE_OAUTH_TOKEN` or
+  `ANTHROPIC_API_KEY`. **No API key is needed**: a Claude subscription works. See [Auth](#auth)
+  below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
   `02-feature-happy`, `06`-`10`, `12`).
 - Nothing extra for hooks on Linux or macOS. The fixture's committed `settings.json` calls
@@ -78,7 +79,13 @@ dependency; it never shows up as a failed scenario assertion.
 
 ## Running it
 
+Every example below needs an auth variable in the shell first. The runner exits `2` without one,
+and it does not fall back to your `~/.claude/.credentials.json` (see [Auth](#auth)).
+
 ```powershell
+# Once per shell (token from `claude setup-token`; never paste it into a command line you log)
+$env:CLAUDE_CODE_OAUTH_TOKEN = '<from claude setup-token>'
+
 # Full suite
 .\tests\e2e\run-e2e.ps1
 
@@ -109,9 +116,11 @@ $env:SD_E2E_TRANSCRIPT = '1'; .\tests\e2e\run-e2e.ps1 -Case 02-feature-happy
 
 SW-27's acceptance bar is "green 3 times consecutively". To measure it, use one machine and one
 `claude` version, and run the full suite and then `-SelfTest` three times in a row, each with its
-own `-ResultsFile`:
+own `-ResultsFile`. Authenticate from a variable, so no run touches your real login (SW-106), and
+check that each `authMode` in the results names that variable:
 
 ```powershell
+$env:CLAUDE_CODE_OAUTH_TOKEN = '<from claude setup-token>'
 $out = 'C:\sd-e2e-results'
 foreach ($i in 1..3) {
     .\tests\e2e\run-e2e.ps1           -ResultsFile "$out\run$i-suite.json"
@@ -181,19 +190,30 @@ correctly refuses to read `~/.claude/templates/sd/` even though `HOME` points th
 
 ### Auth
 
-Auth is the one piece that can't be fully sandboxed. The runner accepts any of these, checks them
-in this order, and prints the mode it picked:
+The runner takes its auth from an environment variable and hands it to the child `claude`. It
+prints the credential it handed over, and `authMode` in `-ResultsFile` records the same label
+(SW-106):
 
-| Mode | How to get it | Billing | Where it fits |
-|---|---|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` (one-time, long-lived) | Claude subscription | Local on any OS; CI as a repo secret |
-| `~/.claude/.credentials.json` | An ordinary `claude` login (`/login`) | Claude subscription | Local on Windows and Linux |
-| `ANTHROPIC_API_KEY` | Anthropic Console | API, per token | CI (the original nightly setup) |
+| Mode | How to get it | Billing | `authMode` | Where it fits |
+|---|---|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` (one-time, long-lived) | Claude subscription | `subscription (CLAUDE_CODE_OAUTH_TOKEN)` | Local on any OS; CI as a repo secret |
+| `ANTHROPIC_API_KEY` | Anthropic Console | API, per token | `API key (ANTHROPIC_API_KEY)` | CI (the original nightly setup) |
+| Both set | - | API (the key wins) | `API key (ANTHROPIC_API_KEY; CLAUDE_CODE_OAUTH_TOKEN also passed, claude prefers the key)` | The nightly, when both secrets exist |
+| `-CopyCredentials` | An ordinary `claude` login (`/login`) | Claude subscription | the above plus ` + copied ~/.claude/.credentials.json (content not inspected)` | Opt-in only; see below |
 
-- **Credentials file.** `run-e2e.ps1` copies the real `~/.claude/.credentials.json` into each fake
-  home at setup time and deletes it on cleanup. It is never written anywhere persistent and never
-  committed. On macOS the login is kept in the Keychain rather than in this file, so use
-  `claude setup-token` there instead.
+- **Credentials file: opt-in, off by default (SW-106).** `run-e2e.ps1` does **not** read or copy
+  `~/.claude/.credentials.json` unless you pass `-CopyCredentials`, the same switch
+  `probe-model-override.ps1` and `probe-hook-events.ps1` have. A copy forks a single-use OAuth
+  refresh token: when the access token has expired, the sandbox run refreshes it and the real CLI
+  is logged out. That happened during SW-68, and it is why SW-93 shipped without a live
+  measurement. With the switch the file is copied in addition to any auth variable, into the
+  throwaway fake home only, and removed again from a fake home that `SD_E2E_KEEP` or
+  `SD_E2E_TRANSCRIPT` keeps. The label never claims the file unless it was copied, because the
+  file's presence says nothing about what it holds: SW-88 recorded `subscription
+  (~/.claude/.credentials.json)` for a file that held only MCP tokens. On macOS the login is kept
+  in the Keychain rather than in this file, so use `claude setup-token` there.
+- **No variable and no switch** exits `2` before any sandbox is built, with a message naming
+  `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` and `-CopyCredentials`.
 - **API key precedence.** `claude -p` prefers `ANTHROPIC_API_KEY` over a subscription credential.
   If both are present, the runner warns that the run will bill the API. Unset the key to run on the
   subscription.
@@ -211,7 +231,8 @@ in this order, and prints the mode it picked:
   which reads the value from a prompt and so avoids stray quotes or newlines.
 - **Still unverified:** `ANTHROPIC_API_KEY` alone, with no `.credentials.json`. An earlier local
   run recorded `"Not logged in"` in that configuration, and it has not been re-checked since CI
-  moved to the OAuth token.
+  moved to the OAuth token. Since SW-106 that is the configuration an API-key-only run has by
+  default, so if it fails that way, pass `-CopyCredentials` or use `CLAUDE_CODE_OAUTH_TOKEN`.
 
 ### Model-override probe (manual)
 
@@ -424,6 +445,22 @@ the check costs nothing:
 | `no-sections` | the brief has no `## Gate` section | fail |
 
 `write-only` is the SW-88 / SW-89 F1 pattern. If any case behaves otherwise, `-SelfTest` exits 1.
+
+First of all, before the preflight, `-SelfTest` checks the auth plan offline (SW-106). It needs no
+`claude` CLI and no auth, and a failure exits 1 before any paid run. Each case sets the two auth
+variables to a dummy marker (the real values are saved and restored, never printed), points the
+plan at a fake credentials file in a scratch dir, and runs the real plan and copy functions:
+
+| Case | Must |
+|---|---|
+| a variable is set, file present, no switch | copy nothing |
+| both variables | copy nothing, and the label says the key wins |
+| empty variables (an absent CI secret) | count as absent, so exit 2 |
+| nothing set, file present, no switch | exit 2 naming `-CopyCredentials`, copy nothing |
+| nothing set, switch, file present | copy the file |
+| nothing set, switch, file absent | exit 2 saying the file was not found |
+| a variable and the switch, file present | copy it, and the label names both |
+| a variable and the switch, file absent | copy nothing, keep running |
 
 `malformed-deny` is the regression SW-80 fixed, and the reason `03` and `04` grant the edit. Under
 the old no-grant posture the mode refused the edit anyway, and both scenarios stayed green. The
