@@ -141,7 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens), and says the key wins when both variables are set. `-SelfTest` checks the plan offline
   first: a variable means no copy, nothing set means exit 2, the switch means a copy. The nightly
   is unchanged, since it authenticates from variables only. `ANTHROPIC_API_KEY` alone, with no
-  file, is still unverified.
+  file, is still unverified. The run this unblocks is recorded in
+  `docs/spikes/SW-93-lean-format-measured.md`: plan + tasks for the SW-88 medium scenario are 111
+  lines against SW-88's 401, so SW-93's 50% criterion is met (n = 2, one complete run).
 - **`sd-gate-brief` no longer offers `details` at Gate Re-plan (SW-104)** - the skill now says
   only Gates 1, 2 and 3 offer `details`, matching ADR 0018 and `contractLint.gateBriefs`.
 
