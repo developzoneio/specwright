@@ -438,7 +438,7 @@ case "${spec_type}" in
 
             # No apostrophe: PowerShell 5.1's ConvertTo-Json would escape it as
             # ' and the twins' stdout would no longer be byte-identical.
-            feature_note=" A /sd:feature gate is evidenced by its section in gate-briefs.md and the reply recorded on its Reply: line; if the user already answered that gate in this conversation, append that answer verbatim as the Reply: line instead of asking again."
+            feature_note=" A /sd:feature gate is evidenced by its section in gate-briefs.md and the reply recorded on its Reply: line; if the user already answered that gate in this conversation, append that answer verbatim as the Reply: line with the Edit tool instead of asking again."
         fi
         ;;
     bug)
