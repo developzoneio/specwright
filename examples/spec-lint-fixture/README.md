@@ -103,6 +103,7 @@ can be traced to an intentional seed rather than an accident.
 | `PORT-BROKEN-016` | `SL066` (T06) | BLOCK | `Licensed deviations: D99` - `D99` is not in the Deviation table |
 | `FEAT-BROKEN-017` | `SL060` (T01) | WARN | `Files` entry marked `(new)`, no `Pattern refs` field |
 | `FEAT-BROKEN-018` | `SL068` (T02) | BLOCK | `Files` adds `src/infrastructure/retry-after.ts` to its outline row; no `Revised-by`, no `## Revisions` |
+| `FEAT-BROKEN-019` | `SL069` (T02) | BLOCK | `Covers: AC-2`, no `Test` field, and `Acceptance` names no path; T01 names its test and stays silent |
 | _(tree-wide)_ | `SL032` | BLOCK | `BUG-GHOST-006` row in `index.md` has no folder |
 
 `FEAT-BROKEN-011` is the one spec that seeds two rules on purpose. An illegal `status` cannot
@@ -133,11 +134,13 @@ of the rules, which is precisely the drift that SW-1 and SW-3 exist to prevent. 
 trade-off is decided, this fixture makes the acceptance criterion **reproducible**, not
 **enforced**.
 
-**Rule coverage is partial: 33 of the 44 rules are seeded.** `SL061`-`SL066` (port task-block) are
+**Rule coverage is partial: 34 of the 46 rules are seeded.** `SL061`-`SL066` (port task-block) are
 seeded directly in this fixture (`PORT-CLEAN-004` / `PORT-BROKEN-016` above), and `SL060` (the
 narrowed lean-task-format rule, SW-93) by `FEAT-CLEAN-005` / `FEAT-BROKEN-017`. `SL068` (outline
 agreement, SW-105) is seeded by `FEAT-BROKEN-018`, with `FEAT-BROKEN-014` (no outline) and
-`FEAT-BROKEN-017` (an outline its block agrees with) as its negatives. `SL067` (task
+`FEAT-BROKEN-017` (an outline its block agrees with) as its negatives. `SL069` (witness test,
+SW-107) is seeded by `FEAT-BROKEN-019`, with `FEAT-CLEAN-005` and `FEAT-BROKEN-017` (a covering
+task that names its test) and `FEAT-BROKEN-014` as its negatives. `SL067` (task
 check-off marker), the `SL07x` revision-log band and the
 `SL08x` port-fidelity band are exercised by their own fixtures instead - see
 `tests/task-format/fixtures/checkoff-*.md` for `SL067`, `tests/outline-agreement/fixtures/` for

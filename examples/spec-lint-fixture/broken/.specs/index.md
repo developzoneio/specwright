@@ -22,3 +22,4 @@ Active specs (auto-updated by /sd:spec status transitions):
 | PORT-BROKEN-016 | port | in-progress | 2026-07-20 | Port cart-totals validation and discount rules to checkout (broken) |
 | FEAT-BROKEN-017 | feature | in-progress | 2026-07-26 | Add a rate-limit header to webhook responses (broken) |
 | FEAT-BROKEN-018 | feature | in-progress | 2026-07-27 | Add a retry-after header to webhook responses (broken) |
+| FEAT-BROKEN-019 | feature | in-progress | 2026-07-28 | Log a webhook delivery failure with its status code (broken) |

@@ -33,6 +33,7 @@ artifact only matters to the hook at the `in-progress -> done` transition.
 3. Read from disk (commands cannot load skills via frontmatter):
    - `~/.claude/skills/sd/sd-severity-taxonomy/SKILL.md`
    - `~/.claude/skills/sd/sd-evidence-citation/SKILL.md`
+   - `~/.claude/skills/sd/sd-atomic-task-format/SKILL.md` (the "Witness test" section)
 
 ## Checks
 
@@ -49,7 +50,7 @@ rules apply when the corresponding section exists in `00-spec.md`.
 | VF011 | spec has `AC-<n>:` criteria | Every AC ID is listed in >=1 task's `Covers` | BLOCK |
 | VF012 | tasks have `Covers` | Every ID referenced in a `Covers` exists in `00-spec.md` | BLOCK |
 | VF013 | feature specs | `## Success criteria` checkboxes carry `AC-<n>:` prefixes | WARN |
-| VF020 | all | Every task whose `Covers` != none has a witness test - a `Test` field, or else a path-like token in `Acceptance` - that is not `none`/empty | BLOCK |
+| VF020 | all | Every task whose `Covers` != none has a witness test, as defined by the "Witness test" section of `sd-atomic-task-format` | BLOCK |
 | VF021 | all | Every file path named by the witness test exists (use Glob; a witness naming a suite/pattern instead of a path is checked by VF022 only) | BLOCK |
 | VF022 | all | `commands.test` from project-config runs and exits green | BLOCK |
 | VF023 | `commands.test` empty/null | Cannot run tests - report and continue | WARN |
@@ -62,10 +63,9 @@ Parsing shapes (exact):
 - Covers: task lines matching `^- \*\*Covers\*\*: (.+)$` in `02-tasks.md`; split on commas;
   `none` means no IDs. A task block with no `Covers` line is treated as `Covers: none`
   (legacy compatibility).
-- Witness test files: from each task's legacy `- **Test**: ...` value if present, else from its
-  `- **Acceptance**: ...` value, extract tokens that look like relative paths (contain `/` or a
-  file extension); check each with Glob. A task with neither a `Test` field nor a path-like token
-  in `Acceptance` has no witness test.
+- Witness test files: whether a task has a witness is defined once, by the "Witness test" section
+  of `sd-atomic-task-format`. For `VF021`, take each path-like token that definition finds (in the
+  legacy `Test` value, else in `Acceptance`) and check it with Glob.
 
 VF022 execution: run `commands.test` via Bash from the project root. Capture the exit code.
 Do not guess a test command when `commands.test` is empty - that is VF023 (stack-agnostic

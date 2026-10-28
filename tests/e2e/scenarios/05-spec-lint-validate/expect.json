@@ -28,5 +28,10 @@
   { "type": "output-contains", "value": "SL068" },
   { "type": "output-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-018(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-018)" },
   { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-014(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-014)" },
-  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-017(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-017)" }
+  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-017(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-017)" },
+  { "type": "output-contains", "value": "SL069" },
+  { "type": "output-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-019(?:(?!\n###).)*?SL069|SL069(?:(?!\n###).)*?FEAT-BROKEN-019)" },
+  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-014(?:(?!\n###).)*?SL069|SL069(?:(?!\n###).)*?FEAT-BROKEN-014)" },
+  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-017(?:(?!\n###).)*?SL069|SL069(?:(?!\n###).)*?FEAT-BROKEN-017)" },
+  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-018(?:(?!\n###).)*?SL069|SL069(?:(?!\n###).)*?FEAT-BROKEN-018)" }
 ]

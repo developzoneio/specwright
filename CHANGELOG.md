@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`SL069`: a covering task needs a witness test at plan time (SW-107)** - `/sd:spec validate`
+  now flags a task block whose `Covers` is not `none` and that has neither a legacy `Test` value nor
+  a path-like token in `Acceptance`, instead of leaving it for `/sd:verify` to fail in Phase 6. One
+  SW-105 round-1 run failed `VF020` exactly this way.
+  - **One definition:** the witness test is defined once, in a new "Witness test" section of
+    `sd-atomic-task-format`. `SL069` and `VF020` both point at it; the copy in `verify.md` is now a
+    pointer, and `verify.md` Phase 0 reads that section. `VF020`/`VF021` check what they checked.
+  - **BLOCK, not WARN:** `VF020` is BLOCK on the same condition, so `SL069` adds no new failure, it
+    moves one earlier. No spec predating the lean format fires it: a legacy block names its witness
+    in `Test`. It takes the last ID of the `SL060`-`SL069` band.
+  - **Architect self-check:** `sd-spec-architect` `STEP = expand` checks the blocks it is about to
+    write and names the test in `Acceptance`; a criterion with no test in the outline goes through
+    the existing `needs-input` / Gate Re-plan path. No new gate and no new step for the user.
+  - **Fixtures:** `legacy-test-field.md` and `covers-none-no-witness.md` join `lean-test-in-acceptance.md`
+    (pass) and `lean-no-test.md` (fail) in `tests/task-format/fixtures/`. Scenario `05` seeds
+    `FEAT-BROKEN-019` and asserts `SL069` on it and not on `FEAT-BROKEN-014`, `-017` or `-018`.
+  - **Example fix:** `examples/lean-task-format/FEAT-todo-priority` T03 and T06 covered criteria and
+    named no witness, so `VF020` would have failed them; both now name one, with the file still 66 lines.
 - **SW-92 follow-ups (SW-105)** - the outline-first plan's five open items, all closed:
   - **Phase 6 re-plan path:** `/sd:verify` finding an uncovered criterion no longer sends
     `/sd:feature` "back to Phase 3". It enters Gate Re-plan with a new `Phase: verify` value; the
