@@ -284,6 +284,24 @@ the runner passes them as `--allowedTools`. `02-feature-happy`, `06`-`08` grant 
 no tests and grant only the three write tools. A `Bash` call outside the grant, such as
 `echo x > file`, is refused.
 
+**`npm test` through either shell tool (SW-105).** On Windows a session may run the test command
+through the PowerShell tool instead of Bash. A `Bash(...)` grant does not cover it, so the call is
+refused and the session stops to ask. The SW-93 M runs hit this twice, and in one the next gate
+reply went to that question. `02` therefore also grants `Bash(npm run test:*)`, the `PowerShell`
+forms of `npm test` and `npm run test` (bare and with arguments), and the two PowerShell pipe
+stages `Select-Object` and `Select-String`. By the permissions docs, a Bash rule already matches
+`npm test 2>&1` and `npm test -- x`, and checks each part of a pipe or `&&` separately, with `tail`
+and `cd` in the built-in read-only set. The docs do not say the same of PowerShell, hence the two
+stage rules. No rule grants a writer verb (`tee`, `Set-Content`, `Out-File`, `sed -i`,
+`node -e`, `sh -c`), and every part of a compound command must be allowed, so
+`npm test; Set-Content .specs/index.md x` is refused by the mode. A redirect after `npm test` is
+the part no grant stops: the CLI checks the target against Edit rules, and Edit is granted. That
+case rests on spec-gate's `shell-write` rule, which reads the command text and so is a heuristic
+(see gap 2 below). `tests/hooks/fixtures/spec-gate/` holds it for both tools
+(`block-bash-npm-test-redirect-protected`, `block-powershell-npm-test-redirect-protected`) and
+the two pipes that must stay allowed. `06`-`08` carry the same `Bash`-only grant and the same
+exposure on Windows; they were not widened here, because this change was verified on `02` only.
+
 **A well-formed hook deny wins over every posture.** Verified 2026-09-28, `claude` 2.1.283, with
 `probe-permission-posture.ps1` (a minimal always-deny `PreToolUse` hook, no spec-gate logic, that
 denies any call touching one file). The `dontAsk` rows ran on Linux, the `acceptEdits` and skip
@@ -497,7 +515,7 @@ and exits 1.
 | 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89), and every section's shown lines appear verbatim in the main thread's reply text (SW-99). Each gate reply (`yes` x3) and the constitution probe are sent as their own turns from `replies.txt`, so each gate ends a turn (SW-103). |
 | 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. The edit is granted, so only the hook's deny keeps `src/domain/todo.js` unchanged and puts it in `permission_denials` (SW-82). |
 | 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. The edit is granted, so only the hook's deny keeps the row `in-progress` and puts `.specs/index.md` in `permission_denials` (SW-82). |
-| 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings, including `SL060` seeded by the lean-task-format `FEAT-BROKEN-017` (SW-93) - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
+| 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings, including `SL060` seeded by the lean-task-format `FEAT-BROKEN-017` (SW-93) and `SL068` seeded by `FEAT-BROKEN-018`, a task block whose `Files` drifted from the approved outline (SW-105). `SL068` is also asserted absent on `FEAT-BROKEN-014` (no outline) and `FEAT-BROKEN-017` (an agreeing outline) - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
 | 6 | `06-escalation-implementer` | `/sd:feature` Phase 4 resumed on a seeded 2-task spec, authored in the lean task format (SW-93), under `models.escalation.ceiling: "sonnet"`: the task that writes `Estimated complexity: L` logs exactly one uncapped, applied `escalation: sd-implementer haiku -> sonnet (trigger: ESC-FEAT-04)` line in `05-retro.md`; the other task writes neither optional field, reads as `M` / `trivial`, and logs none. |
 | 7 | `07-escalation-disabled` | Same seeded spec in the legacy 11-field format, under `models.escalation.enabled: false`, with T01 at `Estimated complexity: L` and T02 at `Reversibility: hard`: both tasks run and `05-retro.md` carries no `escalation:` line - the suppression covers `ESC-FEAT-04` and `ESC-FEAT-04b` alike. |
 | 8 | `08-resume-checkoff` | `/sd:feature` re-invoked on a seeded 2-task spec in the lean task format (SW-93) whose T01 is already checked off (`Status: done`, code landed, retro line written) and T02 is `open`: the resume executes T02 only - `05-retro.md` gains a `T02:` line and still has exactly one `T01:` line, `countTodos` is not re-added - and both tasks end at the canonical `Status: done` marker (SW-71). |
@@ -553,6 +571,7 @@ gate prints none of it (ADR 0020).
 | `file-matches` / `file-not-matches` | `path`, `pattern` (regex) | the file content matches / does not (a missing file counts as not matching) |
 | `file-no-bom` | `path` | the file exists and does not start with a UTF-8 BOM |
 | `output-contains` | `value` | the final `result` text holds `value` literally (scenario 5 only, see the rule) |
+| `output-matches` / `output-not-matches` | `pattern` (regex) | the final `result` text does / does not match (scenario 5 only, SW-105). Used to scope one rule ID to one spec ID on a single line, which a literal `output-contains` cannot do; `-SelfTest` checks both offline |
 | `exit-code` | `value` | `claude -p` exited with that code |
 | `permission-denied` | `tool` (regex), `path` (suffix) | `permission_denials` holds a matching call (SW-80) |
 | `transcript-contains-section` | `path`, `section` (heading regex, default `^## Gate `) | every matching section has shown lines, and they appear verbatim and in order in one main-thread text block. Shown lines are those after the heading, blank lines excluded, up to `### More decisions` or `Reply:`. Tool calls and subagent transcripts do not count (SW-99) |

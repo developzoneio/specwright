@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SW-92 follow-ups (SW-105)** - three changes from the outline-first plan's open items:
+  - **Phase 6 re-plan path:** `/sd:verify` finding an uncovered criterion no longer sends
+    `/sd:feature` "back to Phase 3". It enters Gate Re-plan with a new `Phase: verify` value; the
+    architect appends the new task with `Revised-by` and no outline row, which `SL068` exempts. The
+    approved outline stays immutable, and the gate count stays 3. Fixtures
+    `added-task-revised/` (PASS) and `added-task-unmarked/` (BLOCK `SL068`) record both sides.
+  - **e2e `02` grant:** also allows `npm test` and `npm run test` through the PowerShell tool and
+    `Bash(npm run test:*)`, plus the `Select-Object` / `Select-String` pipe stages. The SW-93 M runs
+    were refused on the PowerShell tool. Four spec-gate fixtures hold the redirect and pipe cases for
+    both tools.
+  - **Live `SL068` coverage:** scenario `05` now seeds `FEAT-BROKEN-018` (a block whose `Files`
+    drifted from its outline row) and asserts `SL068` on it and not on `FEAT-BROKEN-014` or
+    `FEAT-BROKEN-017`. This needs the new assertion types `output-matches` and `output-not-matches`,
+    checked offline by `-SelfTest`.
 - **Outline-first plan for `/sd:feature` (SW-92, ADR 0022)** - Phase 3 now has two steps. In
   Phase 3a the architect writes `01-plan.md` with a `## Outline` table: one row per task, with ID,
   title, `Files` and `Covers`. Gate 2 approves that outline on both faces, so decompose is decided
