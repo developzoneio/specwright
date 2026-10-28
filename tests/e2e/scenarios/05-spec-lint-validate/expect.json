@@ -26,7 +26,7 @@
   { "type": "output-contains", "value": "SL060" },
   { "type": "output-contains", "value": "SL090" },
   { "type": "output-contains", "value": "SL068" },
-  { "type": "output-matches", "pattern": "(?m)^.*(SL068.*FEAT-BROKEN-018|FEAT-BROKEN-018.*SL068).*$" },
-  { "type": "output-not-matches", "pattern": "(?m)^.*(SL068.*FEAT-BROKEN-014|FEAT-BROKEN-014.*SL068).*$" },
-  { "type": "output-not-matches", "pattern": "(?m)^.*(SL068.*FEAT-BROKEN-017|FEAT-BROKEN-017.*SL068).*$" }
+  { "type": "output-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-018(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-018)" },
+  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-014(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-014)" },
+  { "type": "output-not-matches", "pattern": "(?s)(?:^|\n)### (?:(?!\n###).)*?(?:FEAT-BROKEN-017(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?FEAT-BROKEN-017)" }
 ]

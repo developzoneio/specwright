@@ -284,23 +284,52 @@ the runner passes them as `--allowedTools`. `02-feature-happy`, `06`-`08` grant 
 no tests and grant only the three write tools. A `Bash` call outside the grant, such as
 `echo x > file`, is refused.
 
-**`npm test` through either shell tool (SW-105).** On Windows a session may run the test command
-through the PowerShell tool instead of Bash. A `Bash(...)` grant does not cover it, so the call is
-refused and the session stops to ask. The SW-93 M runs hit this twice, and in one the next gate
-reply went to that question. `02` therefore also grants `Bash(npm run test:*)`, the `PowerShell`
-forms of `npm test` and `npm run test` (bare and with arguments), and the two PowerShell pipe
-stages `Select-Object` and `Select-String`. By the permissions docs, a Bash rule already matches
-`npm test 2>&1` and `npm test -- x`, and checks each part of a pipe or `&&` separately, with `tail`
-and `cd` in the built-in read-only set. The docs do not say the same of PowerShell, hence the two
-stage rules. No rule grants a writer verb (`tee`, `Set-Content`, `Out-File`, `sed -i`,
-`node -e`, `sh -c`), and every part of a compound command must be allowed, so
+**`npm test` through either shell tool (SW-105) - the widened grant did not fix the flake.** On
+Windows a session may run the test command through the PowerShell tool instead of Bash. A
+`Bash(...)` grant does not cover it, so the call is refused and the session stops to ask. The
+SW-93 M runs hit this twice, and in one the next gate reply went to that question. `02` therefore
+also grants `Bash(npm run test:*)`, the `PowerShell` forms of `npm test` and `npm run test` (bare
+and with arguments), and the two PowerShell pipe stages `Select-Object` and `Select-String`. No
+rule grants a writer verb (`tee`, `Set-Content`, `Out-File`, `sed -i`, `node -e`, `sh -c`), and
+the permissions docs say every part of a compound command must be allowed, so
 `npm test; Set-Content .specs/index.md x` is refused by the mode. A redirect after `npm test` is
 the part no grant stops: the CLI checks the target against Edit rules, and Edit is granted. That
 case rests on spec-gate's `shell-write` rule, which reads the command text and so is a heuristic
 (see gap 2 below). `tests/hooks/fixtures/spec-gate/` holds it for both tools
 (`block-bash-npm-test-redirect-protected`, `block-powershell-npm-test-redirect-protected`) and
-the two pipes that must stay allowed. `06`-`08` carry the same `Bash`-only grant and the same
-exposure on Windows; they were not widened here, because this change was verified on `02` only.
+the two pipes that must stay allowed.
+
+**The live result is negative: 0 of 5 runs were green (2026-10-28).** Five runs of `02` in a row,
+each with `SD_E2E_TRANSCRIPT=1` (`claude` 2.1.312, Windows 10.0.26200, pwsh 7.6.9, subscription
+auth via `CLAUDE_CODE_OAUTH_TOKEN`, commit `1e92e48`), cost $5.76 in all. Every run failed 3 to 5
+assertions, and every transcript held `Permission to use Bash has been denied` (4 to 7 times); three
+also held a PowerShell denial. The denied calls were not `npm test` variants that a prefix rule
+covers:
+
+| Shape of the refused call | Seen in | What it shows |
+|---|---|---|
+| `cd /d/sd-e2e/<ws> 2>/dev/null \|\| cd "C:/sd-e2e/<ws>"; npm test 2>&1 [\| tail -n 25]`, or `cd /d C:\... && npm test` | subagents, runs 1, 3, 4, 5 | the command starts with `cd` to a path the CLI does not count as a working directory, so `Bash(npm test:*)` never applies |
+| `npm test >/dev/null 2>&1; echo exit=$?` | main thread, run 2 | refused although the docs say `/dev/null` is not checked and `echo` is read-only; not explained |
+| `npm test 2>&1 \| Select-String -Pattern "..."`, `... \| Select-Object -Last 9; "exit=$LASTEXITCODE"` | main thread, runs 1 and 5 | refused **with** `PowerShell(npm test *)` and the `Select-*` rules granted, so either the rule form is not honoured or the compound is judged as a whole; not told apart |
+| `node --test 2>&1 \| Select-String ...`, `node --input-type=module -e ...` | runs 3 and 2 | the model skips `npm test` for the command underneath it, which no `npm test` rule covers |
+| `printf 'Reply: yes\n' >> gate-briefs.md`, `cat >> gate-briefs.md <<EOF` | main thread, runs 1, 3, 4, 5 | a shell write the model chose to record a gate reply; refusing it is correct. The stop-gate reason says to append the `Reply:` line without saying to use the Edit tool |
+| `Glob` / `Grep` with a path or pattern outside the workspace (skill and template lookups) | subagents, runs 1-4 | read tools are refused outside the granted directories too; unrelated to `npm test` |
+
+The refusals change the outcome. In runs 2 and 3 the tests could not be run, and in run 4 the
+Gate 3 reply could not be recorded, so close-out never started: no `06-verify.md`. In run 5
+`/sd:verify` could not run `npm test` and wrote `result: fail` with `VF022`. In all four the spec
+stayed `in-progress`. Run 1 is a different failure: the tests ran, and `/sd:verify` returned `fail` on
+two `VF020` findings, because the lean `Acceptance` of T02 and T03 named no path-like witness test
+(ADR 0023 item 7 reads the witness test from `Acceptance`). That is a content defect of the
+lean format, not a permission one, and it needs its own ticket.
+
+So the ticket's "done when" (3 consecutive green runs and no `Permission to use Bash has been
+denied` in any transcript) is **not met**, and widening the `npm test` prefixes alone cannot meet
+it. The grant lines stay in `allowed-tools.txt` as an unconfirmed hypothesis, not a fix: nothing
+here shows they did anything. The next step is a cheap probe (`probe-permission-posture.ps1`
+style, a few cents with haiku) that runs each shape above under the same `--allowedTools`, to
+learn which ones a rule can cover, before any more `02` runs. `06`-`08` carry the same
+`Bash`-only grant and were not widened.
 
 **A well-formed hook deny wins over every posture.** Verified 2026-09-28, `claude` 2.1.283, with
 `probe-permission-posture.ps1` (a minimal always-deny `PreToolUse` hook, no spec-gate logic, that
@@ -686,6 +715,50 @@ Run on 2026-10-25, `claude` 2.1.306, Windows, subscription auth (`CLAUDE_CODE_OA
 | `12-resume-outline-complexity` | 7/7 | pass |
 | `08-resume-checkoff` (legacy single-step plan) | 8/8 | pass |
 | `02-feature-happy` | 18/23, then 23/23 | first run stopped before Gate 3 (no transcript kept to diagnose); the re-run with `SD_E2E_TRANSCRIPT=1` passed |
+
+### SW-92 follow-up runs (SW-105)
+
+Run on 2026-10-28, `claude` 2.1.312, Windows 10.0.26200, pwsh 7.6.9, subscription auth
+(`CLAUDE_CODE_OAUTH_TOKEN`, no `-CopyCredentials`), commit `1e92e48`. The paid runs cost $8.45 in
+all (`02` x5 $5.76, `05` and `-SelfTest` $0.64, `feat03b` $2.05). Item 2's result is in "Permission
+mode" above; the other three follow.
+
+**`ESC-FEAT-03b` on the expansion (item 1): confirmed.** `probe-model-override.ps1 -Case feat03b`
+now seeds an unresolved Open question, as scenario 12 does, so Gate 2 shows the Complexity face
+whatever the architect's file partition. Gate 2 showed Face B in both runs (the precondition held).
+Evidence is subagent `meta.json` and transcript `message.model` only:
+
+| Run | Call | `model` param | Served |
+|---|---|---|---|
+| `feat03b-run` (reply `no-split`) | `sd-spec-architect` "Plan outline" (Phase 3a) | none | `claude-sonnet-5-5` |
+| | `sd-spec-architect` "Expand outline into tasks" (Phase 3b) | `opus` | `claude-opus-5-5` |
+| | `sd-code-explorer` | none | `claude-haiku-5-5` |
+| `feat03b-control` (reply `approve split`) | `sd-spec-architect` x4 (outline and three child specs) | none | `claude-sonnet-5-5` |
+| | `sd-code-explorer` | none | `claude-haiku-5-5` |
+
+The run's retro carried `escalation: sd-spec-architect sonnet -> opus (trigger: ESC-FEAT-03b)`; the
+control's carried none. That retro line is the model's own account and is context only. Cost $0.87
+and $1.18, single runs.
+
+**`SL068` live coverage (item 4): the engine is right, the assertion was wrong, and the corrected
+assertion has no live green yet.** Scenario `05` passed 29 of 30 assertions ($0.43). The validate
+report raised `SL068` once, in block `B30`, on `FEAT-BROKEN-018` (T02's `Files` adds
+`src/infrastructure/retry-after.ts`, citing `02-tasks.md:14` and the outline row at
+`01-plan.md:18`). It raised none for `FEAT-BROKEN-014` (its one finding is `SL044`) or
+`FEAT-BROKEN-017` (`SL060`). The failing assertion was the one that put `SL068` and the spec ID on
+one line: the report prints each finding as a `### B30: ...` block with `File:line` and `Rule` on
+their own lines. The two `output-not-matches` assertions passed, but vacuously, for the same
+reason. They now match inside one finding block, and the offline self-check uses that layout. The
+corrected assertions were evaluated against the recorded output (30 of 30 pass); they have not been
+run live, which costs about $0.43. `-SelfTest` passed in full ($0.21): auth 9 of 9, transcript 9
+of 9, output assertions 4 of 4, and all four guard runs detected.
+
+**`approve split` with no task block (item 3): not run.** The $10 cap was reached first (the
+estimate for it, $1.60, would have passed the cap by about $0.05). The branch is unproven. It
+needs scenario 12 with the reply `approve split` as a second turn, kept out of the suite, and then
+a check that the parent is `archived`, the children exist at `draft` with `spawns` / `spawned-by`
+links, the parent has `01-plan.md` with `## Outline` and no `02-tasks.md`, and `05-retro.md` has
+the decompose note.
 
 ### Resume-from-approved scenarios (SW-74)
 

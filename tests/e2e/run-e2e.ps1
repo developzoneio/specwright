@@ -1005,21 +1005,32 @@ function Invoke-TranscriptAssertionSelfCheck {
 
 function Invoke-OutputAssertionSelfCheck {
     # -SelfTest, offline (SW-105): output-matches / output-not-matches against
-    # a built report. The regexes are the ones scenario 05 uses to scope SL068
-    # to one spec per line, so a wrong direction or a vacuous pattern is caught
-    # here before a paid run.
+    # a built report in the layout /sd:spec validate prints (one '### <id>: ...'
+    # block per finding, with File:line and Rule on their own lines). The regexes
+    # are the ones scenario 05 uses to scope SL068 to one spec's block. The first
+    # live run of 05 (SW-105) assumed one line per finding and failed on exactly
+    # this layout, so the sample here is that layout.
     $allOk = $true
     $report = @(
-        '- BLOCK SL068 FEAT-AAA-018 T02 Files differs from its outline row'
-        '- WARN  SL060 FEAT-AAA-017 T01 new file without Pattern refs'
-        '- BLOCK SL044 FEAT-AAA-014 empty reason'
+        '### B1: Tasks disagree with the approved outline'
+        '- **File:line**: `.specs/FEAT-AAA-018/02-tasks.md:14`'
+        '- **Rule**: `SL068`'
+        '- **Finding**: T02 adds a file the outline row does not list.'
+        ''
+        '### W1: (new) file with no Pattern refs'
+        '- **File:line**: `.specs/FEAT-AAA-017/02-tasks.md:5`'
+        '- **Rule**: `SL060`'
+        ''
+        '### W2: empty reason'
+        '- **File:line**: `.specs/FEAT-AAA-014/05-retro.md:9`'
+        '- **Rule**: `SL044`'
     ) -join "`n"
     $run = [pscustomobject]@{ Result = [pscustomobject]@{ result = $report }; Stdout = '' }
-    $sameLine = '(?m)^.*(SL068.*{0}|{0}.*SL068).*$'
+    $sameLine = '(?s)(?:^|\n)### (?:(?!\n###).)*?(?:{0}(?:(?!\n###).)*?SL068|SL068(?:(?!\n###).)*?{0})'
     $cases = @(
-        @{ Name = 'matches: rule and spec on one line'; Type = 'output-matches'
+        @{ Name = 'matches: rule and spec in one finding block'; Type = 'output-matches'
            Pattern = ($sameLine -f 'FEAT-AAA-018'); Expect = $true },
-        @{ Name = 'matches: rule on another spec'; Type = 'output-matches'
+        @{ Name = 'matches: SL068 is not in this spec block'; Type = 'output-matches'
            Pattern = ($sameLine -f 'FEAT-AAA-017'); Expect = $false },
         @{ Name = 'not-matches: spec with no SL068 finding'; Type = 'output-not-matches'
            Pattern = ($sameLine -f 'FEAT-AAA-014'); Expect = $true },
