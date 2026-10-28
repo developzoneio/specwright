@@ -10,27 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **SW-92 follow-ups (SW-105)** - three changes from the outline-first plan's open items:
+- **SW-92 follow-ups (SW-105)** - the outline-first plan's five open items, all closed:
   - **Phase 6 re-plan path:** `/sd:verify` finding an uncovered criterion no longer sends
     `/sd:feature` "back to Phase 3". It enters Gate Re-plan with a new `Phase: verify` value; the
     architect appends the new task with `Revised-by` and no outline row, which `SL068` exempts. The
     approved outline stays immutable, and the gate count stays 3. Fixtures
     `added-task-revised/` (PASS) and `added-task-unmarked/` (BLOCK `SL068`) record both sides.
-  - **e2e `02` grant (not a fix):** also allows `npm test` and `npm run test` through the PowerShell
-    tool and `Bash(npm run test:*)`, plus the `Select-Object` / `Select-String` pipe stages. Five live
-    runs afterwards were all red and still hit Bash and PowerShell denials, on shapes a prefix rule
-    does not cover (a leading `cd`, `node --test`, shell writes of a `Reply:` line), so the grant is
-    an unconfirmed hypothesis and the ticket item stays open. Four spec-gate fixtures hold the
-    redirect and pipe cases for both tools.
-  - **Live `SL068` coverage:** scenario `05` now seeds `FEAT-BROKEN-018` (a block whose `Files`
-    drifted from its outline row) and asserts `SL068` on it and not on `FEAT-BROKEN-014` or
-    `FEAT-BROKEN-017`. This needs the new assertion types `output-matches` and `output-not-matches`,
-    checked offline by `-SelfTest`. The first live run found `SL068` on 018 only, as intended, but
-    failed one assertion that assumed one line per finding; the assertions now match inside a
-    finding block and have not had a live green yet.
+  - **e2e `02` is green 3 times in a row:** five earlier runs were all red, with Bash and PowerShell
+    denials on shapes a prefix rule cannot cover. A new probe, `probe-permission-posture.ps1 -Probe
+    shell-shapes`, showed the grant works where it names the command and that no rule covers a
+    redirect. So `02` now also grants `npm run test` and the PowerShell forms of `npm test`; its
+    prompt states which shell forms are refused; and `sd-gate-brief` and both `stop-gate` twins say
+    to record a gate `Reply:` line with the Edit tool (the reason text changes in 8 fixtures and
+    ADR 0021). Three runs passed 25/25 with no Bash or PowerShell denial in any transcript. Four
+    spec-gate fixtures hold the redirect and pipe cases for both tools. `06`-`08` were not widened.
+  - **Live `SL068` coverage:** scenario `05` seeds `FEAT-BROKEN-018` (a block whose `Files` drifted
+    from its outline row) and asserts `SL068` on it and not on `FEAT-BROKEN-014` or
+    `FEAT-BROKEN-017`, with new assertion types `output-matches` and `output-not-matches` checked
+    offline by `-SelfTest`. The first live run found `SL068` on 018 only but failed an assertion that
+    assumed one line per finding; the assertions now match inside a finding block and passed 30/30.
   - **`ESC-FEAT-03b` evidence:** probe case `feat03b` seeds an unresolved Open question so Gate 2
     shows Face B deterministically. Its live run served the Phase 3b expansion with `model=opus` on
     `claude-opus-5-5` and the outline architect on `claude-sonnet-5-5`; the control escalated nothing.
+  - **`approve split` run once:** scenario 12 plus a second turn `approve split` (kept out of the
+    suite) archived the parent, created three `draft` children linked by `spawns` / `spawned-by`,
+    and left the parent with `## Outline` and no `02-tasks.md`.
 - **Outline-first plan for `/sd:feature` (SW-92, ADR 0022)** - Phase 3 now has two steps. In
   Phase 3a the architect writes `01-plan.md` with a `## Outline` table: one row per task, with ID,
   title, `Files` and `Covers`. Gate 2 approves that outline on both faces, so decompose is decided

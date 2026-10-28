@@ -284,7 +284,7 @@ the runner passes them as `--allowedTools`. `02-feature-happy`, `06`-`08` grant 
 no tests and grant only the three write tools. A `Bash` call outside the grant, such as
 `echo x > file`, is refused.
 
-**`npm test` through either shell tool (SW-105) - the widened grant did not fix the flake.** On
+**`npm test` through either shell tool (SW-105).** On
 Windows a session may run the test command through the PowerShell tool instead of Bash. A
 `Bash(...)` grant does not cover it, so the call is refused and the session stops to ask. The
 SW-93 M runs hit this twice, and in one the next gate reply went to that question. `02` therefore
@@ -299,7 +299,7 @@ case rests on spec-gate's `shell-write` rule, which reads the command text and s
 (`block-bash-npm-test-redirect-protected`, `block-powershell-npm-test-redirect-protected`) and
 the two pipes that must stay allowed.
 
-**The live result is negative: 0 of 5 runs were green (2026-10-28).** Five runs of `02` in a row,
+**First round: 0 of 5 runs were green (2026-10-28).** Five runs of `02` in a row,
 each with `SD_E2E_TRANSCRIPT=1` (`claude` 2.1.312, Windows 10.0.26200, pwsh 7.6.9, subscription
 auth via `CLAUDE_CODE_OAUTH_TOKEN`, commit `1e92e48`), cost $5.76 in all. Every run failed 3 to 5
 assertions, and every transcript held `Permission to use Bash has been denied` (4 to 7 times); three
@@ -323,13 +323,37 @@ two `VF020` findings, because the lean `Acceptance` of T02 and T03 named no path
 (ADR 0023 item 7 reads the witness test from `Acceptance`). That is a content defect of the
 lean format, not a permission one, and it needs its own ticket.
 
-So the ticket's "done when" (3 consecutive green runs and no `Permission to use Bash has been
-denied` in any transcript) is **not met**, and widening the `npm test` prefixes alone cannot meet
-it. The grant lines stay in `allowed-tools.txt` as an unconfirmed hypothesis, not a fix: nothing
-here shows they did anything. The next step is a cheap probe (`probe-permission-posture.ps1`
-style, a few cents with haiku) that runs each shape above under the same `--allowedTools`, to
-learn which ones a rule can cover, before any more `02` runs. `06`-`08` carry the same
-`Bash`-only grant and were not widened.
+**What the probe showed.** `probe-permission-posture.ps1 -Probe shell-shapes` runs 18 command
+shapes, one tool call each, under three rule sets (haiku, 2026-10-28, three sessions for $0.03; the
+outcome of each call is read from the kept transcript). The shipped grant works where it names the
+command, and nothing a rule names covers a redirect:
+
+| Shape | `Bash(npm test:*)` only | Shipped grant |
+|---|---|---|
+| `npm test`, `npm test 2>&1`, `... \| tail -n 5`, `cd <ws> && npm test` | allowed | allowed |
+| `npm run test` (Bash) | DENIED | allowed |
+| PowerShell `npm test`, `npm test 2>&1`, `... \| Select-Object -Last 5`, `npm run test` | DENIED | allowed |
+| `npm test >/dev/null 2>&1; echo exit=$?`, `npm test > out.txt`, `cd <ws> 2>/dev/null \|\| cd "<ws>"; npm test` | DENIED | DENIED |
+| `node --test` (either tool) | DENIED | DENIED |
+| PowerShell `... \| Select-String -Pattern "^# (tests\|pass)\|^not ok"`, `...; "exit=$LASTEXITCODE"` | DENIED | DENIED |
+| `printf 'x' >> notes.txt`, `npm test; Set-Content notes.txt x` (controls) | DENIED | DENIED |
+
+So the `PowerShell(...)` rules are honoured in both the `*` and the `:*` form, which overturns the
+first-round reading that they were ignored. What no prefix rule can cover is a redirect (even to
+`/dev/null`), `node --test`, a quoted `Select-String` pattern with `|`, and a trailing string
+statement. Those are decisions the model makes, so they were fixed where it makes them.
+
+**Second round, 3 of 3 green (2026-10-28, commit `920bd92`).** Three changes: `sd-gate-brief` and
+both stop-gate twins tell the model to record the `Reply:` line with the Edit tool; `02`'s prompt
+states which shell forms are refused (plain `npm test` only, no `cd`, redirect, `;`, `||`,
+`node --test`) and asks it to tell subagents the same; the grant above stays. Three consecutive
+runs of `02` passed 25 of 25, in 319-361 s and $1.25, $1.32 and $1.25. No transcript, subagent ones
+included, held `Permission to use Bash has been denied` or its PowerShell form. One run held three
+`Glob` denials (subagent skill lookups outside the workspace), which the ticket's condition does
+not name. The runs do not say which of the three changes mattered: the grant, the prompt and the
+skill wording moved together. The prompt in particular states the posture to the model, so the
+result is for that prompt; a session that skips it can still choose a refused shape. `06`-`08` carry
+the same `Bash`-only grant and the same exposure and were not widened.
 
 **A well-formed hook deny wins over every posture.** Verified 2026-09-28, `claude` 2.1.283, with
 `probe-permission-posture.ps1` (a minimal always-deny `PreToolUse` hook, no spec-gate logic, that
@@ -719,9 +743,10 @@ Run on 2026-10-25, `claude` 2.1.306, Windows, subscription auth (`CLAUDE_CODE_OA
 ### SW-92 follow-up runs (SW-105)
 
 Run on 2026-10-28, `claude` 2.1.312, Windows 10.0.26200, pwsh 7.6.9, subscription auth
-(`CLAUDE_CODE_OAUTH_TOKEN`, no `-CopyCredentials`), commit `1e92e48`. The paid runs cost $8.45 in
-all (`02` x5 $5.76, `05` and `-SelfTest` $0.64, `feat03b` $2.05). Item 2's result is in "Permission
-mode" above; the other three follow.
+(`CLAUDE_CODE_OAUTH_TOKEN`, no `-CopyCredentials`), commit `1e92e48`. The first round of paid runs cost
+$8.45 in all (`02` x5 $5.76, `05` and `-SelfTest` $0.64, `feat03b` $2.05). A second round the same day,
+for items 4, 3 and 2, cost $5.19 (`05` $0.46, the split run $0.89, the probe $0.03, `02` x3 $3.81).
+Item 2's result is in "Permission mode" above; the other three follow.
 
 **`ESC-FEAT-03b` on the expansion (item 1): confirmed.** `probe-model-override.ps1 -Case feat03b`
 now seeds an unresolved Open question, as scenario 12 does, so Gate 2 shows the Complexity face
@@ -740,25 +765,28 @@ The run's retro carried `escalation: sd-spec-architect sonnet -> opus (trigger: 
 control's carried none. That retro line is the model's own account and is context only. Cost $0.87
 and $1.18, single runs.
 
-**`SL068` live coverage (item 4): the engine is right, the assertion was wrong, and the corrected
-assertion has no live green yet.** Scenario `05` passed 29 of 30 assertions ($0.43). The validate
-report raised `SL068` once, in block `B30`, on `FEAT-BROKEN-018` (T02's `Files` adds
-`src/infrastructure/retry-after.ts`, citing `02-tasks.md:14` and the outline row at
-`01-plan.md:18`). It raised none for `FEAT-BROKEN-014` (its one finding is `SL044`) or
-`FEAT-BROKEN-017` (`SL060`). The failing assertion was the one that put `SL068` and the spec ID on
-one line: the report prints each finding as a `### B30: ...` block with `File:line` and `Rule` on
-their own lines. The two `output-not-matches` assertions passed, but vacuously, for the same
+**`SL068` live coverage (item 4): confirmed on the second run.** The first run of scenario `05`
+passed 29 of 30 assertions ($0.43). The validate report raised `SL068` once, in block `B30`, on
+`FEAT-BROKEN-018` (T02's `Files` adds `src/infrastructure/retry-after.ts`, citing `02-tasks.md:14`
+and the outline row at `01-plan.md:18`), and none for `FEAT-BROKEN-014` (its one finding is `SL044`)
+or `FEAT-BROKEN-017` (`SL060`). The failing assertion was the one that put `SL068` and the spec ID
+on one line: the report prints each finding as a `### B30: ...` block with `File:line` and `Rule`
+on their own lines. The two `output-not-matches` assertions passed, but vacuously, for the same
 reason. They now match inside one finding block, and the offline self-check uses that layout. The
-corrected assertions were evaluated against the recorded output (30 of 30 pass); they have not been
-run live, which costs about $0.43. `-SelfTest` passed in full ($0.21): auth 9 of 9, transcript 9
-of 9, output assertions 4 of 4, and all four guard runs detected.
+corrected `05` then passed 30 of 30 live ($0.46, commit `e6fbeb7`). `-SelfTest` passed in full
+($0.21): auth 9 of 9, transcript 9 of 9, output assertions 4 of 4, and all four guard runs
+detected.
 
-**`approve split` with no task block (item 3): not run.** The $10 cap was reached first (the
-estimate for it, $1.60, would have passed the cap by about $0.05). The branch is unproven. It
-needs scenario 12 with the reply `approve split` as a second turn, kept out of the suite, and then
-a check that the parent is `archived`, the children exist at `draft` with `spawns` / `spawned-by`
-links, the parent has `01-plan.md` with `## Outline` and no `02-tasks.md`, and `05-retro.md` has
-the decompose note.
+**`approve split` with no task block (item 3): confirmed.** Run as a manual scenario kept out of the
+suite: scenario 12's spec and prompt, with the reply `approve split` sent as a second turn (2 turns,
+148 s, $0.89). Read from the kept workspace: the parent `FEAT-e2e-outline-split` is `archived`, with
+`01-plan.md` (and its `## Outline`), `03-decisions.md`, `05-retro.md` and `gate-briefs.md` but no
+`02-tasks.md`; three child specs exist at `draft` (`-domain-due-date`, `-store-due-before`,
+`-service-overdue`), each with `spawned-by: FEAT-e2e-outline-split` under `linked_specs`, matched by
+three `spawns:` entries on the parent; `index.md` has the four rows; `05-retro.md` has a
+`## Decomposition` note naming the children. The run's own assertions reported 7 of 8, because the
+scratch scenario looked for `spawns:` as a top-level key while `/sd:spec link` stores it as an
+item of `linked_specs`. A single run.
 
 ### Resume-from-approved scenarios (SW-74)
 
