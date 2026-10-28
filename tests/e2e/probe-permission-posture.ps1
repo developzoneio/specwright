@@ -72,6 +72,12 @@
 .PARAMETER Probe
     hook-deny (default): does a hook's deny hold under each posture?
     claude-dir (SW-83): does a grant let a write under .claude/ through?
+    shell-shapes (SW-105): which shell command shapes does a permission rule cover? Runs 18 commands
+    (Bash and PowerShell variants of npm test, with redirects, pipes and a leading cd, plus two
+    write controls), one tool call each, under dontAsk with a rule set per -Posture: baseline
+    (Bash(npm test:*) only), shipped (the rules in 02-feature-happy/allowed-tools.txt) and colon
+    (the same with PowerShell(... :*) rules). It keeps the session and reads each call's outcome from
+    the transcript. Use -BudgetUsd 0.8: one session makes about 18 tool calls.
 
 .PARAMETER Posture
     One or more posture names of the selected -Probe, or 'all' (default).
@@ -113,7 +119,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('hook-deny', 'claude-dir')]
+    [ValidateSet('hook-deny', 'claude-dir', 'shell-shapes')]
     [string]$Probe = 'hook-deny',
     [string[]]$Posture = @('all'),
     [string[]]$HookFormat = @('legacy', 'fixed'),
@@ -150,8 +156,29 @@ $claudeDirPostures = [ordered]@{
     'bypass'         = @{ Args = @('--permission-mode', 'bypassPermissions') }
     'skip'           = @{ Args = @('--permission-mode', 'acceptEdits', '--dangerously-skip-permissions') }
 }
+# SW-105: which shell command shapes a permission rule covers. The 'shipped' posture reads the
+# rules from 02-feature-happy/allowed-tools.txt, so the probe tests what the scenario grants.
+$shippedGrantPath = Join-Path $PSScriptRoot 'scenarios' '02-feature-happy' 'allowed-tools.txt'
+$shippedRules = @()
+if (Test-Path -LiteralPath $shippedGrantPath) {
+    $shippedRules = @(Get-Content -LiteralPath $shippedGrantPath |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+}
+$baselineRules = @('Edit', 'Write', 'MultiEdit', 'Bash(npm test:*)')
+$colonRules = @($shippedRules | ForEach-Object {
+    if ($_ -like 'PowerShell(* *)') { $_ -replace ' \*\)$', ':*)' } else { $_ }
+})
+$shapePostures = [ordered]@{
+    'baseline' = @{ Args = @('--permission-mode', 'dontAsk', '--allowedTools', ($baselineRules -join ',')) }
+    'shipped'  = @{ Args = @('--permission-mode', 'dontAsk', '--allowedTools', ($shippedRules -join ',')) }
+    'colon'    = @{ Args = @('--permission-mode', 'dontAsk', '--allowedTools', ($colonRules -join ',')) }
+}
 if ($Probe -eq 'claude-dir') {
     $postures = $claudeDirPostures
+    $HookFormat = @('none')
+}
+if ($Probe -eq 'shell-shapes') {
+    $postures = $shapePostures
     $HookFormat = @('none')
 }
 
@@ -172,7 +199,7 @@ function Test-EnvSet {
 $Posture = @($Posture | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $HookFormat = @($HookFormat | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 foreach ($f in $HookFormat) {
-    if ($Probe -eq 'claude-dir') { break }
+    if ($Probe -in @('claude-dir', 'shell-shapes')) { break }
     if ($f -notin @('legacy', 'fixed', 'exit2')) { Exit-CannotRun "unknown hook format '$f'. Known: legacy, fixed, exit2" }
 }
 if ($Posture -contains 'all') { $Posture = @($postures.Keys) }
@@ -197,7 +224,7 @@ if ([string]::IsNullOrWhiteSpace($OutDir)) {
     $root = if (Test-EnvSet 'SD_E2E_ROOT') { $env:SD_E2E_ROOT }
             elseif ($IsWindows) { Join-Path "$($env:SystemDrive)\" 'sd-e2e' }
             else { Join-Path ([System.IO.Path]::GetTempPath()) 'sd-e2e' }
-    $prefix = if ($Probe -eq 'claude-dir') { 'sw83-' } else { 'sw80-' }
+    $prefix = switch ($Probe) { 'claude-dir' { 'sw83-' } 'shell-shapes' { 'sw105-' } default { 'sw80-' } }
     $OutDir = Join-Path $root ($prefix + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
@@ -253,6 +280,14 @@ function New-ProbeRun {
         # A bare project, as /sd:setup finds it: no .claude/, so no hook.
         New-Item -ItemType Directory -Path $ws -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $ws 'package.json') -Value '{"name":"probe","version":"1.0.0","private":true}' -Encoding ascii
+        return [pscustomobject]@{ Dir = $runDir; Home = $fakeHome; Ws = $ws }
+    }
+    if ($Probe -eq 'shell-shapes') {
+        # A bare project with a test script that records each run. No hook: the question is what the
+        # permission rules alone decide.
+        New-Item -ItemType Directory -Path $ws -Force | Out-Null
+        $pkgShapes = '{"name":"probe","version":"1.0.0","private":true,"scripts":{"test":"node -e \"require(''fs'').appendFileSync(''ran.log'',''x'')\""}}'
+        Set-Content -LiteralPath (Join-Path $ws 'package.json') -Value $pkgShapes -Encoding ascii
         return [pscustomobject]@{ Dir = $runDir; Home = $fakeHome; Ws = $ws }
     }
     New-Item -ItemType Directory -Path (Join-Path $ws '.claude') -Force | Out-Null
@@ -312,13 +347,104 @@ Then reply with one line per step: allowed, refused or skipped.
 '@
 }
 
+# SW-105: the command shapes the e2e runs showed refused (README "Permission mode"), plus controls.
+# Each is run exactly as written, one tool call each. The workspace path appears in the two spellings
+# a Bash call on Windows uses.
+function Get-ShapeList {
+    param([string]$Ws)
+    $win = $Ws.Replace('\', '/')
+    $msys = '/' + $Ws.Substring(0, 1).ToLower() + $Ws.Substring(2).Replace('\', '/')
+    return @(
+        @{ Id = 'B1';  Tool = 'Bash';       Cmd = 'npm test' }
+        @{ Id = 'B2';  Tool = 'Bash';       Cmd = 'npm test 2>&1' }
+        @{ Id = 'B3';  Tool = 'Bash';       Cmd = 'npm test 2>&1 | tail -n 5' }
+        @{ Id = 'B4';  Tool = 'Bash';       Cmd = 'npm test >/dev/null 2>&1; echo exit=$?' }
+        @{ Id = 'B5';  Tool = 'Bash';       Cmd = "cd $msys && npm test" }
+        @{ Id = 'B6';  Tool = 'Bash';       Cmd = "cd $msys 2>/dev/null || cd `"$win`"; npm test 2>&1" }
+        @{ Id = 'B7';  Tool = 'Bash';       Cmd = 'npm run test' }
+        @{ Id = 'B8';  Tool = 'Bash';       Cmd = 'node --test' }
+        @{ Id = 'B9';  Tool = 'Bash';       Cmd = 'npm test > out.txt' }
+        @{ Id = 'B10'; Tool = 'Bash';       Cmd = "printf 'x' >> notes.txt" }
+        @{ Id = 'P1';  Tool = 'PowerShell'; Cmd = 'npm test' }
+        @{ Id = 'P2';  Tool = 'PowerShell'; Cmd = 'npm test 2>&1' }
+        @{ Id = 'P3';  Tool = 'PowerShell'; Cmd = 'npm test 2>&1 | Select-Object -Last 5' }
+        @{ Id = 'P4';  Tool = 'PowerShell'; Cmd = 'npm test 2>&1 | Select-String -Pattern "^# (tests|pass|fail)|^not ok"' }
+        @{ Id = 'P5';  Tool = 'PowerShell'; Cmd = 'npm test 2>&1 | Select-Object -Last 9; "exit=$LASTEXITCODE"' }
+        @{ Id = 'P6';  Tool = 'PowerShell'; Cmd = 'npm run test' }
+        @{ Id = 'P7';  Tool = 'PowerShell'; Cmd = 'node --test' }
+        @{ Id = 'P8';  Tool = 'PowerShell'; Cmd = 'npm test; Set-Content -Path notes.txt -Value x' }
+    )
+}
+
+function Get-ShapePrompt {
+    param($Shapes)
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add('This is a scripted permission test in a throwaway directory created and deleted by a test')
+    $lines.Add('runner. Run each command below exactly as written, character for character, with the tool')
+    $lines.Add('named, one tool call per command, in order. Do not change, split or quote the commands')
+    $lines.Add('differently, and if a call is refused do not retry it or work around it: go to the next')
+    $lines.Add('command. When all are done, reply with one line per command: its id and allowed or refused.')
+    $lines.Add('')
+    foreach ($s in $Shapes) {
+        $lines.Add("$($s.Id). $($s.Tool) tool, command between the markers <<< and >>>:")
+        $lines.Add("<<<$($s.Cmd)>>>")
+    }
+    return ($lines -join "`n")
+}
+
+function Get-NormalCommand {
+    param([string]$Text)
+    return (($Text -replace '\s+', ' ').Trim())
+}
+
+function Get-ShapeStatuses {
+    # SW-105. Evidence is the kept session transcript: every Bash / PowerShell tool_use, and whether its
+    # tool_result says the permission was denied. Never the model's own account.
+    param($Run, $Shapes)
+    $projects = Join-Path $Run.Home '.claude' 'projects'
+    $calls = @{}
+    $denied = [System.Collections.Generic.HashSet[string]]::new()
+    if (Test-Path -LiteralPath $projects) {
+        foreach ($f in (Get-ChildItem -LiteralPath $projects -Recurse -Filter '*.jsonl')) {
+            foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                $o = $null
+                try { $o = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+                if (($null -eq $o.message) -or ($o.message.content -isnot [System.Array])) { continue }
+                foreach ($b in $o.message.content) {
+                    if (($b.type -eq 'tool_use') -and ($b.name -in @('Bash', 'PowerShell'))) {
+                        $calls[[string]$b.id] = @{ Tool = [string]$b.name; Cmd = (Get-NormalCommand ([string]$b.input.command)) }
+                    }
+                    elseif ($b.type -eq 'tool_result') {
+                        $text = if ($b.content -is [string]) { $b.content } else { ($b.content | ConvertTo-Json -Depth 5 -Compress) }
+                        if ($text -match 'has been denied') { [void]$denied.Add([string]$b.tool_use_id) }
+                    }
+                }
+            }
+        }
+    }
+    $status = [ordered]@{}
+    foreach ($s in $Shapes) {
+        $want = Get-NormalCommand $s.Cmd
+        $hits = @($calls.GetEnumerator() | Where-Object { ($_.Value.Tool -eq $s.Tool) -and ($_.Value.Cmd -eq $want) })
+        if ($hits.Count -eq 0) { $status[$s.Id] = 'not-run'; continue }
+        $anyDenied = @($hits | Where-Object { $denied.Contains($_.Key) }).Count -gt 0
+        $status[$s.Id] = if ($anyDenied) { 'DENIED' } else { 'allowed' }
+    }
+    return $status
+}
+
 function Invoke-ProbeRun {
-    param($Run, [string[]]$PostureArgs)
+    # -PromptText overrides the probe's fixed prompt; -KeepSession drops --no-session-persistence so the
+    # transcript is on disk (the shell-shapes probe reads its evidence from it).
+    param($Run, [string[]]$PostureArgs, [string]$PromptText = $prompt, [switch]$KeepSession)
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = (Get-Command claude).Source
-    $cliArgs = @('-p', $prompt, '--output-format', 'json', '--no-session-persistence',
-        '--setting-sources', 'project', '--model', $Model,
-        '--max-budget-usd', $BudgetUsd.ToString([System.Globalization.CultureInfo]::InvariantCulture)) + $PostureArgs
+    $cliArgs = @('-p', $PromptText, '--output-format', 'json')
+    if ($KeepSession -eq $false) { $cliArgs += '--no-session-persistence' }
+    $cliArgs += @('--setting-sources', 'project', '--model', $Model,
+        '--max-budget-usd', $BudgetUsd.ToString([System.Globalization.CultureInfo]::InvariantCulture))
+    $cliArgs += $PostureArgs
     foreach ($a in $cliArgs) { $psi.ArgumentList.Add($a) }
     $psi.WorkingDirectory = $Run.Ws
     $psi.RedirectStandardOutput = $true
@@ -417,11 +543,20 @@ function Get-ClaudeDirRow {
 }
 
 $results = [System.Collections.Generic.List[object]]::new()
+$shapeStatus = [ordered]@{}
+$shapeCost = [ordered]@{}
 foreach ($name in $Posture) {
     foreach ($fmt in $HookFormat) {
         Write-Host "[RUN]  $name / $fmt"
         $spec = $postures[$name]
         $run = New-ProbeRun -Name $name -Spec $spec -Format $fmt
+        if ($Probe -eq 'shell-shapes') {
+            $shapes = Get-ShapeList -Ws $run.Ws
+            $res = Invoke-ProbeRun -Run $run -PostureArgs $spec.Args -PromptText (Get-ShapePrompt -Shapes $shapes) -KeepSession
+            $shapeStatus[$name] = Get-ShapeStatuses -Run $run -Shapes $shapes
+            $shapeCost[$name] = if ($res) { [Math]::Round([double]$res.total_cost_usd, 4) } else { $null }
+            continue
+        }
         $res = Invoke-ProbeRun -Run $run -PostureArgs $spec.Args
         if ($Probe -eq 'claude-dir') {
             $results.Add((Get-ClaudeDirRow -Name $name -Run $run -Res $res))
@@ -431,7 +566,18 @@ foreach ($name in $Posture) {
     }
 }
 
-if ($Probe -eq 'claude-dir') {
+if ($Probe -eq 'shell-shapes') {
+    # One row per command shape, one column per grant set. DENIED / allowed is read from the transcript.
+    $matrix = foreach ($s in (Get-ShapeList -Ws 'C:\ws')) {
+        $row = [ordered]@{ id = $s.Id; tool = $s.Tool; command = $s.Cmd.Replace('C:/ws', '<ws>') }
+        foreach ($name in $Posture) { $row[$name] = $shapeStatus[$name][$s.Id] }
+        [pscustomobject]$row
+    }
+    $matrix | Format-Table -AutoSize | Out-String -Width 220 | Write-Host
+    foreach ($name in $Posture) { Write-Host "[INFO] cost $name : $($shapeCost[$name])" }
+    $results.Add([pscustomobject]@{ shapes = @($matrix); cost = $shapeCost })
+}
+elseif ($Probe -eq 'claude-dir') {
     $results | Format-Table posture, free, config, settings, edit, denials, verdict, costUsd -AutoSize | Out-String -Width 200 | Write-Host
 } else {
     $results | Format-Table posture, format, write, guarded, npmTest, bashWrite, denials, verdict, costUsd -AutoSize | Out-String -Width 200 | Write-Host
@@ -448,7 +594,11 @@ Write-Host "[INFO] results: $(Join-Path $OutDir 'results.json')"
 if ($useCreds) {
     Get-ChildItem -LiteralPath $OutDir -Recurse -Force -Filter '.credentials.json' | Remove-Item -Force
 }
-if ($Probe -eq 'claude-dir') {
+if ($Probe -eq 'shell-shapes') {
+    Write-Host '[INFO] allowed = the tool_result carries no denial; DENIED = "has been denied"; not-run = the model'
+    Write-Host '       never made that exact call. B10 and P8 are controls and must be DENIED.'
+}
+elseif ($Probe -eq 'claude-dir') {
     Write-Host '[INFO] A grant lets .claude/ writes through when config and settings are both written.'
     Write-Host '       free.txt is the control: refused there means the posture grants no writes at all.'
 } else {
