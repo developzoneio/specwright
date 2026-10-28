@@ -1,0 +1,19 @@
+[
+  { "type": "file-exists", "path": ".specs/BUG-title-200/00-spec.md" },
+  { "type": "file-exists", "path": ".specs/BUG-title-200/03-decisions.md" },
+  { "type": "file-exists", "path": ".specs/BUG-title-200/04-artifacts/repro/failing-test-output.txt" },
+  { "type": "file-exists", "path": ".specs/BUG-title-200/gate-briefs.md" },
+  { "type": "file-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "(?m)^## Gate 1 - " },
+  { "type": "file-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
+  { "type": "file-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "(?m)^## Gate 3 - " },
+  { "type": "file-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "(?m)^## Gate 4 - " },
+  { "type": "file-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "(?m)^## Gate 5 - " },
+  { "type": "file-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "(?m)^Reply: yes\\b" },
+  { "type": "transcript-contains-section", "path": ".specs/BUG-title-200/gate-briefs.md", "section": "^## Gate " },
+  { "type": "file-not-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "file-not-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
+  { "type": "file-not-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "file-matches", "path": "src/domain/todo.js", "pattern": "title\\.length > MAX_TITLE_LENGTH" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "BUG-title-200\\s*\\|\\s*bug\\s*\\|\\s*done" },
+  { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }
+]

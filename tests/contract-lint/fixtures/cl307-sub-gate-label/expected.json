@@ -1,0 +1,26 @@
+{
+  "note": "labels 3 and 3a are distinct: 3a names the skill and offers details while only 3 is declared; and a slash parenthetical in a declared gate's prose is an option set lacking details (SW-96)",
+  "findings": [
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "prose-paren-counts"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "sub-gate-undeclared-brief"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "sub-gate-undeclared-details"
+    }
+  ]
+}

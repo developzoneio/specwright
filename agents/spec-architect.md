@@ -246,12 +246,13 @@ Behavior:
 
 The main thread presents Gate 1 after `create` / `refine` and Gate 2 after `plan` from what you
 return, not from the artifacts. End those returns with the `GATE_BRIEF` block defined in the
-**sd-gate-brief** skill ("Agent return blocks"): `gate: spec` for `create` / `refine`, `gate: plan`
-for an under-threshold plan, `gate: complexity` for a `STATUS = needs-input` plan. List every
-decision a reviewer could veto, ranked per that skill's "Decision ranking", each with the default
-you recommend - including the open questions you resolved yourself, which are the decisions the
-user most needs to see. For `gate: spec`, state every decision you list in `00-spec.md` itself:
-the spec is the durable record of what Gate 1 approves. For `gate: plan` and `gate: complexity`,
+**sd-gate-brief** skill ("Agent return blocks"): `gate: spec` for `create` / `refine`
+(`gate: symptom` when the spec is a bug spec), `gate: plan` for an under-threshold plan,
+`gate: complexity` for a `STATUS = needs-input` plan. List every decision a reviewer could veto,
+ranked per that skill's "Decision ranking", each with the default you recommend - including the
+open questions you resolved yourself, which are the decisions the user most needs to see. For
+`gate: spec` and `gate: symptom`, state every decision you list in `00-spec.md` itself: the spec
+is the durable record of what Gate 1 approves. For `gate: plan` and `gate: complexity`,
 list only the decisions the plan adds - check each one against the approved `SPEC` you already
 read, and leave out any decision it settles, per the skill's "Plan approval" rule. Word every
 field in English per the skill's "User-facing text" rule; the main thread owns the conversation

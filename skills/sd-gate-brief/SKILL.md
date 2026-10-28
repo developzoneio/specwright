@@ -3,14 +3,14 @@
 Gate brief discipline for specwright workflows: what a gate shows the user, where that text is
 kept, and how every user-facing line is worded. This file is the single owner of the brief
 artifact, its language, the per-gate shapes, the decision ranking rule, the `details` targets,
-the agent return blocks and the narration rule. `/sd:feature` reads it at runtime as Phase 0
-step 4 (commands cannot load skills via frontmatter) and names only where each rule applies.
+the agent return blocks and the narration rule. `/sd:feature` and `/sd:bug` read it at runtime
+in Phase 0 (commands cannot load skills via frontmatter) and name only where each rule applies.
 `sd-spec-architect` and `sd-reviewer` load it via `skills:` so they know the block they return.
 
 Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
 brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means reply text, the
 closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `details` from the
-outline), Jira SW-92. Measured "before":
+outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -43,7 +43,8 @@ presented a gate without printing a line of it.
   or scripted run whose reply is already known, and in a turn that continues past the gate: the
   reply text is the only channel the user reads. A gate whose body is not in reply text has not
   been presented, and no later message may say it was.
-- **One section per gate pass.** Section headings, by gate:
+- **One section per gate pass.** Section headings, by gate, for `/sd:feature` (other workflows:
+  "Per-workflow parts"):
 
 ```text
 ## Gate 1 - Spec approval (pass <n>)
@@ -107,7 +108,10 @@ Lines, in order:
 
 6. The gate's question line with its option set, copied from the command.
 
-Per gate:
+A workflow with its own shape in "Per-workflow parts" replaces lines 1-5 with the lines given
+there. The cap, the `Risk:` line, the question line and the decision ranking still apply.
+
+Per gate, for `/sd:feature`:
 
 - **Spec approval** - decisions come from the spec: resolved open questions, defaults the
   architect chose, scope calls in Out of scope. Every decision in the block, shown or collapsed,
@@ -151,8 +155,9 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 
 ## The details option
 
-Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3 offer it with an
-optional target: `details <target>`. Gate Re-plan carries a brief but keeps its own option set,
+In `/sd:feature`, Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3
+offer it with an optional target: `details <target>`. Every `/sd:bug` gate offers it, with the
+targets in "Per-workflow parts"; the rules of this section apply to them. Gate Re-plan carries a brief but keeps its own option set,
 which has no `details` (ADR 0018). A `details` reply is never an approval and never advances the
 workflow. Each one prints, records `Reply: <reply verbatim>` in the open section, then asks the
 same question again. The printout is not appended: it is either already in the section or a copy
@@ -190,8 +195,23 @@ END_GATE_BRIEF
 `decision:` repeats once per decision (none when there are none); `task:` repeats once per task
 and appears only for `plan` and `complexity`, one per outline row when the plan has an outline.
 
-`sd-reviewer` ends a `holistic` review with one block. The main thread adds the test and lint
-summary it measured itself.
+For a bug spec (`TEMPLATE = bug.template.md`), `create` and `refine` end with a `gate: symptom`
+block instead, ranked and recorded in `00-spec.md` exactly as `gate: spec`:
+
+```text
+GATE_BRIEF
+gate: symptom
+symptom: <one plain sentence>
+expected: <one plain sentence>
+severity: <P0 | P1 | P2 | P3> | <why, one clause>
+affected: <components and users, one line>
+decision: <impact> <reversibility> | <decision> | <recommended default> | <why>
+risk: <one line>
+END_GATE_BRIEF
+```
+
+`sd-reviewer` ends a `holistic` or a `bug-fix-final` review with one block. The main thread adds
+the test and lint summary it measured itself.
 
 ```text
 GATE_BRIEF
@@ -204,6 +224,76 @@ END_GATE_BRIEF
 
 Each field is English and follows the user-facing text rule below, so the main thread can render
 it into the conversation language (see "Language") without first removing IDs.
+
+## Per-workflow parts
+
+A workflow listed here uses the artifact, language, cap, ranking, `details` rules and text rule
+above, with its own headings, shown lines and `details` targets from this section.
+
+### /sd:bug
+
+Section headings:
+
+```text
+## Gate 1 - Symptom captured (pass <n>)
+## Gate 2 - Reproduction confirmed (pass <n>)
+## Gate 3a - Hypothesis tree exhausted (pass <n>)
+## Gate 3 - Root cause confirmed (pass <n>)
+## Gate 4 - Failing test confirmed (pass <n>)
+## Gate 5 - Regression and review (pass <n>)
+```
+
+Sources. Gate 1 comes from the architect's `gate: symptom` block and Gate 5 from the reviewer's
+`gate: review` block plus the test and lint summary the main thread measured. The main thread
+composes Gates 2, 3a, 3 and 4 itself from what it already wrote: the `## Reproduction` section,
+the hypothesis tree and verdicts in `03-decisions.md`, the `## Root cause` section and the saved
+failing-test output. `sd-debugger` returns no block: its verdicts are already on disk, and it
+also serves `/sd:rca` and `/sd:perf`.
+
+Shown lines, replacing lines 1-5 of "Brief shape":
+
+- **Symptom captured** - `Bug: <symptom, one plain sentence>`, `Expected: <one plain sentence>`,
+  `Severity: <P-level> (<why>). Affected: <components and users>`, then lines 2-4 of "Brief
+  shape". The decisions are the calls the architect made alone (the severity, where the affected
+  scope ends, the expected behavior when the report leaves it open), each stated in `00-spec.md`.
+  With none: `Decisions: none - the spec only restates the report.`
+- **Reproduction confirmed** - `Reproduction: <confirmed locally | intermittent, about <n>% | not
+  reproduced> - <how it was tried, one clause>`, `Trigger: <the exact input or condition>`,
+  `Observed: <what happened, against what was expected>`, `Evidence: <paths under 04-artifacts/>`
+  or `Evidence: the steps in 00-spec.md only`, `Environment: <where it reproduces>`, `Risk:`. The
+  brief states what the session ran; the reply is the user's own confirmation.
+- **Hypothesis tree exhausted** - `No root cause yet: <N> hypotheses checked, <r> ruled out, <i>
+  inconclusive.`, then up to 3 lines `Ruled out: H<n> <plain statement> - <why, one clause>`,
+  highest score first, then `<n> more ruled out - reply details to list them.` when there are
+  more, then `Still open: H<n> <plain statement> - missing: <evidence>` for the best-scored
+  inconclusive one, or `Still open: none`, then `Recommended: <re-enumerate | observe | abort> -
+  <why, one clause>`, then `Risk:`. The rest of the ruled-out list goes in the collapsed
+  subsection.
+- **Root cause confirmed** - `Root cause: <named, fixable cause, files named>`, `Why root, not
+  symptom: <one clause>`, `Evidence: <the log, test or file that showed it> (confidence <low |
+  medium | high>)`, `Ruled out: <r> other hypotheses - reply details tree to see them.` (omitted
+  at 0), `Risk:` (for example an inconclusive hypothesis that may also contribute).
+- **Failing test confirmed** - `Test: "<test name>" in <test file path>`, `Result: fails -
+  <failure reason, one line>`, `Fails for the documented reason: yes` or `Fails for the documented
+  reason: unclear - <why>`, `Links to root cause: <one clause>`, `Risk:`.
+- **Regression and review** - the "Integration and review" lines, unchanged, with suggestions
+  logged to `05-retro.md` before the brief is written. The `Tests:` line says whether the new test
+  passes and whether anything else failed.
+
+`details` targets:
+
+| Reply | Prints | Offered at |
+|---|---|---|
+| `details` | the collapsed subsection when the section has one, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate |
+| `details repro` | the `## Reproduction` section of `00-spec.md`, verbatim | Gate 2 |
+| `details tree` | the hypothesis tree table and every `### H<n> verification` section of `03-decisions.md`, verbatim | Gates 3a, 3 |
+| `details H<n>`, e.g. `details H2` | that hypothesis's tree row and its `### H<n> verification` sections, verbatim | Gates 3a, 3 |
+| `details rootcause` | the `## Root cause` section of `00-spec.md`, verbatim | Gates 3, 4, 5 |
+| `details output` | `04-artifacts/repro/failing-test-output.txt`, verbatim | Gate 4 |
+| `details fix` | the `## Fix approach` section of `00-spec.md`, verbatim | Gate 5 |
+
+Gate 1 offers a bare `details` only: nothing but the spec exists yet. `details` is never an
+override, so the HARD Gate 2 offers it like any other gate.
 
 ## User-facing text
 
@@ -218,8 +308,9 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
   three digits), a constitution section sign reference, a criterion or decision
   reference (`SC-<n>`, `AC-<n>`, `D<n>`), or a `path:line` citation. Say what the thing is
   instead.
-- **Allowed handles.** The spec ID, a task ID on the same line as its plain title, gate names,
-  file paths, and the option tokens of the question line.
+- **Allowed handles.** The spec ID, a task ID on the same line as its plain title, a hypothesis ID
+  (`H<n>`) on the same line as its plain statement, a bug severity (`P0`-`P3`), gate names, file
+  paths, and the option tokens of the question line.
 - **Narrate a model escalation in plain words**: what runs on a stronger model and why, for
   example "planning with a stronger model because the spec was sized large". The rule ID stays in
   the retro line only.
