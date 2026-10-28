@@ -19,6 +19,8 @@ a human or a future harness, and are pinned to LF via `.gitattributes`.
 | `drift-revised/` | PASS - the same drift, recorded by Gate Re-plan: `R1` (`Phase: expand`) lists `T02`, and `T02` carries `Revised-by: R1` | none (`SL070`-`SL073` also pass) |
 | `row-missing/` | BLOCK - outline row `T02` has no block in `02-tasks.md`, and no revision lists it | `SL068` |
 | `marker-ignored/` | PASS - lean blocks (ADR 0023) mark every `Files` entry `(new)` or `(new symbol)`; none of the rows carry a marker, and the sets still agree once it is dropped | none |
+| `added-task-revised/` | PASS - `/sd:verify` found AC-2 uncovered in Phase 6, so Gate Re-plan added `T03` with no outline row: `R1` (`Phase: verify`) lists `T03`, and `T03` carries `Revised-by: R1` (SW-105) | none (`SL070`-`SL073` also pass) |
+| `added-task-unmarked/` | BLOCK - the same `T03`, appended by hand: it has no outline row, no `Revised-by`, and `01-plan.md` has no `## Revisions` (SW-105) | `SL068` |
 
 Notes for a reader running the check by hand:
 
