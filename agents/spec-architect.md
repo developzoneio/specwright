@@ -200,6 +200,9 @@ number, e.g. `R2`), and the trigger the main thread passed.
 
 1. **Regenerate only the scoped task blocks** in `02-tasks.md`. Every task block **not** in
    `REPLAN_SCOPE` is left byte-for-byte unchanged - do not reflow, renumber, or re-order them.
+   A `REPLAN_SCOPE` ID that names no existing block is a **new task** (Phase 6, `Phase: verify`):
+   append its block after the last block with that exact ID, never renumbering or reusing one. Its
+   `Covers` names the criteria the main thread reported as uncovered. Do not touch `## Outline`.
 2. **Mark each regenerated block** with the `Revised-by: <REVISION>` field (per the "Re-plan adds one
    field" section of `sd-atomic-task-format`). Every core field (`Files`, `Acceptance`, `Covers`,
    `Depends on`) stays fully populated, the optional fields follow the same write-only-when-

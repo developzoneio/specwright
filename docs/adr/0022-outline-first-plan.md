@@ -112,6 +112,7 @@ Scenario `12-resume-outline-complexity` shows the Gate Complexity face presented
 - Between Gate 2 and the end of 3b, a spec is `in-progress` with no task list. Hooks treat that
   state explicitly (table above), and `/sd:spec validate` treats it as legal.
 - `/sd:refactor` is unchanged. A `TASK = plan` invocation without `STEP` still plans in one step.
-- Not covered: Phase 6's "uncovered criterion -> back to Phase 3" path still predates the
-  outline. Adding a task after Gate 2 should go through Gate Re-plan; that is left as a
-  follow-up.
+- Not covered at acceptance: Phase 6's "uncovered criterion -> back to Phase 3" path still predated
+  the outline. Adding a task after Gate 2 should go through Gate Re-plan; that was left as a
+  follow-up. Resolved by SW-105: Phase 6 enters Gate Re-plan with `Phase: verify`, and the added
+  task is a block with `Revised-by` and no outline row, which `SL068` exempts.

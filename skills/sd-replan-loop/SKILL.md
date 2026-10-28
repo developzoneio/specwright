@@ -28,6 +28,11 @@ approved into full task blocks, and expansion can show that an approved row cann
 as written. That is a plan-invalidating discovery too, and it goes through this gate before any
 task block is written.
 
+A fourth entry point is `/sd:feature` Phase 6 (SW-105). `/sd:verify` can report a success or
+acceptance criterion that no task `Covers`. The plan is not wrong there, it is incomplete, and the
+approved outline is immutable, so adding the task is a revision and goes through this gate with
+`Phase: verify`.
+
 ---
 
 ## What counts as a plan-invalidating discovery
@@ -45,6 +50,8 @@ implementation adjustment. Trigger the loop when:
   `01-plan.md`, per `sd-atomic-task-format` "Outline row"): a row whose expanded block needs a
   different `Files` set or `Covers` set, a row that has to be split, merged or dropped, or a task the
   outline lacks. Rewording a title or filling the block's other fields is expansion, not divergence.
+- `/sd:feature` Phase 6 (`/sd:verify` FAIL) finds a criterion that no task `Covers`, so a task has to
+  be added after Gate 2. Widening an existing task's `Covers` or `Files` for it is the same case.
 
 Do **not** trigger the loop for work that stays inside one task's contract (a rename, a helper reuse,
 a test tweak). That is ordinary implementation, handled by the implementer's own scope. Re-planning
@@ -79,9 +86,15 @@ and waits for explicit user approval; silence is not approval, and there is no o
    `REPLAN_SCOPE` exactly as the outline approved it, and writes the affected tasks per the approved
    delta, each marked `Revised-by: R<n>`. The `## Outline` table itself is never edited.
 
+   A scoped ID that names no block yet is a **new task** (the Phase 6 case). The architect appends
+   its block after the last one, with the next free `T<NN>`: it never renumbers, reorders or reuses
+   an ID. Its `Covers` names the uncovered criteria, and it carries `Revised-by: R<n>` like any
+   scoped task. It has no outline row and needs none: `SL068` exempts a block with `Revised-by`.
+
 4. **Resume.** Re-enter the Execute phase at the first affected (now regenerated) task. Already-passed
    tasks that the revision did not touch stay checked. From Phase 3b, the Execute phase starts at
-   its first task, as it would after any expansion.
+   its first task, as it would after any expansion. From Phase 6, the Execute phase starts at the new
+   task, and Phase 5, Gate 3 (a new pass) and Phase 6 then run again as after any Execute phase.
 
 ---
 
@@ -97,7 +110,7 @@ here. Create the `## Revisions` header on the first revision.
 ### R1 - <UTC ISO 8601 timestamp>
 
 - Trigger: <the discovery that invalidated the plan - one or two lines>
-- Phase: <execute | review | expand>
+- Phase: <execute | review | expand | verify>
 - Gate: re-plan
 - Affected tasks: <T## list>
 - Delta: <what changed in those tasks and why>
@@ -106,6 +119,11 @@ here. Create the `## Revisions` header on the first revision.
 
 Rules:
 
+- **`Phase` names where the gate was entered.** `execute` (Phase 4 self-check), `review` (batch
+  review finds the plan wrong), `expand` (Phase 3b divergence), `verify` (`/sd:feature` Phase 6,
+  an uncovered criterion; no other workflow runs `/sd:verify`). `verify` is distinct from `review`
+  because there the plan is incomplete, not wrong. `/sd:spec validate` checks that the line is
+  present (`SL073`), not its value.
 - **Contiguous numbering.** Revisions are `R1`, `R2`, `R3` ... with no gaps and no reuse. `R<n>`
   never appears twice.
 - **Append-only.** A prior `R<k>` entry is never edited or deleted. A later correction is a new

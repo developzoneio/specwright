@@ -257,7 +257,8 @@ Move to next task. Repeat until all tasks checked.
 ### Gate Re-plan (HARD) - adaptive re-plan on a plan-invalidating discovery
 
 Reachable from Phase 3b (a material divergence from the approved outline), Phase 4 (self-check
-above) **and** Phase 5b (a batch-review finding that the plan itself is wrong). Follow the **sd-replan-loop** skill; the protocol is defined there once and shared
+above), Phase 5b (a batch-review finding that the plan itself is wrong) **and** Phase 6 (an
+uncovered criterion in `/sd:verify`, `Phase: verify`). Follow the **sd-replan-loop** skill; the protocol is defined there once and shared
 with `/sd:refactor`. In brief:
 
 1. STOP. The main thread writes the Re-plan brief (trigger, affected tasks, proposed delta) to
@@ -271,7 +272,8 @@ with `/sd:refactor`. In brief:
    `REVISION = R<n>` (next contiguous number). It appends the `## Revisions` entry to `01-plan.md`
    (append-only; the original plan prose is never edited), regenerates ONLY the affected task blocks
    in `02-tasks.md`, and marks each `Revised-by: R<n>`. From Phase 3b it also passes `STEP = expand`
-   and writes the whole `02-tasks.md`, per **sd-replan-loop**.
+   and writes the whole `02-tasks.md`, per **sd-replan-loop**. A scoped ID with no block yet is a
+   new task, appended after the last block (the Phase 6 case).
 3. Resume Phase 4 at the first regenerated task (from Phase 3b, at the first task). Tasks the
    revision did not touch stay checked.
 
@@ -336,7 +338,9 @@ Treat findings:
    `.specs/FEAT-<arg>/05-retro.md`. Never tick a box just to make VF030 pass - an unearned
    checkbox is a fabricated result, not a shortcut.
 2. Run `/sd:verify FEAT-<arg>`. It must report `result: pass`.
-   - On FAIL: address the findings (uncovered criterion -> back to Phase 3 to add tasks;
+   - On FAIL: address the findings (uncovered criterion -> the plan is incomplete, so enter
+     **Gate Re-plan** (Phase 4) with `Phase: verify`, scoped to the task that will cover it, then
+     resume Phase 4 at that task; never edit the approved outline or append a block by hand;
      failing tests -> back to Phase 4; unchecked `AC-<n>` criterion with real evidence already
      in hand -> gather the citation and check the box per step 1; unchecked criterion with no
      evidence yet -> route back to the phase that produces it, e.g. Phase 4 for an untested
@@ -374,7 +378,8 @@ Treat findings:
   why the workflow still has 3 hard gates - do not describe it as 4.
 - **Gate Re-plan is a conditional gate, not a fourth always-on gate.** Like Gate Complexity, it
   fires ONLY on a specific trigger - a material divergence from the outline in Phase 3b, a
-  plan-invalidating discovery in Phase 4 or a plan-is-wrong BLOCK in Phase 5. A run that never hits one never sees it. It is HARD when it does fire (explicit
+  plan-invalidating discovery in Phase 4, a plan-is-wrong BLOCK in Phase 5 or an uncovered
+  criterion in Phase 6. A run that never hits one never sees it. It is HARD when it does fire (explicit
   approval, no override), and it never re-plans a `done` spec. The protocol lives in the
   `sd-replan-loop` skill; `02-tasks.md` is re-planned only through it - never by a silent hand-edit.
   Any revision is recorded append-only in `01-plan.md`'s `## Revisions` log with the original plan

@@ -563,7 +563,7 @@ try {
         # stdout of the two twins would no longer be byte-identical.
         $featureNote = ' A /sd:feature gate is evidenced by its section in gate-briefs.md and the reply recorded' +
             ' on its Reply: line; if the user already answered that gate in this conversation, append that answer' +
-            ' verbatim as the Reply: line instead of asking again.'
+            ' verbatim as the Reply: line with the Edit tool instead of asking again.'
     }
     $reason = 'specwright stop-gate: ' + $id + ' (/sd:' + $specType + ') is past a HARD gate without its evidence.' +
         ($findings -join '') + $featureNote +

@@ -38,8 +38,9 @@
                served on claude-sonnet-*; control has no model on any call.
       feat03b - Gate 2 Face B `no-split`, ESC-FEAT-03b (SW-76). A `draft`
                spec at complexity M (so ESC-FEAT-03 does not fire) whose
-               scope spans all three production layers, which puts the plan
-               over Gate 2's layer threshold. Two turns: turn 1 stops at
+               scope spans all three production layers and which carries an
+               unresolved Open question (as in e2e scenario 12, SW-105), which
+               puts the plan over Gate 2's threshold. Two turns: turn 1 stops at
                Gate 2; if it showed Face B, turn 2 resumes the session
                (--resume) with `no-split` (run) or `approve split` (control).
                Expect: run has an sd-spec-architect call at the default (the
@@ -426,8 +427,10 @@ $t01Hard = {
 }
 
 # feat03b: one cohesive feature that must touch all three production layers of
-# the fixture (domain, infrastructure, application), so the plan crosses Gate 2's
-# "spans > 2 production layers" threshold whatever the architect's discretion.
+# the fixture (domain, infrastructure, application) and carries one unresolved Open
+# question, as in e2e scenario 12 (SW-105). The Open question is what makes Gate 2
+# show Face B deterministically: any unresolved Open question is over threshold,
+# while the three-layer span alone depended on how the architect partitioned files.
 $feat03bSpec = @'
 ---
 id: FEAT-e2e-escalation-demo
@@ -478,6 +481,12 @@ production layer of the fixture.
 ## Out of scope
 
 - Time zones, recurring due dates, reminders.
+
+## Open questions
+
+- Unresolved: should `listOverdue` include todos that are already done? The product owner has not
+  decided; the answer changes the store query and the service contract. Left open on purpose by
+  the fixture author - it is the user's call, not the architect's.
 
 ## Constitution check
 

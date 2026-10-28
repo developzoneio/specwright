@@ -85,7 +85,9 @@ gate-briefs.md`; `an approving Reply: line in a ## Gate 2 section of gate-briefs
 refine)`) and the later-phase evidence. A feature reason then adds one sentence before ADR 0016's
 closing instruction: the gate's evidence is its section and the reply on its `Reply:` line, and if
 the user already answered that gate in this conversation, the model appends that answer verbatim
-as the `Reply:` line instead of asking again. The sentence has no apostrophe, so PowerShell 5.1's
+as the `Reply:` line, with the Edit tool (SW-105: five live runs recorded it through `printf` and
+`echo`, which a restricted permission mode refuses), instead of asking again. The sentence has no
+apostrophe, so PowerShell 5.1's
 `ConvertTo-Json` leaves both twins' stdout byte-identical.
 
 **Gate Re-plan has no rule.** Its heading `## Gate Re-plan - R<n>` carries no pass number, the

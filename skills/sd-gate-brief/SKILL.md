@@ -57,7 +57,8 @@ presented a gate without printing a line of it.
   subsection, written in the same write as the brief. It is part of the record, not of the shown
   text, so a resumed session can answer `details` without re-deriving anything.
 - **The reply closes the section.** When the user answers, append one line `Reply: <reply
-  verbatim>` to the section. A `details` reply is recorded the same way, and the section stays
+  verbatim>` to the section with the Edit tool, never a shell redirect or `printf`/`echo`: a shell
+  write is the route a restricted permission mode refuses, and the stop-gate reads this line. A `details` reply is recorded the same way, and the section stays
   open for the next reply.
 - Subagents never write this file. `sd-spec-architect` and `sd-reviewer` return blocks (below);
   the main thread renders and writes.
