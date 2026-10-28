@@ -28,8 +28,8 @@ All paths are relative to `examples/fixture-project/`. Test command is `npm test
 ### T03 - Add Domain unit tests for the priority field
 
 - **Files**: tests/todo.test.js
-- **Acceptance**: new tests cover SC-1, SC-2, SC-3 and SC-5, plus a direct `validatePriority` call
-  (AC-3), appended without editing the four existing tests; `npm test` passes (AC-7).
+- **Acceptance**: new tests in tests/todo.test.js cover SC-1, SC-2, SC-3, SC-5 and a direct
+  `validatePriority` call (AC-3), existing four tests untouched; `npm test` passes (AC-7).
 - **Covers**: SC-1, SC-2, SC-3, SC-5, AC-1, AC-2, AC-3, AC-6, AC-7
 - **Depends on**: T02
 - **Estimated complexity**: M
@@ -59,8 +59,8 @@ All paths are relative to `examples/fixture-project/`. Test command is `npm test
 
 - **Files**: .specs/constitution.md
 - **Acceptance**: the two example todo shapes read `{ id, title, done, priority }` via an in-place
-  literal replacement - exactly two changed lines, nothing else (AC-9); `git status` shows exactly
-  the five files this feature touches (AC-8).
+  literal replacement - `git diff -- .specs/constitution.md` shows exactly two changed lines
+  (AC-9); `git status` shows exactly the five files this feature touches (AC-8).
 - **Covers**: AC-8, AC-9
 - **Depends on**: T01, T02, T03, T04, T05
 - **Status**: open

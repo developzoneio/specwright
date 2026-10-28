@@ -313,6 +313,7 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 | `SL066` | A `Licensed deviations:` list cites a deviation ID absent from the spec's `## Deviation table` | 🔴 BLOCK |
 | `SL067` | Task check-off marker is non-canonical: `Status` value is not `open`/`done`, or the heading carries a check-off prefix (`[x]`, `[ ]`, `✅`) | 🟠 WARN |
 | `SL068` | Task blocks disagree with the approved `## Outline` in `01-plan.md` and no `Revised-by` explains it: an outline row with no block, a block whose `Files` or `Covers` set differs from its row, or a block with no row | 🔴 BLOCK |
+| `SL069` | Task block in `02-tasks.md` has a `Covers` other than `none` and no witness test: no legacy `Test` value and no path-like token in `Acceptance` | 🔴 BLOCK |
 | `SL070` | Task carries `Revised-by: R<n>` but `01-plan.md` has no matching `## Revisions` entry `R<n>` | 🔴 BLOCK |
 | `SL071` | A `## Revisions` entry `R<n>` names an `Affected task` that does not carry `Revised-by: R<n>` (or does not exist) | 🔴 BLOCK |
 | `SL072` | Revision numbering is non-contiguous, duplicated, or a prior entry was rewritten (append-only violated) | 🔴 BLOCK |
@@ -327,9 +328,10 @@ BLOCK or WARN without one. IDs are stable: renumbering them breaks anyone who ha
 carry (a snapshot-member-range `Pattern refs` citation and a licensed-deviation ID list in
 `Acceptance`), checked at validate time instead of only at `/sd:port` Phase 6 execution.
 `SL067` is the **check-off marker** rule and applies to every spec type. `SL068` is the **outline
-agreement** rule (`/sd:feature`, ADR 0022). `SL069` remains **reserved** for a further task-block
-content rule. Claim from this band rather than extending
-another one - `SL05x` is link integrity and has nothing to do with task content.
+agreement** rule (`/sd:feature`, ADR 0022). `SL069` is the **witness test** rule (SW-107): the
+plan-time twin of `/sd:verify` `VF020`. It is the last ID in this band, so a further task-block
+content rule needs a new band - do not extend `SL05x`, which is link integrity and has nothing to do
+with task content.
 
 `SL070`-`SL079` are the **revision-log integrity** band (the `sd-replan-loop` `## Revisions` log in
 `01-plan.md`, cross-checked against `Revised-by` markers in `02-tasks.md`). It is a distinct band on
@@ -371,6 +373,13 @@ shipped already carried it (22 of 22), while the two specs without it predate th
 Blocking would fail old specs for a rule they could not have followed, and would gain nothing on
 new ones. A task whose `Files` carries no such marker is never checked at all (ADR 0023): the
 field is conditional, not required, and an absent field there reads as `none`.
+
+`SL069` is **BLOCK**, unlike `SL060`, because it adds no new failure: `/sd:verify` `VF020` is BLOCK
+on the same condition and the same witness definition, so a task `SL069` flags would fail close-out
+anyway - this only moves the failure to plan time. A legacy-corpus reason would argue WARN, and none
+exists: a legacy block names its witness in a `Test` field (`VF020` reads it identically), and every
+spec under `examples/` that predates the lean format passes. Promoting it to WARN would let a
+validate run pass a spec that `/sd:verify` is certain to fail.
 
 `SL067` is WARN by the same test. The tolerant reader in `sd-atomic-task-format` "Check-off marker"
 still resolves every drifted marker to a definite checked/unchecked state, so resume behavior stays
@@ -417,6 +426,15 @@ anything other than `open` or `done`, **or** its heading carries a check-off pre
 `Status` line and a plain heading is **compliant** (legacy, reads as unchecked). The check-off
 semantics themselves are defined in `sd-atomic-task-format` "Check-off marker"; do not restate them
 here.
+
+Report one `SL069` per offending task block, citing the task's `Acceptance` line (the heading when
+the block has none). A block is a finding when its `Covers` value, read with the grammar above,
+names at least one ID and is not `none`, **and** the block has no witness test. What a witness test
+is, and how a legacy `Test` field and `Acceptance` resolve against each other, is defined once in
+the "Witness test" section of `sd-atomic-task-format` - `/sd:verify` `VF020` reads the same section,
+so the two rules cannot disagree. Do not restate that definition here, and do not check that a named
+path exists: that is `VF021`, which needs the disk and runs at close-out. A block with no `Covers`
+line reads as `Covers: none` and is never checked.
 
 `SL068` is BLOCK: a task list that contradicts the outline Gate 2 approved, with no revision record
 for the change, is a registry that **lies** about what was approved - and the approved outline is

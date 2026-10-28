@@ -46,8 +46,8 @@ A block authored before ADR 0023 carries 11 fields: the five above plus `Layer`,
 `Test`, `Conflicts with`, and `Estimated complexity` / `Reversibility` / `Pattern refs` written on
 every task. Such a block stays valid and is read as written:
 
-- A legacy `Test` field names the witness test. Readers use it when present, and the test path in
-  `Acceptance` otherwise.
+- A legacy `Test` field names the witness test - see "Witness test" below for how readers resolve
+  it against `Acceptance`.
 - `Layer` and `Step type` are ignored. Layers come from `Files`; where a legacy block carries
   `Layer`, a reader that counts layers may use it instead.
 - `Conflicts with` is ignored outside refactor mode.
@@ -243,6 +243,27 @@ newline truncates them.
 This grammar applies to **every** field in the block, not only to the field a given check cares
 about. Anything that reads `02-tasks.md` - `/sd:spec validate`, `/sd:verify`, `sd-implementer` -
 uses this one rule. Do not write a per-field matcher.
+
+---
+
+## Witness test
+
+This section is the only definition of a witness test. `/sd:verify` (`VF020`, `VF021`) and
+`/sd:spec validate` (`SL069`) reference it and never restate it.
+
+A task **needs a witness** when its `Covers` value is not `none`. A block with no `Covers` line
+reads as `Covers: none` (legacy) and needs none.
+
+A task **has a witness** when either of these holds, tried in this order:
+
+1. It carries a legacy `Test` field whose value is not `none` or empty. The value is read as
+   written: an annotated `none - documentation edit` is not the bare `none`, so it counts.
+2. Its `Acceptance` value holds a token that looks like a relative path - it contains a `/` or a
+   file extension. The value runs across continuation lines, per the field label grammar.
+
+A `Test` field that is `none` or empty falls through to step 2. A task that needs a witness and has
+none is a finding: `SL069` at plan time, `VF020` at close-out. Whether a named path exists on disk
+is a separate question that only `VF021` asks; `SL069` reads the text and never touches the disk.
 
 ---
 

@@ -112,6 +112,12 @@ decompose decided - before a full task block exists.
   **single Write** once every block is ready - never an empty or partial file, because the
   workflow resumes from whether it exists. Never edit `01-plan.md`: the approved outline is
   immutable.
+- **Witness check (no gate).** Before that Write, check every block whose `Covers` is not `none`
+  for a witness test, per the "Witness test" section of **sd-atomic-task-format**; `/sd:spec
+  validate` reports a miss as `SL069`. Fix a miss by naming the test file in that block's
+  `Acceptance` - one already in the row's `Files`, or one that exists on disk. If neither exists,
+  the outline carried no test for the criterion: that is a material divergence, so return
+  `STATUS = needs-input` as below instead of adding a path to `Files`.
 - **Material divergence during `expand`.** If a row cannot be carried out as approved - it needs a
   different `Files` or `Covers` set, has to be split, merged or dropped, or a task is missing (per
   **sd-replan-loop**) - write nothing. Return `STATUS = needs-input` naming the affected row IDs

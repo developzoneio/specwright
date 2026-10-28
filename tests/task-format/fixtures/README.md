@@ -29,7 +29,9 @@ specs.
 | `lean-edit-no-refs.md` | an edit-only task, no `Files` marker, no `Pattern refs` field | SW-93 negative case |
 | `lean-optional-fields.md` | `Estimated complexity`/`Reversibility` written only when non-default (`L`/`hard`), absent on the other task (`M`/`trivial`) | SW-93 |
 | `lean-test-in-acceptance.md` | `Covers` != `none`, no `Test` field, witness test path named in `Acceptance` | SW-93, VF020 |
-| `lean-no-test.md` | `Covers` != `none`, no `Test` field, no path-like token in `Acceptance` | SW-93 negative case, VF020 |
+| `lean-no-test.md` | `Covers` != `none`, no `Test` field, no path-like token in `Acceptance` | SW-93 negative case, VF020; SW-107 `SL069` positive case |
+| `legacy-test-field.md` | `Covers` != `none`, legacy `Test: tests/todo-service.test.js`, no path-like token in `Acceptance` | SW-107 |
+| `covers-none-no-witness.md` | `Covers: none`, no `Test` field, no path-like token in `Acceptance` | SW-107 |
 
 The first three are the 11-field legacy shape (ADR 0001); the `lean-*` fixtures are the 5-core-field
 shape ADR 0023 introduced. Both shapes are first-class: a reader must parse both identically to
@@ -81,3 +83,23 @@ a path-like token in `Acceptance`. `lean-test-in-acceptance.md`'s T01 has `Cover
 `Test` field, but its `Acceptance` names `tests/todo-service.test.js` - VF020 must pass and VF021
 must find that path. `lean-no-test.md`'s T01 has `Covers: AC-1` and no path-like token anywhere -
 VF020 must report exactly one BLOCK against it.
+
+## SL069 expectations (SW-107)
+
+`SL069` is the plan-time twin of `VF020`: both read the one "Witness test" section of
+`skills/sd-atomic-task-format/SKILL.md`, so they must agree on every fixture. All four fixtures
+below use the canonical label form, because `commands/verify.md` still reads `Covers` with a
+canonical-only regex while `SL069` uses the tolerant grammar; on a plain-label block the two could
+diverge, and that is a `VF020` parsing gap, not a witness-definition disagreement.
+
+| Fixture | Needs a witness | Has a witness | `VF020` | `SL069` |
+|---|---|---|---|---|
+| `lean-test-in-acceptance.md` | yes (`AC-1`) | yes - path in `Acceptance` | pass | no |
+| `legacy-test-field.md` | yes (`AC-1`) | yes - legacy `Test` | pass | no |
+| `covers-none-no-witness.md` | no (`Covers: none`) | no | pass | no |
+| `lean-no-test.md` | yes (`AC-1`) | **no** | BLOCK | **yes** (BLOCK) |
+
+`lean-no-test.md` is the only positive case. Every other fixture in this directory must produce no
+`SL069`, including the legacy 11-field ones (they carry a `Test` field) and the lean blocks whose
+`Covers` is a real ID (each names a path in `Acceptance`). If a change makes `lean-no-test.md` pass
+clean, or a witness-bearing fixture fire, the check is broken - not the fixture.
