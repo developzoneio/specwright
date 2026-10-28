@@ -1003,6 +1003,42 @@ function Invoke-TranscriptAssertionSelfCheck {
     return $allOk
 }
 
+function Invoke-OutputAssertionSelfCheck {
+    # -SelfTest, offline (SW-105): output-matches / output-not-matches against
+    # a built report. The regexes are the ones scenario 05 uses to scope SL068
+    # to one spec per line, so a wrong direction or a vacuous pattern is caught
+    # here before a paid run.
+    $allOk = $true
+    $report = @(
+        '- BLOCK SL068 FEAT-AAA-018 T02 Files differs from its outline row'
+        '- WARN  SL060 FEAT-AAA-017 T01 new file without Pattern refs'
+        '- BLOCK SL044 FEAT-AAA-014 empty reason'
+    ) -join "`n"
+    $run = [pscustomobject]@{ Result = [pscustomobject]@{ result = $report }; Stdout = '' }
+    $sameLine = '(?m)^.*(SL068.*{0}|{0}.*SL068).*$'
+    $cases = @(
+        @{ Name = 'matches: rule and spec on one line'; Type = 'output-matches'
+           Pattern = ($sameLine -f 'FEAT-AAA-018'); Expect = $true },
+        @{ Name = 'matches: rule on another spec'; Type = 'output-matches'
+           Pattern = ($sameLine -f 'FEAT-AAA-017'); Expect = $false },
+        @{ Name = 'not-matches: spec with no SL068 finding'; Type = 'output-not-matches'
+           Pattern = ($sameLine -f 'FEAT-AAA-014'); Expect = $true },
+        @{ Name = 'not-matches: spec with an SL068 finding'; Type = 'output-not-matches'
+           Pattern = ($sameLine -f 'FEAT-AAA-018'); Expect = $false }
+    )
+    foreach ($c in $cases) {
+        $assertion = [pscustomobject]@{ type = $c.Type; pattern = $c.Pattern }
+        $got = Test-OneAssertion -Assertion $assertion -Workspace '' -Run $run -FakeHome ''
+        if ($got -eq $c.Expect) {
+            Write-Ok "self-test: $($c.Type) [$($c.Name)] : $($c.Expect), as expected"
+        } else {
+            Write-Bad "self-test: $($c.Type) [$($c.Name)] : expected $($c.Expect), got $got"
+            $allOk = $false
+        }
+    }
+    return $allOk
+}
+
 function Test-OneAssertion {
     param($Assertion, [string]$Workspace, $Run, [string]$FakeHome)
     $type = $Assertion.type
@@ -1030,6 +1066,14 @@ function Test-OneAssertion {
         'output-contains' {
             $text = if ($Run.Result -and $Run.Result.result) { [string]$Run.Result.result } else { $Run.Stdout }
             return ($text -match [regex]::Escape($Assertion.value))
+        }
+        'output-matches' {
+            $text = if ($Run.Result -and $Run.Result.result) { [string]$Run.Result.result } else { $Run.Stdout }
+            return ($text -match $Assertion.pattern)
+        }
+        'output-not-matches' {
+            $text = if ($Run.Result -and $Run.Result.result) { [string]$Run.Result.result } else { $Run.Stdout }
+            return ($text -notmatch $Assertion.pattern)
         }
         'exit-code' {
             return ($Run.ExitCode -eq [int]$Assertion.value)
@@ -1072,6 +1116,8 @@ function Get-AssertionLabel {
         'file-matches'     { return "file-matches: $($Assertion.path) ~= $($Assertion.pattern)" }
         'file-not-matches' { return "file-not-matches: $($Assertion.path) !~ $($Assertion.pattern)" }
         'output-contains'  { return "output-contains: $($Assertion.value)" }
+        'output-matches'   { return "output-matches: $($Assertion.pattern)" }
+        'output-not-matches' { return "output-not-matches: $($Assertion.pattern)" }
         'exit-code'        { return "exit-code: $($Assertion.value)" }
         'file-no-bom'      { return "file-no-bom: $($Assertion.path)" }
         'permission-denied' { return "permission-denied: $($Assertion.tool) on $($Assertion.path)" }
@@ -1333,6 +1379,9 @@ Assert-Prerequisites -ScenarioDirs $selectedDirs
 if ($SelfTest) {
     Write-Host '=== e2e self-test: transcript-contains-section must FAIL on a brief that was not printed ==='
     $allDetected = Invoke-TranscriptAssertionSelfCheck
+    Write-Host ''
+    Write-Host '=== e2e self-test: output-matches / output-not-matches must scope a rule to one spec, offline ==='
+    if ((Invoke-OutputAssertionSelfCheck) -eq $false) { $allDetected = $false }
     Write-Host ''
     Write-Host '=== e2e self-test: harness must DETECT a removed or malformed guard ==='
     foreach ($mutation in $guardMutations) {
