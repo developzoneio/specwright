@@ -1,0 +1,23 @@
+/sd:rca e2e-brief
+
+Incident report (synthetic, written for this e2e scenario; the code it points at is the real
+project in this directory). Severity is P0. On 2026-09-26 the demo host restarted at 09:58 UTC and
+restored 3 todos (ids 1, 2, 3) from a snapshot, by calling InMemoryStore.save for each one. At
+10:02 UTC the first new todo got id 1 and the list still showed 3 items; at 10:05 the second new
+todo got id 2 and the list still showed 3 items. No error was raised anywhere. The pager fired at
+10:07 on the todo count regression, and at 10:20 on-call mitigated it by restarting the demo host
+with an empty store. Impact: restored todos were silently overwritten on the demo deployment, one
+pager alert, the snapshot file was intact. The only recent change was on 2026-09-25 at 17:00, when
+the demo maintainer added snapshot restore on startup. The raw log is `incident/demo-host-restart.txt`;
+save it under the spec's `04-artifacts/` as the evidence. Fill Timeline, Symptoms, Affected scope
+and Recent changes yourself from this report, since no human is available to dictate them.
+
+This is a headless, scripted test run. The runner that started it types each gate reply as the
+next message of this session, the way a person would. Stop at each hard gate as the workflow says
+and wait for that message. The spec ID carries today's UTC date. Change no code anywhere. After
+Phase 5 close-out, report the final spec ID and its status.
+
+This run grants file writes only and refuses shell access, for you and for every subagent you
+start. Verify each hypothesis by reading the code with Read and Grep, in rank order. Make every
+change to a file under `.specs/`, including the `Reply:` line in `gate-briefs.md`, with the Edit or
+Write tool. Tell each subagent you start the same.

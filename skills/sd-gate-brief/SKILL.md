@@ -3,16 +3,17 @@
 Gate brief discipline for specwright workflows: what a gate shows the user, where that text is
 kept, and how every user-facing line is worded. This file is the single owner of the brief
 artifact, its language, the per-gate shapes, the decision ranking rule, the `details` targets,
-the agent return blocks and the narration rule. `/sd:feature`, `/sd:bug` and `/sd:refactor` read
-it at runtime in Phase 0 (commands cannot load skills via frontmatter) and name only where each
-rule applies; **sd-replan-loop** names it at Gate Re-plan. `sd-spec-architect` and `sd-reviewer`
+the agent return blocks and the narration rule. `/sd:feature`, `/sd:bug`, `/sd:refactor` and
+`/sd:rca` read it at runtime in Phase 0 (commands cannot load skills via frontmatter) and name only
+where each rule applies; **sd-replan-loop** names it at Gate Re-plan. `sd-spec-architect` and `sd-reviewer`
 load it via `skills:` so they know the block they return.
 
 Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
 brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means reply text, the
 closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `details` from the
 outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96, and ADR 0025 (the
-`/sd:refactor` gates, `details` at Gate Re-plan), Jira SW-109. Measured "before":
+`/sd:refactor` gates, `details` at Gate Re-plan), Jira SW-109, and ADR 0026 (the `/sd:rca` gates),
+Jira SW-111. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -164,8 +165,8 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 ## The details option
 
 In `/sd:feature`, Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3
-offer it with an optional target: `details <target>`. Every `/sd:bug` and `/sd:refactor` gate
-offers it, with the targets in "Per-workflow parts"; the rules of this section apply to them. Gate
+offer it with an optional target: `details <target>`. Every `/sd:bug`, `/sd:refactor` and
+`/sd:rca` gate offers it, with the targets in "Per-workflow parts"; the rules of this section apply to them. Gate
 Re-plan offers `details <target>` in every workflow that reaches it (ADR 0025): its delta exists
 only in the brief until `approve` writes the revision, so the user needs to see the tasks it
 rewrites. A `details` reply is never an approval and never advances the
@@ -382,6 +383,57 @@ Shown lines, replacing lines 1-5 of "Brief shape":
 
 Gate 1 offers `details invariants` besides the bare `details`: the spec is the only artifact yet.
 The HARD Gates 2, 3 and 5 offer `details` like any other gate; it is never an override.
+
+### /sd:rca
+
+Section headings:
+
+```text
+## Gate 1 - Evidence gathered (pass <n>)
+## Gate 2 - Hypotheses enumerated (pass <n>)
+## Gate 3 - Root cause confirmed (pass <n>)
+```
+
+`gather more`, `add hypothesis`, `refine ranking` and `dig deeper` each re-present their gate as a
+new pass. Sources. The main thread composes all three briefs itself and no agent returns a block:
+Gate 1 from the Timeline, Symptoms, Affected scope and Recent changes sections it filled with the
+user, Gate 2 from the tree it appended to `00-spec.md`, Gate 3 from the `## Root cause` section and
+the confirmed verdict. The `GATE_BRIEF` block `sd-spec-architect` returns for the empty skeleton is
+not used. `sd-debugger` is unchanged. An RCA keeps its tree and its verdicts in `00-spec.md`, not
+in `03-decisions.md`, and it has no Gate 3a: an exhausted tree is `dig deeper`.
+
+Shown lines, replacing lines 1-5 of "Brief shape". No line is a decision: the user supplied the
+evidence and the tree is ranked, not chosen, so a gate here shows no `Decisions` block.
+
+- **Evidence gathered** - `Incident: <what broke and for whom, one plain sentence>. Severity:
+  <P-level> (<why>)`, `Window: <start> to <end> UTC (<duration>); detected after <latency>,
+  mitigated after <latency>`, `Timeline: <n> events, from <first event> to <last event>`, `Impact:
+  <services and users hit>; data integrity: <none | what is inconsistent>`, `Recent changes: <n>
+  in the 72 hours before - <the most suspect, one clause>` or `Recent changes: none found`,
+  `Evidence: <n> files saved under 04-artifacts/`, `Gaps: <what the user could not provide>` or
+  `Gaps: none` (its own line), `Risk:`.
+- **Hypotheses enumerated** - `Hypotheses: <N> ranked, best lead first.`, then the best-scored one
+  as the "Still open" line of `/sd:bug` Gate 3a with `to check:` for `missing:`, then up to 2 lines
+  `Next: H<n> <plain statement> - to check: <evidence>`, then `<n> more - reply details tree to
+  list them.` when there are more, `Recommended: <yes | add hypothesis | refine ranking> - <why,
+  one clause>`, `Risk:`.
+- **Root cause confirmed** - the "Root cause confirmed" lines of `/sd:bug` (`Root cause:`, `Why
+  root, not symptom:`, `Evidence:` with its confidence, `Ruled out:`), then `Explains: <the
+  symptoms it accounts for>; unexplained: <none | what is left>` and `Timeline fit: <how it lines
+  up with the first symptom, one clause>`, then `Risk:`.
+
+`details` targets:
+
+| Reply | Prints | Offered at |
+|---|---|---|
+| `details` | the collapsed subsection when the section has one, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate |
+| `details timeline` | the `## Timeline (UTC)` and `## Recent changes` sections of `00-spec.md`, verbatim | Gates 1, 3 |
+| `details impact` | the `## Symptoms observed` and `## Affected scope` sections of `00-spec.md`, verbatim | Gate 1 |
+| `details tree` | as in `/sd:bug`, from `## Hypothesis tree` and `### Verification results (Phase 3)` of `00-spec.md` | Gates 2, 3 |
+| `details H<n>`, e.g. `details H2` | that hypothesis's tree row and every entry under `### Verification results (Phase 3)` that names it, verbatim; before Phase 3, the tree row only | Gates 2, 3 |
+| `details rootcause` | the `## Root cause` and `## Why this is root cause (not symptom)` sections of `00-spec.md`, verbatim | Gate 3 |
+
+`details` is never an override, so the HARD gates offer it like any other gate.
 
 ## User-facing text
 

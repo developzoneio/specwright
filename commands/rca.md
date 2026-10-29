@@ -35,8 +35,13 @@ Drives an incident analysis from raw signals to a documented root cause, recorde
    applied at Phase 2 step 0; this file names only rule IDs and trigger inputs. If that file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
-3. Compute current UTC date for the spec ID stamp.
-4. Detect state. Print resume plan.
+3. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
+   (`gate-briefs.md`), what each gate shows (its `/sd:rca` part), the `details` option and the
+   wording of every user-facing line; this file names only the gates it applies to. If that file
+   is unreadable, STOP: "specwright install incomplete - gate brief skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+4. Compute current UTC date for the spec ID stamp.
+5. Detect state. Print resume plan.
 
 ---
 
@@ -58,12 +63,16 @@ This phase is conversational. The user has the raw evidence; the workflow turns 
 
 ### ⛔ Gate 1 - Evidence gathered
 
-STOP. Display the populated Timeline, Symptoms, Affected scope, Recent changes. Ask:
+STOP. The main thread writes the Gate 1 brief to
+`.specs/RCA-<slug>-<YYYYMMDD>/gate-briefs.md` from the populated Timeline, Symptoms, Affected scope
+and Recent changes and the evidence saved above, per **sd-gate-brief**, then shows it verbatim.
+Ask:
 
-> Evidence is sufficient to enumerate hypotheses? (yes / gather more / abort)
+> Evidence is sufficient to enumerate hypotheses? (yes / gather more / details <target> / abort)
 
 - `yes` -> status=`draft` (RCA stays draft until root cause confirmed), append to index, proceed.
-- `gather more` -> loop with user on missing pieces.
+- `gather more` -> loop with user on missing pieces. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -84,13 +93,15 @@ STOP. Display the populated Timeline, Symptoms, Affected scope, Recent changes. 
 
 ### ⛔ Gate 2 - Hypotheses enumerated
 
-STOP. Display the ranked hypotheses. Ask:
+STOP. The main thread writes the Gate 2 brief to `.specs/RCA-<slug>-<YYYYMMDD>/gate-briefs.md`
+from the ranked hypotheses in `00-spec.md`, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Hypothesis tree complete? (yes / add hypothesis / refine ranking / abort)
+> Hypothesis tree complete? (yes / add hypothesis / refine ranking / details <target> / abort)
 
 - `yes` -> proceed.
-- `add hypothesis <text>` -> loop with debugger.
-- `refine ranking` -> loop.
+- `add hypothesis <text>` -> loop with debugger. The next pass is a new brief section.
+- `refine ranking` -> loop. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -115,12 +126,15 @@ STOP. Fill the Root cause section. Must be:
 - File:line citation where applicable.
 - Reasoning under "Why this is root cause (not symptom)".
 
-Ask:
+Then the main thread writes the Gate 3 brief to `.specs/RCA-<slug>-<YYYYMMDD>/gate-briefs.md` from
+that section and the confirmed verdict, per **sd-gate-brief**, and shows it verbatim. Ask:
 
-> Confirm root cause: <one-line>. Proceed to mitigation documentation? (yes / dig deeper / abort)
+> Confirm root cause: <one-line>. Proceed to mitigation documentation? (yes / dig deeper / details <target> / abort)
 
 - `yes` -> status=`approved`, proceed.
-- `dig deeper` -> back to Phase 3, additional hypotheses if needed.
+- `dig deeper` -> back to Phase 3, additional hypotheses if needed. The next pass is a new brief
+  section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -152,7 +166,7 @@ No gate here - documentation-only phase.
    - What we got lucky on.
 5. Set status=`done` in frontmatter. Update `.specs/index.md`.
 6. Append to `05-retro.md`: RCA duration, evidence completeness, any data the team could not access.
-7. Print summary:
+7. Print summary, worded per **sd-gate-brief**:
    - Root cause one-liner.
    - Spawned spec IDs.
    - Top 3 lessons.
@@ -173,5 +187,10 @@ No gate here - documentation-only phase.
 - **Model escalation follows `sd-model-escalation` only.** Rule `ESC-RCA-02` is applied at Phase 2
   step 0; the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live
   in the skill and are not restated here. The main thread writes its retro line - `sd-debugger`
-  stays without a write tool, escalated or not.
+  stays without a write tool, escalated or not. Narrating a fired rule to the user follows
+  **sd-gate-brief**.
+- **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above writes its
+  brief to `.specs/RCA-<slug>-<YYYYMMDD>/gate-briefs.md` before showing it. The brief shape and
+  language, the `details` targets and the rule for every line the user reads live in the skill and
+  are not restated here.
 - RCAs do not get a `revive` action. New incident -> new RCA.
