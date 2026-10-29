@@ -4,17 +4,18 @@ Gate brief discipline for specwright workflows: what a gate shows the user, wher
 kept, and how every user-facing line is worded. This file is the single owner of the brief
 artifact, its language, the per-gate shapes, the decision ranking rule, the `details` targets,
 the agent return blocks and the narration rule. `/sd:feature`, `/sd:bug`, `/sd:refactor`,
-`/sd:rca` and `/sd:perf` read it at runtime in Phase 0 (commands cannot load skills via frontmatter) and name only
-where each rule applies; **sd-replan-loop** names it at Gate Re-plan. `sd-spec-architect` and `sd-reviewer`
-load it via `skills:` so they know the block they return.
+`/sd:rca`, `/sd:perf` and `/sd:port` read it at runtime in Phase 0 (commands cannot load skills
+via frontmatter) and name only where each rule applies; **sd-replan-loop** names it at Gate
+Re-plan. `sd-spec-architect` and `sd-reviewer` load it via `skills:` so they know the block they
+return.
 
 Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
 brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means reply text, the
 closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `details` from the
 outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96, and ADR 0025 (the
 `/sd:refactor` gates, `details` at Gate Re-plan), Jira SW-109, and ADR 0026 (the `/sd:rca` gates),
-Jira SW-111, and ADR 0027 (the `/sd:perf` gates), Jira SW-110. Measured "before":
-`docs/spikes/SW-88-feature-baseline.md`.
+Jira SW-111, and ADR 0027 (the `/sd:perf` gates), Jira SW-110, and ADR 0028 (the `/sd:port`
+gates), Jira SW-112. Measured "before": `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
 
@@ -166,8 +167,8 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 
 In `/sd:feature`, Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3
 offer it with an optional target: `details <target>`. Every `/sd:bug`, `/sd:refactor`,
-`/sd:rca` and `/sd:perf` gate offers it, with the targets in "Per-workflow parts"; the rules of this section apply to them. Gate
-Re-plan offers `details <target>` in every workflow that reaches it (ADR 0025): its delta exists
+`/sd:rca`, `/sd:perf` and `/sd:port` gate offers it, with the targets in "Per-workflow parts";
+the rules of this section apply to them. Gate Re-plan offers `details <target>` in every workflow that reaches it (ADR 0025): its delta exists
 only in the brief until `approve` writes the revision, so the user needs to see the tasks it
 rewrites. A `details` reply is never an approval and never advances the
 workflow. Each one prints, records `Reply: <reply verbatim>` in the open section, then asks the
@@ -223,7 +224,8 @@ risk: <one line>
 END_GATE_BRIEF
 ```
 
-`sd-reviewer` ends a `holistic`, a `bug-fix-final` or a `perf-final` review with one block. The main thread adds
+`sd-reviewer` ends a `holistic`, a `bug-fix-final`, a `perf-final` or a `port-parity` review with
+one block. The main thread adds
 the test and lint summary it measured itself.
 
 ```text
@@ -233,12 +235,16 @@ block: <plain title> | <file> | <direction>
 warn: <plain title> | <file>
 suggest: <plain title> | <file>
 invariant: <plain statement> | <held | broken | unverified> | <file>
+parity: <justified hunks> | <present>/<total> members | <files outside the path mapping>
 END_GATE_BRIEF
 ```
 
 `invariant:` repeats once per entry of `INVARIANTS`, in the spec's order, and appears only when the
 review received `INVARIANTS` (a `/sd:refactor` holistic review). A `broken` invariant is also a
-`block:` line.
+`block:` line. `parity:` appears once, in a `port-parity` review only, with the three counts of
+its summary line. There, each non-`justified` hunk and each failed whole-artifact check is one
+`block:` line, titled by its class and the member it touches, for example `unjustified change in
+normalizeTitle`; a `justified` hunk is counted, never listed.
 
 Each field is English and follows the user-facing text rule below, so the main thread can render
 it into the conversation language (see "Language") without first removing IDs.
@@ -531,6 +537,108 @@ gate does not offer, or a hotspot or hypothesis ID that is not in the ranking, p
 naming the valid targets, then asks again. `details` is never an override, so the HARD gates offer
 it like any other gate.
 
+### /sd:port
+
+Section headings, the titles of the gates in `commands/port.md`:
+
+```text
+## Gate 1 - Donor set frozen (pass <n>)
+## Gate 2 - Fidelity tables complete (pass <n>)
+## Gate 3 - Behavior pinned and green (pass <n>)
+## Gate 4 - Plan approval (pass <n>)
+## Gate 5 - Batch tests green (pass <n>)
+## Gate 6 - Justified-diff parity (pass <n>)
+```
+
+`re-capture`, `refine`, `re-pin`, each batch and each parity run (`re-run parity`, and the
+re-review after `revert-to-snapshot` or `add-deviation`) present their gate as a new pass.
+Sources. Gate 4 comes from the architect's `gate: plan` block and Gate 6 from the reviewer's
+`gate: review` block of a `port-parity` review plus the test and lint summary the main thread
+measured. The main thread composes Gates 1, 2, 3 and 5 itself from what it already wrote:
+`MANIFEST.md` and the warnings of Phases 0 to 2, the three fidelity tables it counts in Phase 4,
+the `## Behavior pinning` section and the saved pinning output, and the saved batch output. The
+`gate: spec` block the architect returns for `create` and `refine` is not used: the deviation
+table is the record of what Gate 2 approves, and the main thread counts it rather than trusting a
+summary of it.
+
+**The tables are counted, never re-judged.** Every count in a brief is the count the command
+makes mechanically, read from the artifact when the section is written. What a table row means,
+its completeness condition and the hunk vocabulary stay in **sd-port-fidelity**; a brief states
+counts and names rows, it does not restate those rules.
+
+**A deviation in plain words.** A deviation row is shown as `D<NN> <donor form> -> <host form>`,
+and what forced it as words, never as its citation: `compiler conflict on <identifier>`, `host
+rule on <topic>`, `host precedent in <file path>`, `agreed fix of <donor defect>`. A `§N.M` or a
+`path:line` citation stays in the table, where `details` prints it.
+
+Shown lines, replacing lines 1-5 of "Brief shape". Gates 1, 3 and 5 are checks and show no
+`Decisions` block.
+
+- **Donor set frozen** - `Donor: <donor> at <commit, first 12 characters> - scope <scope>, copied
+  from <another repo | this repo>, snapshot <contract | contract and source>`, `Frozen: <N> files,
+  <M> members; <k> paths now protected from edits.`, `Manifest: 04-artifacts/source/MANIFEST.md,
+  sha256 <hex>`, `Policy: <the effective port policy, one clause>`, `Warnings: <each warning of
+  Phases 0 to 2, plain: a dirty donor commit, a build or test configuration that sees .specs/>` or
+  `Warnings: none`, `Risk:`.
+- **Fidelity tables complete** - `Tables: <P> files mapped (<m> mirror, <g> merge, <o> omit);
+  members <M>/<T> (<p> ported, <d> deviated, <x> omitted).`, `Deviations: <D> - <n> compiler
+  conflict, <n> host rule, <n> host precedent, <n> agreed donor fix.` (a group at 0 is left out),
+  then one of two faces.
+  Complete, with nothing unmapped and no blocking problem from the spec check: the deviations are
+  the decisions, shown as `Decisions (top <k> of <D>):` with up to 3 lines `D<NN> <donor form> ->
+  <host form> - Recommended: keep. <what forced it>`, ranked agreed donor fix first (it changes
+  behavior), then host rule, host precedent and compiler conflict, then `<D - 3> more deviations
+  taken - reply details deviations to list them.` when there are more. With none: `Decisions:
+  none - the host mirrors the donor.`
+  Incomplete: `Blocking: <n> - approval refused until 0.` replaces the decisions, then up to 4
+  lines `Blocking: <the member, file or row, plain> - <what is missing>`, then `<n> more blocking -
+  reply details to list them.` when there are more; the rest go in the collapsed subsection.
+  `yes` is refused on this face, so no decision is hidden by it. Then `Risk:` on both faces.
+- **Behavior pinned and green** - `Pinned via: <contract suite | characterization tests | skipped -
+  scope is pattern> - <why, one clause>`, `Tests: <n> pinned tests in <test files> - <passed> of
+  <total> pass.` (omitted when skipped), `Covers: <the contract facets and invariants the tests
+  assert, plain>`, `Production tree: unmodified - both checks empty.` or `Production tree: <n>
+  changed paths - <up to 3 paths>; approval refused until clean.`, `Recommended: <yes | re-pin> -
+  <why, one clause>`, `Risk:`.
+- **Plan approval** - the `/sd:refactor` "Plan approval" lines and batch table, with `What
+  changes: <N> tasks in <B> batches, one per host file - <D> deviations to adapt, threshold 8
+  (<under | over: split along <k> host paths>).` The main thread writes that line from the metric
+  it computed; the architect's other lines are kept. A deviation is not a plan decision: Gate 2
+  approved it. A task's snapshot range and licensed deviations are not shown in the table:
+  `details <task ID>` prints its block.
+- **Batch tests green** - the `/sd:refactor` "Tests green per batch" lines, both faces, with
+  `Pinned suite: <passed> of <total> pass.` or `Pinned suite: <n> failed.` after the `Tests:`
+  line. A red pinned suite is a red batch.
+- **Justified-diff parity** - the `/sd:feature` "Integration and review" lines, with `Parity: <J>
+  hunks justified by a deviation, <B> blocking; members <n>/<total> present; <u> files outside the
+  path mapping.` after the `Tests:` line, from the block's `parity:` field. Blocking lines are
+  never collapsed; when one file has more than 3 blocking hunks of one class they share a line,
+  `Blocking: <n> <class> changes in <file> - <direction>`, and each stays listed in the parity
+  report. A justified hunk is never listed.
+
+`details` targets. Each prints the file or section named, verbatim:
+
+| Reply | Prints | Offered at |
+|---|---|---|
+| `details` | the collapsed subsection when the section has one, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate |
+| `details manifest` | `04-artifacts/source/MANIFEST.md` | Gates 1, 2, 6 |
+| `details contract` | the `## Behavioral contract` and `## Behavioral invariants (non-obvious)` sections of `00-spec.md` | Gates 1, 3 |
+| `details tables` | the `## Path mapping table`, `## Member manifest` and `## Deviation table` sections of `00-spec.md` | Gates 2, 6 |
+| `details deviations` | the `## Deviation table` section of `00-spec.md` | Gates 2, 4, 6 |
+| `details D<NN>`, e.g. `details D02` | the Deviation table's header, separator and that row, then the Member manifest's header, separator and every row naming it, from `00-spec.md` | Gates 2, 4, 6 |
+| `details scan` | the `## Host-constitution scan` section of `03-decisions.md` | Gate 2 |
+| `details pinning` | the `## Behavior pinning` section of `03-decisions.md` | Gate 3 |
+| `details output` | `04-artifacts/pinning/pinned-tests.txt` at Gate 3, `04-artifacts/batches/batch-<b>-tests.txt` of the batch the section reports at Gate 5 | Gates 3, 5 |
+| `details proof` | `04-artifacts/pinning/tree-check.txt`, the empty-diff checks and their output | Gate 3 |
+| `details <task ID>`, `details plan` | as in "The details option" | Gates 4, 5 |
+| `details risks` | as in "The details option" | Gate 4 |
+| `details parity` | `04-artifacts/parity/REPORT.md`, then `04-artifacts/parity/INDEX.md` | Gate 6 |
+| `details <host path>`, e.g. `details src/domain/title-format.js` | the `.diff` file `INDEX.md` lists for that host path | Gate 6 |
+
+A deviation ID that is not in the table, or a host path `INDEX.md` does not list, prints one line
+naming the valid targets, then asks again. `details` is never an override, so the HARD Gates 1, 2,
+3 and 6 offer it like any other gate.
+
 ## User-facing text
 
 Applies to every line the user reads: `gate-briefs.md` and all reply text of the session, from
@@ -546,8 +654,10 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
   instead.
 - **Allowed handles.** The spec ID, a task ID on the same line as its plain title, a hypothesis ID
   (`H<n>`, or `H<n><x>` for a `/sd:perf` hypothesis of hotspot `H<n>`) on the same line as its
-  plain statement, a bug severity (`P0`-`P3`), gate names, file
-  paths, and the option tokens of the question line.
+  plain statement, a `/sd:port` deviation ID (`D<NN>`) on the same line as its
+  `<donor form> -> <host form>`, a bug severity (`P0`-`P3`), gate names, file
+  paths, and the option tokens of the question line. The deviation ID is the one `D<n>` the
+  user may see: it names a row the user can ask for (`details D02`) and cite in `add-deviation`.
 - **Narrate a model escalation in plain words**: what runs on a stronger model and why, for
   example "planning with a stronger model because the spec was sized large". The rule ID stays in
   the retro line only.

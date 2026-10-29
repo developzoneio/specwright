@@ -67,5 +67,8 @@ option set, so the Gate 2 prose `(logs / traces only)` would have failed the lin
   its feature parser (ADR 0021) runs only for `type: feature`. Follow-up: BUG rules evidenced by
   the brief; the feature heading pattern `^## Gate ([123])` would also match `## Gate 3a`, which a
   BUG rule must separate.
-- Follow-ups: `/sd:refactor`, `/sd:perf`, `/sd:rca`, `/sd:port` (SW-96 parts 2-5), and whether
-  Gate Re-plan offers `details`.
+- Follow-ups, all done, which completes SW-96:
+  - `/sd:refactor`, part 2 (SW-109, ADR 0025). Gate Re-plan offers `details` (ADR 0025).
+  - `/sd:perf`, part 3 (SW-110, ADR 0027).
+  - `/sd:rca`, part 4 (SW-111, ADR 0026).
+  - `/sd:port`, part 5 (SW-112, ADR 0028).

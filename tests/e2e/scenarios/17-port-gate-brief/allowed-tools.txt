@@ -1,0 +1,30 @@
+# Permission rules granted under dontAsk (SW-80), one per line: file writes plus commands.test
+# (npm test), the one-time git baseline the empty-diff proof needs, read-only git diff/status for
+# that proof and the parity diffs, and the hash and size readers of the snapshot manifest, through
+# either shell tool (SW-105), and the two read-only pipe stages a PowerShell run uses. No rule
+# grants a writer verb, so only a visible redirect can reach a path, and spec-gate's shell-write
+# rule denies that for a protected path.
+Edit
+Write
+MultiEdit
+Bash(npm test:*)
+Bash(npm run test:*)
+Bash(git init -q)
+Bash(git add -A)
+Bash(git -c user.name=e2e -c user.email=e2e@example.invalid commit -q -m baseline)
+Bash(git diff:*)
+Bash(git status:*)
+Bash(sha256sum:*)
+Bash(wc -c:*)
+PowerShell(npm test)
+PowerShell(npm test *)
+PowerShell(npm run test)
+PowerShell(npm run test *)
+PowerShell(git init -q)
+PowerShell(git add -A)
+PowerShell(git -c user.name=e2e -c user.email=e2e@example.invalid commit -q -m baseline)
+PowerShell(git diff *)
+PowerShell(git status *)
+PowerShell(Get-FileHash *)
+PowerShell(Select-Object *)
+PowerShell(Select-String *)

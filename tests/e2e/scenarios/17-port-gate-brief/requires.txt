@@ -1,0 +1,5 @@
+# Commands this scenario needs on PATH (checked by the run-e2e.ps1 preflight).
+# The fixture is a Node project; the empty-diff proof and the parity diffs need git.
+node
+npm
+git

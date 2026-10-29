@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gate brief for `/sd:port` (SW-112, SW-96 part 5 of 5)** - every `/sd:port` gate (1-6; Gates
+  1, 2, 3 and 6 HARD) writes a brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it
+  verbatim and offers `details <target>`. Gate count unchanged, HARD gates list no override
+  (ADR 0028). This completes SW-96: every phased workflow presents its gates as briefs.
+  - **Single source:** `sd-gate-brief` "Per-workflow parts" gains a `/sd:port` part. Plan approval,
+    batch tests and review reuse the `/sd:refactor` and review shapes by reference; new lines only
+    for the donor set summary, the fidelity tables as counts plus blocking rows, the behavior-pin
+    result and the parity verdict. `details` prints the tables, a deviation row, `MANIFEST.md`,
+    the parity report and each diff verbatim; the table rules stay in `sd-port-fidelity`.
+  - **Deviation IDs:** `D<NN>` is an allowed handle when it sits beside its `donor -> host` form;
+    its `§N.M` or `file:line` citation is said in words. The Phase 1 WARN no longer names a rule ID.
+  - **Sources:** `sd-spec-architect` (Gate 4) and `sd-reviewer` (Gate 6, `port-parity` now returns
+    `gate: review` with a `parity:` counts line) return blocks; the main thread composes Gates 1, 2,
+    3 and 5. Gate 5 is two-faced. New saves: `pinning/pinned-tests.txt`, `pinning/tree-check.txt`,
+    `batches/batch-<n>-tests.txt`, `parity/REPORT.md`.
+  - **Lint:** `contractLint.gateBriefs` declares `commands/port.md` (labels `1` to `6`). No new
+    fixture. e2e scenario `17-port-gate-brief` runs an in-repo port fresh through all 6 gates.
 - **Gate brief for `/sd:perf` (SW-110, SW-96 part 3 of 5)** - every `/sd:perf` gate (1-8, all
   HARD) writes a brief to `.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it verbatim and
   offers `details <target>`. Gate count unchanged, HARD gates list no override and the `CL305` allow

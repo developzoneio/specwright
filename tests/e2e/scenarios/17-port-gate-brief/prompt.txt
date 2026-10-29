@@ -1,0 +1,27 @@
+/sd:port title-format --from src/legacy/title-format.js --scope module
+
+Port request: reproduce the title helpers in src/legacy/title-format.js as
+src/domain/title-format.js in this same repository, member for member. The donor stays where it is
+and must not change. The host constitution applies to the new file: where it forbids a donor form,
+that departure is a deviation row; anything else mirrors the donor. Default snapshot mode.
+
+This is a headless, scripted test run. The runner that started it types each gate reply as the
+next message of this session, the way a person would. Stop at each hard gate as the workflow says
+and wait for that message. The spec ID carries today's UTC date. If you are asked to reserve
+follow-up specs at close-out, there are none. After close-out, report the final spec ID and its
+status.
+
+The project is not under version control yet, and the workflow's empty-diff proof needs it. Before
+Phase 0, run exactly these three commands from the project root, once:
+`git init -q`, `git add -A`, and
+`git -c user.name=e2e -c user.email=e2e@example.invalid commit -q -m baseline`.
+
+This run grants shell access narrowly and refuses the rest, for you and for every subagent you
+start. Allowed, run from the project root: the three commands above; the project's test command as
+plain `npm test` (or `npm run test`); `git diff` and `git status` (read-only, including
+`git diff --no-index` to produce a parity diff); `sha256sum` and `wc -c` (or `Get-FileHash`) to
+hash and size a snapshot file; optionally piped through `tail -n 40` or `Select-Object -Last 40`.
+A `cd`, a redirect to a file or to /dev/null, chaining with `;` or `||`, `node --test`, `node -e`
+and any shell write are refused. Make every change to a file under `.specs/` or `.claude/`,
+including the snapshot copy, the `Reply:` line in `gate-briefs.md`, every saved test output and
+every parity diff, with the Edit or Write tool. Tell each subagent you start the same.

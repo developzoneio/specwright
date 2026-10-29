@@ -87,7 +87,12 @@ frontmatter first and is never resumed from its task markers.
    applied at Phase 1 and Phase 6 step 2; this file names only rule IDs and trigger inputs. If
    that file is unreadable, STOP: "specwright install incomplete - model escalation skill not
    found under `~/.claude/skills/sd/`. Re-run the installer."
-8. Detect state from the table above. Print the resume plan.
+8. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
+   (`gate-briefs.md`), what each gate shows (its `/sd:port` part), the `details` option and the
+   wording of every user-facing line; this file names only the gates it applies to. If that file
+   is unreadable, STOP: "specwright install incomplete - gate brief skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+9. Detect state from the table above. Print the resume plan.
 
 ---
 
@@ -108,8 +113,8 @@ frontmatter first and is never resumed from its task markers.
 4. `--snapshot contract+source` with no `source/` subtree in the bundle -> STOP.
 5. Read the bundle's `escalation_line` frontmatter value: the donor-side `/sd:explore --port`
    decision for rule `ESC-PORT-01` of **sd-model-escalation**. Hold it for step 6 under "Both
-   branches". `none` -> nothing to carry. Key absent -> WARN "bundle predates ESC-PORT-01 - no
-   escalation decision to carry" and carry nothing.
+   branches". `none` -> nothing to carry. Key absent -> WARN "the bundle predates the donor-side model
+   escalation record - nothing to carry" and carry nothing.
 
 ### Branch B - topology `in-repo`
 
@@ -169,14 +174,17 @@ Main-thread file operations only - this command's `Write` tool is not escalated 
 
 ### ⛔ Gate 1 - Donor set frozen (HARD)
 
-STOP. Display the snapshot root, the file count, the `MANIFEST.md` row count, how many entries
-were appended to `paths.protected`, and the sha256 of `MANIFEST.md` itself. Ask:
+STOP. The main thread writes the Gate 1 brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from
+`MANIFEST.md` (file and member counts, its own sha256), the `paths.protected` entries appended,
+the effective port policy and the warnings of Phases 0 to 2, per **sd-gate-brief**, then shows it
+verbatim. Ask:
 
-> Donor set frozen for PORT-<slug>: <N> file(s), <M> member range(s). Proceed on this frozen set? (yes / re-capture <reason> / abort)
+> Donor set frozen for PORT-<slug>: <N> file(s), <M> member range(s). Proceed on this frozen set? (yes / re-capture <reason> / details <target> / abort)
 
 - `yes` -> proceed to Phase 3.
 - `re-capture <reason>` -> delete `04-artifacts/source/`, remove exactly the `paths.protected`
-  entries this phase appended, return to Phase 1.
+  entries this phase appended, return to Phase 1. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 - `abort` -> stop the workflow. Leave the spec at status `draft`; re-invoking resumes here.
 
 This gate is HARD. Nothing downstream reads a donor file outside the frozen set, and no later
@@ -235,15 +243,17 @@ No gate here - the survey is informational. The user reviews it via the tables a
 
 ### ⛔ Gate 2 - Fidelity tables complete, zero unmapped (HARD)
 
-STOP. Display: path-mapping row count, `<M>/<T>` members mapped, deviation rows by group, the
-unmapped count, and the `/sd:spec validate` verdict. Ask:
+STOP. The main thread writes the Gate 2 brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from the
+three tables, the counts of step 2 and the `/sd:spec validate` verdict, per **sd-gate-brief**,
+then shows it verbatim. Ask:
 
-> PORT-<slug>: <P> path rows, <M>/<T> members mapped, <D> deviation rows, <U> unmapped. Approve the fidelity tables? (yes / refine <feedback> / abort)
+> PORT-<slug>: <P> path rows, <M>/<T> members mapped, <D> deviation rows, <U> unmapped. Approve the fidelity tables? (yes / refine <feedback> / details <target> / abort)
 
 - `yes` -> permitted only when `<U>` is 0, every author-fill `<<...>>` token is gone, and
   `/sd:spec validate` reports zero BLOCK. Set status=`approved` in `00-spec.md` and
   `.specs/index.md`; proceed to Phase 5.
-- `refine <feedback>` -> loop through step 1.
+- `refine <feedback>` -> loop through step 1. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 - `abort` -> stop the workflow. Leave the spec at status `draft`.
 
 This gate is HARD. An incomplete table is refused by count, without a discussion of intent.
@@ -273,23 +283,27 @@ section in `03-decisions.md`:
    - `SPEC_REF = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
    - `IMPACT_REF = .specs/PORT-<slug>-<YYYYMMDD>/03-decisions.md`
    - `WORKFLOW_TYPE = port`
-3. Run the pinned tests via `commands.test`.
+3. Run the pinned tests via `commands.test`. Save the output with the Write tool to
+   `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/pinning/pinned-tests.txt`, so the gate can print it verbatim.
 4. **Prove the host production tree is unmodified.** Run `git diff --quiet --` over every path in
    `paths.src` and every `paths.layers[].path`, then `git status --porcelain --` over the same set
-   to catch untracked additions. Both must return empty.
+   to catch untracked additions. Both must return empty. Save each command and its output (or
+   `(empty)`) with the Write tool to `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/pinning/tree-check.txt`.
 
 ### ⛔ Gate 3 - Behavior pinned and green (HARD)
 
-STOP. Display the mechanism chosen, the pinned test files, the `commands.test` result, and the
-empty-diff proof - the exact checks run and their output. Ask:
+STOP. The main thread writes the Gate 3 brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from the
+`## Behavior pinning` section, `pinned-tests.txt` and `tree-check.txt`, per **sd-gate-brief**,
+then shows it verbatim. Ask:
 
-> PORT-<slug> pinned via <mechanism>: tests green, host production tree unmodified. Proceed to planning? (yes / re-pin <feedback> / abort)
+> PORT-<slug> pinned via <mechanism>: tests green, host production tree unmodified. Proceed to planning? (yes / re-pin <feedback> / details <target> / abort)
 
 - `yes` -> permitted only when the pinned tests are green AND both tree checks returned empty.
 - If either tree check returns output, this gate refuses and lists the dirty paths - a dirty
   production tree makes the Phase 8 parity diff unattributable. Commit or revert those changes
   under their own spec first, then re-run the check.
-- `re-pin <feedback>` -> return to step 1.
+- `re-pin <feedback>` -> return to step 1. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 - `abort` -> stop the workflow. Leave the spec at status `approved`.
 
 This gate is HARD, including for `scope = pattern` - it presents the recorded skip reason and asks
@@ -343,14 +357,15 @@ the same question; the empty-diff proof is never skipped.
 
 ### ⛔ Gate 4 - Plan approval
 
-STOP. Display the task count, the port decompose metric (`<D>` deviation rows requiring
-adaptation, threshold 8) with its verdict, and a per-task line showing the `Pattern refs` snapshot
-range and the licensed deviation IDs. Ask:
+STOP. The main thread writes the Gate 4 brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from the
+architect's `GATE_BRIEF` block and the port decompose metric of step 1 with its verdict, per
+**sd-gate-brief**, then shows it verbatim. Ask:
 
-> Approve plan for PORT-<slug>? (<N> tasks, <D> deviation rows requiring adaptation) (yes / refine <feedback> / abort)
+> Approve plan for PORT-<slug>? (<N> tasks, <D> deviation rows requiring adaptation) (yes / refine <feedback> / details <target> / abort)
 
 - `yes` -> set status=`in-progress` in `00-spec.md` and `.specs/index.md`; proceed to Phase 7.
-- `refine <feedback>` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop.
+- `refine <feedback>` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 - `abort` -> stop the workflow. Leave the spec at status `approved`.
 
 This is the standard plan approval - the same shape as `/sd:feature` Gate 2 Face A. It is not one
@@ -377,15 +392,29 @@ current batch:
 5. Check off the task in `02-tasks.md` (set its `Status` line to `done`, per the "Check-off
    marker" section of the **sd-atomic-task-format** skill). Log one line to `05-retro.md`:
    `T<NN>: <status> - <note>`.
+6. **Post-batch**: after the batch's last task, run the full suite via `commands.test`, the Phase 5
+   pinned suite included. Save its output with the Write tool to
+   `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/batches/batch-<n>-tests.txt`, `<n>` being the batch number, so the gate
+   can print it verbatim.
 
 ### ⛔ Gate 5 - Batch tests green
 
-STOP after every batch. Display the `commands.test` result and the Phase 5 pinned-suite result.
+STOP after every batch. The main thread writes the Gate 5 brief to
+`.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from the saved batch output, per **sd-gate-brief**, then shows it
+verbatim. The brief takes one of two faces.
 
-> Batch <n> of PORT-<slug>: tests <green|red>, pinned suite <green|red>. (continue / revert batch / abort)
+**Face A - tests and pinned suite green.** Ask:
 
-- `continue` -> permitted only when both are green. Check off the batch, start the next one.
-- `revert batch` -> revert the batch, re-plan the offending task, retry.
+> Batch <n> of PORT-<slug>: tests green, pinned suite green. (continue / details <target> / abort)
+
+**Face B - anything red.** Refuse to proceed. Ask:
+
+> Batch <n> of PORT-<slug> is red. (revert batch / details <target> / abort)
+
+- `continue` (Face A) -> check off the batch, start the next one.
+- `revert batch` (Face B) -> revert the batch, re-plan the offending task, retry. The retried batch
+  is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 - `abort` -> stop the workflow. Leave the spec at status `in-progress`.
 
 A red batch is reverted or fixed, never deferred - batched-with-tests-between exists to localize
@@ -412,26 +441,33 @@ Move to the next batch. Repeat until every batch is checked off.
    - `DIFF_REF = .specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/parity/INDEX.md`
    - `CHANGED_FILES = <all host files changed across every batch>`
    - `SNAPSHOT_REF = .specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/source/`
+4. Save the reviewer's report, without its `GATE_BRIEF` block, with the Write tool to
+   `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/parity/REPORT.md`. Like the rest of `parity/`, it is overwritten on every
+   run. Log its suggestions to `05-retro.md`.
 
 ### ⛔ Gate 6 - Justified-diff parity (HARD)
 
-STOP. Display the `justified` count as a single number, then each `unjustified` / `missing` /
-`extra` / `overreached` finding, member completeness as `<n>/<total>`, the path-conformance BLOCK
-count, and the test + lint summary.
+STOP. The main thread writes the Gate 6 brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from the
+reviewer's `GATE_BRIEF` block and the test and lint results of step 2, per **sd-gate-brief**,
+then shows it verbatim: the `justified` count as a single number, each `unjustified` / `missing` /
+`extra` / `overreached` finding, member completeness and the files outside the path mapping. A
+hunk is named by its host file and the member it touches.
 
 **Case A - zero BLOCK.** Ask:
 
-> PORT-<slug> parity clean: <J> justified hunks, members <n>/<n>, no unmapped file. Proceed to close-out? (yes / re-run parity / abort)
+> PORT-<slug> parity clean: <J> justified hunks, members <n>/<n>, no unmapped file. Proceed to close-out? (yes / re-run parity / details <target> / abort)
 
 **Case B - one or more BLOCK.** The gate refuses close-out. Exactly two resolutions exist. Ask:
 
-> PORT-<slug> parity: <B> BLOCK finding(s). Choose a resolution: (revert-to-snapshot <hunks> / add-deviation <rows> / re-run parity)
+> PORT-<slug> parity: <B> BLOCK finding(s). Choose a resolution: (revert-to-snapshot <hunks> / add-deviation <rows> / re-run parity / details <target>)
 
 - `revert-to-snapshot <hunks>` -> route the named hunks to `sd-implementer` to restore the
   snapshot form, regenerate `04-artifacts/parity/`, re-invoke the reviewer.
 - `add-deviation <rows>` -> route to `sd-spec-architect` (`TASK = refine`) to add rows whose group
   and citation hold up, regenerate, re-invoke.
 - `re-run parity` -> regenerate and re-invoke with no spec or code change.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- Every parity run after the first presents this gate as a new brief section.
 
 This gate is HARD and has no override. Deriving the missing rows from the unexplained hunks is not
 a resolution - it makes the diff justify itself.
@@ -455,7 +491,8 @@ a resolution - it makes the diff justify itself.
    ID with its group, citation, and the hunks it covered; every donor defect reproduced as-is with
    its reserved follow-up ID; the snapshot commit.
 6. Set status=`done` in `00-spec.md` and `.specs/index.md`.
-7. Print a 5-line summary: donor, scope, members ported, deviations applied, spawned follow-ups.
+7. Print a 5-line summary, worded per **sd-gate-brief**: donor, scope, members ported, deviations
+   applied, spawned follow-ups.
 
 ---
 
@@ -486,7 +523,11 @@ a resolution - it makes the diff justify itself.
   Phase 1 (Branch B; carried from the bundle in Branch A) and `ESC-PORT-06` at Phase 6 step 2. The
   Phase 5 and Phase 7 `sd-implementer` calls run at the default, a decision recorded in the skill;
   the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
-  skill and are not restated here.
+  skill and are not restated here. Narrating a fired rule to the user follows **sd-gate-brief**.
+- **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above writes its
+  brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` before showing it. The brief shape and
+  language, the `details` targets and the rule for every line the user reads live in the skill and
+  are not restated here; the fidelity tables and the hunk vocabulary stay in `sd-port-fidelity`.
 - Snapshot visibility: this command warns about host tooling globbing `.specs/` and never edits the
   host's build, lint, or coverage configuration.
 - Implementer touches only files declared in the task's `Files` list. Any scope creep -> stop,

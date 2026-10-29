@@ -166,6 +166,10 @@ Checklist:
 Findings only. The parity gate belongs to the caller, and so does every resolution - you have no
 write tools and no way to regenerate the diff.
 
+End a `port-parity` report with the same `gate: review` `GATE_BRIEF` block as `holistic`, worded
+the same way, plus its `parity:` line: `/sd:port` Gate 6 is presented from it. Each non-`justified`
+hunk and each failed whole-artifact check is a `block:` line.
+
 ---
 
 ## How to find things
