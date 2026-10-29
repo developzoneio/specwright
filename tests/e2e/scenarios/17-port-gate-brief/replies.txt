@@ -1,0 +1,14 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# One donor file, one deviation the host constitution forces, one task in one batch.
+# Gate 1 - donor set frozen (HARD)
+yes
+# Gate 2 - fidelity tables complete (HARD)
+yes
+# Gate 3 - behavior pinned and green (HARD)
+yes
+# Gate 4 - plan approval
+yes
+# Gate 5 - batch tests green, batch 1 of 1
+continue
+# Gate 6 - justified-diff parity (HARD), clean
+yes
