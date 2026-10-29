@@ -17,9 +17,10 @@
          folder has a 00-spec.md and is not done/archived. No fallback: a
          turn that never touched a spec is never blocked.
       4. By the frontmatter type:, evaluate the invariant table of ADR 0016
-         (feature rows: ADR 0021, read from gate-briefs.md). A rule fires
-         only when later-phase evidence exists AND the HARD gate's own
-         evidence is missing.
+         (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan:
+         ADR 0029; all read from gate-briefs.md). A rule fires only when
+         later-phase evidence exists AND the HARD gate's own evidence is
+         missing.
       5. On a hit, print {"decision":"block","reason":...} to stdout. That
          blocks Stop exactly like exit 2 (ADR 0015) while this hook still
          exits 0.
@@ -287,18 +288,40 @@ function Test-StatusIn {
     return ($Allowed -ccontains $Status)
 }
 
-# --- gate briefs (ADR 0021) ---------------------------------------------------
-# /sd:feature gates leave no verdict in the phase artifacts; their evidence is
-# gate-briefs.md (sd-gate-brief): one `## Gate <n> ...` section per gate pass,
-# closed by a `Reply: <reply verbatim>` line. Only those two kinds of line are
-# read. Mirrors read_brief in the .sh.
+# --- gate briefs (ADR 0021, ADR 0029) -----------------------------------------
+# /sd:feature, /sd:bug and /sd:refactor gates are evidenced by gate-briefs.md
+# (sd-gate-brief): one `## Gate <label> ...` section per gate pass, closed by a
+# `Reply: <reply verbatim>` line. Only those two kinds of line are read.
+# Mirrors read_brief in the .sh.
 
-# The option tokens that keep a gate open or leave it, plus a bare "no". Any
-# other reply approves, so a reply in the conversation language still counts.
-$script:FeatDenyTokens = @{
-    1 = @('details', 'refine', 'abort', 'no')
-    2 = @('details', 'refine', 'abort', 'approve', 'no')
-    3 = @('details', 'address', 'abort', 'no')
+# The gate labels a workflow's brief records, in workflow order; R is Gate
+# Re-plan. The position is the label's rank for the coverage rule. A label not
+# listed is not a gate of that workflow, so `3` and `3a` never collide. Adding
+# a workflow is one entry here plus its Get-DenyTokens entries.
+$script:BriefOrder = @{
+    feature  = @('1', '2', 'R', '3')
+    bug      = @('1', '2', '3a', '3', '4', '5')
+    refactor = @('1', '2', '3', '4', '5', 'R', '6')
+}
+
+# The option tokens that keep gate <type>:<label> open or leave it, plus a bare
+# "no". Any other reply approves, so a reply in the conversation language
+# still counts.
+function Get-DenyTokens {
+    param([string]$Key)
+    $base = @('details', 'refine', 'abort', 'no')
+    switch -CaseSensitive -Regex ($Key) {
+        '^feature:1$' { return @('details', 'refine', 'abort', 'no') }
+        '^feature:2$' { return @('details', 'refine', 'abort', 'approve', 'no') }
+        '^feature:3$' { return @('details', 'address', 'abort', 'no') }
+        '^bug:2$' { return ($base + 'partial') }
+        '^bug:3$' { return ($base + 'dig') }
+        '^(bug:5|refactor:6)$' { return ($base + 'address') }
+        '^refactor:[23]$' { return ($base + 'add') }
+        '^refactor:5$' { return ($base + @('revert', 'fix')) }
+        ':R$' { return ($base + 'revise') }
+    }
+    return $base
 }
 
 # A reply's token: the first word after `Reply:`, with surrounding markdown
@@ -312,62 +335,134 @@ function Get-ReplyToken {
     return $t.ToLowerInvariant()
 }
 
-# One pass over the brief. Per gate 1..3: Seen (a section exists), Replies
-# (Reply: lines with a token), Ok (one of them approves), Deny (the last
-# non-approving token). Start is the rank of the first gate heading, doubled
-# to stay integral: Gate 1 = 2, Gate 2 = 4, Gate Re-plan = 5, Gate 3 = 6. A
-# `### ` subheading does not end a section; any other `## ` heading does.
+# A fresh counter set for one gate label or one Re-plan revision.
+function New-GateCounter {
+    return @{ Seen = $false; Replies = 0; Ok = $false; Deny = '' }
+}
+
+# One pass over the brief of workflow $Type. Gates maps each label of
+# BriefOrder to its counters: Seen (a section exists), Replies (Reply: lines
+# with a token), Ok (one of them approves), Deny (the last non-approving
+# token). Rp holds the same per Re-plan revision number; RpMin is the lowest
+# number with a section. Start is the rank of the first gate heading. A `### `
+# subheading does not end a section; any other `## ` heading does.
 function Get-BriefState {
-    param([string]$Text)
-    $state = @{
-        Start   = 0
-        Seen    = @{ 1 = $false; 2 = $false; 3 = $false }
-        Replies = @{ 1 = 0; 2 = 0; 3 = 0 }
-        Ok      = @{ 1 = $false; 2 = $false; 3 = $false }
-        Deny    = @{ 1 = ''; 2 = ''; 3 = '' }
+    param([string]$Text, [string]$Type)
+    $state = @{ Start = 0; Rank = @{}; Gates = @{}; Rp = @{}; RpMin = 0 }
+    $i = 0
+    foreach ($g in $script:BriefOrder[$Type]) {
+        $i++
+        $state.Rank[$g] = $i
+        $state.Gates[$g] = New-GateCounter
     }
-    $cur = 0
+    $cur = $null
+    $curKey = ''
     foreach ($l in ($Text -split "`n")) {
         if ($l.StartsWith('## ')) {
             $h = $l.TrimEnd()
-            $cur = 0
+            $cur = $null
             $rank = 0
-            if ($h -cmatch '^## Gate ([123])([^0-9]|$)') {
-                $cur = [int]$Matches[1]
-                $rank = 2 * $cur
-                $state.Seen[$cur] = $true
-            } elseif ($h -cmatch '^## Gate Re-plan') {
-                $rank = 5
+            if ($h -cmatch '^## Gate Re-plan') {
+                # It marks where a brief starts even when the workflow has no
+                # Re-plan rule; its replies count only under a `- R<n>` heading.
+                if ($state.Rank.ContainsKey('R')) { $rank = $state.Rank['R'] }
+                if ($rank -gt 0 -and $h -cmatch '^## Gate Re-plan - R([0-9]{1,6})([^0-9]|$)') {
+                    $n = [int]$Matches[1]
+                    if (-not $state.Rp.ContainsKey($n)) { $state.Rp[$n] = New-GateCounter }
+                    $cur = $state.Rp[$n]
+                    $cur.Seen = $true
+                    $curKey = "${Type}:R"
+                    if ($state.RpMin -eq 0 -or $n -lt $state.RpMin) { $state.RpMin = $n }
+                }
+            } elseif ($h -cmatch '^## Gate ([0-9]+[a-z]?)([^0-9a-z]|$)') {
+                $lab = $Matches[1]
+                if ($state.Rank.ContainsKey($lab)) {
+                    $rank = $state.Rank[$lab]
+                    $cur = $state.Gates[$lab]
+                    $cur.Seen = $true
+                    $curKey = "${Type}:$lab"
+                }
             }
             if ($state.Start -eq 0 -and $rank -gt 0) { $state.Start = $rank }
             continue
         }
-        if ($cur -eq 0) { continue }
+        if ($null -eq $cur) { continue }
         if ($l -cnotmatch '^[ \t]*Reply:') { continue }
         $tok = Get-ReplyToken $l
         if (-not $tok) { continue }
-        $state.Replies[$cur] = $state.Replies[$cur] + 1
-        if ($script:FeatDenyTokens[$cur] -ccontains $tok) {
-            $state.Deny[$cur] = $tok
+        $cur.Replies = $cur.Replies + 1
+        if ((Get-DenyTokens $curKey) -ccontains $tok) {
+            $cur.Deny = $tok
         } else {
-            $state.Ok[$cur] = $true
+            $cur.Ok = $true
         }
     }
     return $state
 }
 
-# What gate $Gate lacks, when the brief covers that gate: it is at or after
-# the first gate the brief records. A gate before that point (a resumed spec,
-# or one created before gate briefs existed) is never checked: a missing
-# record is not a skipped gate. '' when nothing is missing.
+# What the gates $Gates lack together: one label, or a pool whose sections all
+# record one decision (refactor Gates 2 and 3). The pool is checked when the
+# brief covers it: its last gate is at or after the first gate the brief
+# records. A gate before that point (a resumed spec, or one created before gate
+# briefs existed) is never checked: a missing record is not a skipped gate.
+# -Conditional (bug Gate 3a) checks a gate whenever it has a section, wherever
+# the brief starts. '' when nothing is missing.
 function Get-BriefMissing {
-    param($State, [int]$Gate)
-    if ($State.Start -eq 0 -or (2 * $Gate) -lt $State.Start) { return '' }
-    if (-not $State.Seen[$Gate]) { return "a ## Gate $Gate section in gate-briefs.md" }
-    if ($State.Ok[$Gate]) { return '' }
-    if ($State.Replies[$Gate] -eq 0) { return "a Reply: line in a ## Gate $Gate section of gate-briefs.md" }
-    return ("an approving Reply: line in a ## Gate $Gate section of gate-briefs.md (last reply: " +
-        $State.Deny[$Gate] + ')')
+    param($State, [string[]]$Gates, [switch]$Conditional)
+    if ($State.Start -eq 0) { return '' }
+    $top = 0
+    $seen = $false
+    $replies = 0
+    $deny = ''
+    foreach ($g in $Gates) {
+        $c = $State.Gates[$g]
+        if ($c.Ok) { return '' }
+        if ($State.Rank[$g] -gt $top) { $top = $State.Rank[$g] }
+        if ($c.Seen) { $seen = $true }
+        $replies += $c.Replies
+        if ($c.Deny) { $deny = $c.Deny }
+    }
+    if ($Conditional) {
+        if (-not $seen) { return '' }
+    } elseif ($top -lt $State.Start) {
+        return ''
+    }
+    $names = ($Gates | ForEach-Object { "## Gate $_" }) -join ' or '
+    if (-not $seen) { return ('a ## Gate ' + $Gates[0] + ' section in gate-briefs.md') }
+    if ($replies -eq 0) { return "a Reply: line in a $names section of gate-briefs.md" }
+    return "an approving Reply: line in a $names section of gate-briefs.md (last reply: $deny)"
+}
+
+# Gate Re-plan (ADR 0029): every revision R<n> in `## Revisions` of $Plan
+# needs an approving reply in some `## Gate Re-plan - R<n>` section. A revision
+# numbered below the first one the brief records predates gate briefs; with no
+# Re-plan section at all, no revision is checked. Adds findings to $Out.
+function Add-ReplanFindings {
+    param($State, [string]$Plan, [System.Collections.Generic.List[string]]$Out)
+    if ($State.RpMin -eq 0) { return }
+    $revs = Get-Section $Plan 'Revisions'
+    if ($null -eq $revs) { return }
+    $done = New-Object System.Collections.Generic.HashSet[int]
+    foreach ($l in ($revs -split "`n")) {
+        if ($l -cnotmatch '^###[ \t]+R([0-9]{1,6})([^0-9]|$)') { continue }
+        $n = [int]$Matches[1]
+        if ($n -lt $State.RpMin -or -not $done.Add($n)) { continue }
+        $c = $State.Rp[$n]
+        $mis = New-Object System.Collections.Generic.List[string]
+        if ($null -eq $c) {
+            $mis.Add("a ## Gate Re-plan - R$n section in gate-briefs.md")
+        } elseif ($c.Ok) {
+            continue
+        } elseif ($c.Replies -eq 0) {
+            $mis.Add("a Reply: line in a ## Gate Re-plan - R$n section of gate-briefs.md")
+        } else {
+            $mis.Add("an approving Reply: line in a ## Gate Re-plan - R$n section of gate-briefs.md (last reply: " +
+                $c.Deny + ')')
+        }
+        $adv = New-Object System.Collections.Generic.List[string]
+        $adv.Add("01-plan.md ## Revisions records R$n")
+        $Out.Add((New-Finding "Re-plan R$n" $mis $adv))
+    }
 }
 
 # One finding per fired rule. The phrases are part of the contract: the .sh
@@ -386,13 +481,29 @@ function Get-Findings {
     $hasDecisions = Test-Path -LiteralPath (Join-Path $Dir '03-decisions.md') -PathType Leaf
     $hasTasks = Test-Path -LiteralPath (Join-Path $Dir '02-tasks.md') -PathType Leaf
 
+    # No gate-briefs.md: a spec from before gate briefs, or one no session has
+    # presented a gate for yet. Not evidence of a skipped gate, so Start stays 0
+    # and Get-BriefMissing reports nothing. Read only for the workflows with
+    # brief rules.
+    $script:BriefRead = $false
+    $brief = $null
+    $b = @{ Start = 0; Rank = @{}; Gates = @{}; Rp = @{}; RpMin = 0 }
+    if ($script:BriefOrder.ContainsKey($SpecType) -and $script:BriefOrder.Keys -ccontains $SpecType) {
+        $brief = Get-DocText -Path (Join-Path $Dir 'gate-briefs.md')
+        if (-not [string]::IsNullOrEmpty($brief)) {
+            $b = Get-BriefState $brief $SpecType
+            $script:BriefRead = $true
+        }
+    }
+
+    # Phase 7 of /sd:bug and /sd:refactor opens its 05-retro.md entry with this
+    # heading; the Gate 5/6 suggestions logged before the brief never carry it.
+    $retro = Get-DocText -Path (Join-Path $Dir '05-retro.md')
+    $hasCloseout = Test-LineMatch $retro '^## Close-out[ \t]*$'
+
     switch -CaseSensitive ($SpecType) {
         'feature' {
-            # No gate-briefs.md: a spec from before gate briefs, or one no
-            # session has presented a gate for yet. Not evidence of a skipped gate.
-            $brief = Get-DocText -Path (Join-Path $Dir 'gate-briefs.md')
-            if ([string]::IsNullOrEmpty($brief)) { break }
-            $b = Get-BriefState $brief
+            if (-not $script:BriefRead) { break }
 
             # FEAT-G1: Spec approval.
             $adv = New-Object System.Collections.Generic.List[string]
@@ -422,6 +533,9 @@ function Get-Findings {
             if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Plan approval)' $mis $adv)) }
 
+            # Gate Re-plan (ADR 0029).
+            Add-ReplanFindings $b $plan $out
+
             # FEAT-G3: Integration and review.
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
@@ -432,22 +546,133 @@ function Get-Findings {
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '3 (Integration and review)' $mis $adv)) }
         }
         'bug' {
-            # BUG-G2: Reproduction confirmed.
+            $root = Get-Section $spec 'Root cause'
+            $rootFilled = ($null -ne $root -and -not $root.Contains('<<PHASE-3:'))
+            $hasFailing = Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/repro/failing-test-output.txt') -PathType Leaf
+            $statusAdv = Test-StatusIn $Status @('approved', 'in-progress')
+
+            # BUG-G1: Symptom captured (ADR 0029).
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($statusAdv) { $adv.Add("status is $Status") }
+            if ($hasDecisions) { $adv.Add('03-decisions.md exists') }
+            $m = Get-BriefMissing $b 1
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '1 (Symptom captured)' $mis $adv)) }
+
+            # BUG-G2: Reproduction confirmed. The constitution exception logged
+            # on the insist path excuses both the unfilled section and the reply.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($statusAdv) { $adv.Add("status is $Status") }
+            if ($hasDecisions) { $adv.Add('03-decisions.md exists') }
+            if (Test-AuthorFill (Get-Section $spec 'Reproduction')) {
+                $mis.Add('## Reproduction in 00-spec.md still has unfilled <<...>> fields')
+            }
+            $m = Get-BriefMissing $b 2
+            if ($m) { $mis.Add($m) }
+            if ($mis.Count -gt 0 -and $null -ne $retro) {
+                foreach ($l in ($retro -split "`n")) {
+                    if ($l -match 'constitution exception' -and $l -match 'reproduc|gate 2') { $mis.Clear(); break }
+                }
+            }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Reproduction confirmed)' $mis $adv)) }
+
+            # BUG-G3a: Hypothesis tree exhausted. Conditional: checked only when
+            # it was presented. re-enumerate and observe answer it.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($rootFilled) { $adv.Add('## Root cause is filled') }
+            if ($hasFailing) { $adv.Add('04-artifacts/repro/failing-test-output.txt exists') }
+            $m = Get-BriefMissing $b '3a' -Conditional
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '3a (Hypothesis tree exhausted)' $mis $adv)) }
+
+            # BUG-G3: Root cause confirmed. The root cause is written before its
+            # brief, so the failing test is the first evidence past it.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($hasFailing) { $adv.Add('04-artifacts/repro/failing-test-output.txt exists') }
+            if ($Status -ceq 'in-progress') { $adv.Add('status is in-progress') }
+            $m = Get-BriefMissing $b 3
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '3 (Root cause confirmed)' $mis $adv)) }
+
+            # BUG-G4: Failing test confirmed.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($Status -ceq 'in-progress') { $adv.Add('status is in-progress') }
+            $m = Get-BriefMissing $b 4
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '4 (Failing test confirmed)' $mis $adv)) }
+
+            # BUG-G5: Regression and review.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($hasCloseout) { $adv.Add('05-retro.md has a ## Close-out section') }
+            $m = Get-BriefMissing $b 5
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Regression and review)' $mis $adv)) }
+        }
+        'refactor' {
+            if (-not $script:BriefRead) { break }
+            $hasPlan = Test-Path -LiteralPath (Join-Path $Dir '01-plan.md') -PathType Leaf
+            $tasks = Get-DocText -Path (Join-Path $Dir '02-tasks.md')
+            $taskDone = Test-LineMatch $tasks '^- \*\*Status\*\*:[ \t]*done([^A-Za-z0-9_]|$)'
+
+            # REF-G1: Spec approval.
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
             if (Test-StatusIn $Status @('approved', 'in-progress')) { $adv.Add("status is $Status") }
             if ($hasDecisions) { $adv.Add('03-decisions.md exists') }
-            if (Test-AuthorFill (Get-Section $spec 'Reproduction')) {
-                $retro = Get-DocText -Path (Join-Path $Dir '05-retro.md')
-                $excepted = $false
-                if ($null -ne $retro) {
-                    foreach ($l in ($retro -split "`n")) {
-                        if ($l -match 'constitution exception' -and $l -match 'reproduc|gate 2') { $excepted = $true; break }
-                    }
-                }
-                if (-not $excepted) { $mis.Add('## Reproduction in 00-spec.md still has unfilled <<...>> fields') }
+            if ($hasPlan) { $adv.Add('01-plan.md exists') }
+            $m = Get-BriefMissing $b 1
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '1 (Spec approval)' $mis $adv)) }
+
+            # REF-G2: Coverage threshold met. `add tests` leads to Gate 3, so
+            # the decision is the approving reply in either gate.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($hasPlan) { $adv.Add('01-plan.md exists') }
+            if ($hasTasks) { $adv.Add('02-tasks.md exists') }
+            if ($Status -ceq 'in-progress') { $adv.Add('status is in-progress') }
+            $m = Get-BriefMissing $b @('2', '3')
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Coverage threshold met)' $mis $adv)) }
+
+            # REF-G4: Plan approval.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($Status -ceq 'in-progress') { $adv.Add('status is in-progress') }
+            if ($taskDone) { $adv.Add('a task in 02-tasks.md is done') }
+            $batches = @(Get-ChildItem -LiteralPath (Join-Path $Dir '04-artifacts/batches') -File -Filter 'batch-*-tests.txt' -ErrorAction SilentlyContinue)
+            if ($batches.Count -gt 0) { $adv.Add('a 04-artifacts/batches/batch-*-tests.txt file exists') }
+            $m = Get-BriefMissing $b 4
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '4 (Plan approval)' $mis $adv)) }
+
+            # REF-G5: Tests green per batch.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($taskDone) { $adv.Add('a task in 02-tasks.md is done') }
+            if (Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/coverage/after-refactor.txt') -PathType Leaf) {
+                $adv.Add('04-artifacts/coverage/after-refactor.txt exists')
             }
-            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Reproduction confirmed)' $mis $adv)) }
+            $m = Get-BriefMissing $b 5
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Tests green per batch)' $mis $adv)) }
+
+            # Gate Re-plan (ADR 0029).
+            Add-ReplanFindings $b (Get-DocText -Path (Join-Path $Dir '01-plan.md')) $out
+
+            # REF-G6: Holistic review.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($hasCloseout) { $adv.Add('05-retro.md has a ## Close-out section') }
+            $m = Get-BriefMissing $b 6
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '6 (Holistic review)' $mis $adv)) }
         }
         'perf' {
             # PERF-G2: Baseline measured.
@@ -557,16 +782,16 @@ try {
     $findings = @(Get-Findings -SpecType $specType -Status $status -Dir $dir)
     if ($findings.Count -eq 0) { exit 0 }
 
-    $featureNote = ''
-    if ($specType -ceq 'feature') {
+    $briefNote = ''
+    if ($script:BriefRead) {
         # No apostrophe: ConvertTo-Json on 5.1 escapes it as ', and the
         # stdout of the two twins would no longer be byte-identical.
-        $featureNote = ' A /sd:feature gate is evidenced by its section in gate-briefs.md and the reply recorded' +
+        $briefNote = ' A /sd:' + $specType + ' gate is evidenced by its section in gate-briefs.md and the reply recorded' +
             ' on its Reply: line; if the user already answered that gate in this conversation, append that answer' +
             ' verbatim as the Reply: line with the Edit tool instead of asking again.'
     }
     $reason = 'specwright stop-gate: ' + $id + ' (/sd:' + $specType + ') is past a HARD gate without its evidence.' +
-        ($findings -join '') + $featureNote +
+        ($findings -join '') + $briefNote +
         ' Return to that gate: present it to the user and STOP for their answer, or undo the later-phase work. HARD gates have no override.'
     $obj = [pscustomobject][ordered]@{ decision = 'block'; reason = $reason }
     [Console]::Out.WriteLine(($obj | ConvertTo-Json -Compress))

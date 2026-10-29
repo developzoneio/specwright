@@ -7,7 +7,8 @@
   latency budget); SW-51 (rca Gate 2 could run on an empty hypothesis tree); SW-44 (why gate
   markers are not parsed out of command markdown)
 - Supersedes: none
-- Extended by: ADR 0021 (`/sd:feature` rows FEAT-G1..G3, evidenced by `gate-briefs.md`; SW-100)
+- Extended by: ADR 0021 (`/sd:feature` rows FEAT-G1..G3, evidenced by `gate-briefs.md`; SW-100);
+  ADR 0029 (`/sd:bug`, `/sd:refactor` and Gate Re-plan rows from `gate-briefs.md`; SW-108)
 
 ## Context
 

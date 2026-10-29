@@ -8,6 +8,7 @@
   ADR 0003 (the Gate Re-plan protocol); `skills/sd-gate-brief/SKILL.md` (the rules)
 - Supersedes: none. Amends ADR 0018 decision 5 (its Gate Re-plan clause) and settles the Gate
   Re-plan section shape ADR 0021 left open.
+- Extended by: ADR 0029 (stop-gate reads the `/sd:refactor` briefs and Gate Re-plan; SW-108)
 
 ## Context
 

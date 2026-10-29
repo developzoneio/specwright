@@ -349,7 +349,10 @@ evidence missing*, and fires only when both hold:
 
 | Rule | Fires when |
 |---|---|
-| bug Gate 2 | status `approved`/`in-progress` or `03-decisions.md` exists, while `## Reproduction` still has `<<...>>` fields (unless the retro logs a constitution exception) |
+| bug Gate 2 | status `approved`/`in-progress` or `03-decisions.md` exists, while `## Reproduction` still has `<<...>>` fields or, with a brief, no Gate 2 `Reply:` approves (unless the retro logs a constitution exception) |
+| bug Gates 1, 3a, 3, 4, 5 (SW-108) | the status moved on, the root cause is written, the failing-test output is saved or the retro has a `## Close-out` section, while `gate-briefs.md` has no approving `Reply:` for the gate. Gate 3a is checked only when presented; `re-enumerate` and `observe` answer it (ADR 0029) |
+| refactor Gates 1-6 (SW-108) | the status moved on, `01-plan.md`/`02-tasks.md` exist, a task is done, a batch or after-refactor output is saved or the retro has a `## Close-out` section, while the brief has no approving reply. Gates 2 and 3 are one coverage decision; `exception <reason>` approves (ADR 0029) |
+| Gate Re-plan, feature and refactor (SW-108) | `01-plan.md` `## Revisions` records `R<n>`, while no `## Gate Re-plan - R<n>` section has an approving reply (`revise` and `details` do not approve). No Re-plan section at all, or a revision older than the first one, checks nothing (ADR 0029) |
 | perf Gate 2 | Phase 3+ evidence exists while the baseline artifact, Results log row 0 or the measured `Current observed` is missing |
 | rca Gate 2 (SW-51) | the root cause is written or the status moved on, while `## Hypothesis tree` still holds its `<<PHASE-2:` field |
 | port Gates 1, 2, 3, 6 | later-phase artifacts exist while `MANIFEST.md`/`Frozen: yes`, filled tables, `## Behavior pinning` or `parity/INDEX.md` is missing |

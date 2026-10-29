@@ -388,6 +388,100 @@ Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($fPayload -r
 Assert-Exit0 'stop-gate feature re-fire' $script:Code
 Assert-Empty 'stop-gate feature re-fire' $script:Stdout
 
+# ---- stop-gate: /sd:bug, /sd:refactor and Gate Re-plan (SW-108) ------------
+
+$bg = Join-Path $fixture 'stop-gate-brief-ws'
+New-Item -ItemType Directory -Force -Path (Join-Path $bg '.claude') | Out-Null
+Set-Content -LiteralPath (Join-Path $bg '.claude\project-config.json') -Encoding UTF8 `
+    -Value '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}'
+$bgEsc = $bg -replace '\\', '\\\\'
+$bPayload = "{`"session_id`":`"smoke-stop-brief`",`"cwd`":`"$bgEsc`",`"transcript_path`":`"$bgEsc\\transcript.jsonl`",`"stop_hook_active`":false}"
+
+# Set-BriefState <type> <status> <files> <briefs>
+# <files> is a space-separated subset of: decisions failing closeout plan
+# plan-r1 tasks-done. <briefs> is '-' for no gate-briefs.md, else gate=reply
+# pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
+function Set-BriefState {
+    param([string]$Type, [string]$Status, [string]$Files, [string]$Briefs)
+    $id = if ($Type -eq 'bug') { 'BUG-SMOKE-3' } else { 'REF-SMOKE-4' }
+    $specs = Join-Path $bg '.specs'
+    if (Test-Path -LiteralPath $specs) { Remove-Item -LiteralPath $specs -Recurse -Force }
+    $bd = Join-Path $specs $id
+    New-Item -ItemType Directory -Force -Path $bd | Out-Null
+    Set-Content -LiteralPath (Join-Path $bg 'transcript.jsonl') -Encoding UTF8 -NoNewline `
+        -Value "{`"type`":`"user`",`"message`":{`"content`":`"continue $id`"}}"
+    Set-Content -LiteralPath (Join-Path $bd '00-spec.md') -Encoding UTF8 -NoNewline `
+        -Value "---`nid: $id`ntype: $Type`nstatus: $Status`n---`n"
+    foreach ($f in ($Files -split ' ')) {
+        switch ($f) {
+            'decisions' { Set-Content -LiteralPath (Join-Path $bd '03-decisions.md') -Encoding UTF8 -Value '# Decisions' }
+            'failing' {
+                New-Item -ItemType Directory -Force -Path (Join-Path $bd '04-artifacts\repro') | Out-Null
+                Set-Content -LiteralPath (Join-Path $bd '04-artifacts\repro\failing-test-output.txt') -Encoding UTF8 -Value 'FAIL'
+            }
+            'closeout' { Set-Content -LiteralPath (Join-Path $bd '05-retro.md') -Encoding UTF8 -NoNewline -Value "# Retro`n`n## Close-out`n" }
+            'plan' { Set-Content -LiteralPath (Join-Path $bd '01-plan.md') -Encoding UTF8 -Value '# Plan' }
+            'plan-r1' {
+                Set-Content -LiteralPath (Join-Path $bd '01-plan.md') -Encoding UTF8 -NoNewline `
+                    -Value "# Plan`n`n## Revisions`n`n### R1 - 2026-10-29T10:00:00Z`n"
+            }
+            'tasks-done' {
+                Set-Content -LiteralPath (Join-Path $bd '02-tasks.md') -Encoding UTF8 -NoNewline `
+                    -Value "### T01 - Extract`n`n- **Status**: done`n"
+            }
+        }
+    }
+    if ($Briefs -eq '-') { return }
+    $text = "# Gate briefs - $id`n"
+    foreach ($g in ($Briefs -split ' ')) {
+        $gate, $reply = $g -split '=', 2
+        if ($gate.StartsWith('R')) { $gate = "Re-plan - $gate" }
+        $text += "`n## Gate $gate - smoke (pass 1)`n`nProceed? (yes / abort)`n"
+        if ($reply) { $text += "`nReply: $reply`n" }
+    }
+    Set-Content -LiteralPath (Join-Path $bd 'gate-briefs.md') -Encoding UTF8 -NoNewline -Value $text
+}
+
+# Test-BriefCase <label> <'silent' | substring of the block reason> <Set-BriefState args...>
+function Test-BriefCase {
+    param([string]$Label, [string]$Expect, [string]$Type, [string]$Status, [string]$Files, [string]$Briefs)
+    Set-BriefState $Type $Status $Files $Briefs
+    Write-Section "stop-gate (PowerShell): $Label"
+    Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') $bPayload
+    Assert-Exit0 "stop-gate $Label" $script:Code
+    if ($Expect -eq 'silent') {
+        Assert-Empty "stop-gate $Label" $script:Stdout
+    } else {
+        Assert-Contains "stop-gate $Label" $script:Stdout '"decision":"block"'
+        Assert-Contains "stop-gate $Label" $script:Stdout $Expect
+    }
+}
+
+Test-BriefCase 'bug Gate 1 passed without a reply - blocks' 'Gate 1 (Symptom captured)' 'bug' 'approved' 'decisions' '1='
+Test-BriefCase 'bug Gate 2 partial only - blocks' '(last reply: partial)' 'bug' 'approved' 'decisions' '1=yes 2=partial'
+Test-BriefCase 'bug Gate 3a reply does not answer Gate 3 - blocks' 'Gate 3 (Root cause confirmed)' `
+    'bug' 'approved' 'decisions failing' '1=yes 2=yes 3a=re-enumerate 3='
+Test-BriefCase 'bug at Gate 4 - silent' 'silent' 'bug' 'approved' 'decisions failing' '1=yes 2=yes 3=yes 4='
+Test-BriefCase 'bug past Gate 4, no brief - silent' 'silent' 'bug' 'in-progress' 'decisions failing' '-'
+Test-BriefCase 'bug Gate 5 closed out without a reply - blocks' 'Gate 5 (Regression and review)' `
+    'bug' 'in-progress' 'decisions failing closeout' '1=yes 2=yes 3=yes 4=yes 5='
+Test-BriefCase 'refactor Gate 2 add tests only - blocks' 'Gate 2 (Coverage threshold met)' `
+    'refactor' 'approved' 'decisions plan' '1=yes 2=add'
+Test-BriefCase 'refactor Gate 2 add, Gate 3 yes - silent' 'silent' 'refactor' 'approved' 'decisions plan' '1=yes 2=add 3=yes'
+Test-BriefCase 'refactor Gate 5 passed without a reply - blocks' 'Gate 5 (Tests green per batch)' `
+    'refactor' 'in-progress' 'decisions plan tasks-done' '1=yes 2=yes 4=yes 5='
+Test-BriefCase 'refactor Re-plan revise only - blocks' 'Gate Re-plan R1' `
+    'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes R1=revise'
+Test-BriefCase 'refactor Re-plan approved - silent' 'silent' 'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes R1=approve'
+Test-BriefCase 'refactor revision with no Re-plan section - silent' 'silent' `
+    'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes'
+
+Write-Section 'stop-gate (PowerShell): bug/refactor re-fire with stop_hook_active - silent'
+Set-BriefState 'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes R1=revise'
+Invoke-Hook (Join-Path $repoRoot 'hooks\powershell\stop-gate.ps1') ($bPayload -replace '"stop_hook_active":false', '"stop_hook_active":true')
+Assert-Exit0 'stop-gate brief re-fire' $script:Code
+Assert-Empty 'stop-gate brief re-fire' $script:Stdout
+
 # The shipped example: FEAT-todo-priority is done and has no gate-briefs.md.
 # Its project enables stop-gate, so the nightly e2e runs these rules there.
 Write-Section 'stop-gate (PowerShell): examples/fixture-project FEAT-todo-priority - silent, unchanged'
