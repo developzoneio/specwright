@@ -15,6 +15,8 @@
   { "type": "transcript-contains-section", "path": ".specs/FEAT-todo-count/gate-briefs.md", "section": "^## Gate " },
   { "type": "file-not-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "file-not-matches", "path": ".specs/FEAT-todo-count/gate-briefs.md", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
+  { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-todo-count\\s*\\|\\s*feature\\s*\\|\\s*done" },
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"draft\",\"event\":\"spec_transition\",\"from\":\"-\",\"decision\":\"allow\"" },
   { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-todo-count\",\"phase\":\"approved\",\"event\":\"spec_transition\",\"from\":\"draft\",\"decision\":\"allow\"" },

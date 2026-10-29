@@ -84,6 +84,11 @@
     scenario that uses it keeps its session (no --no-session-persistence)
     whatever SD_E2E_TRANSCRIPT says, and a missing transcript fails it.
 
+    Assertion type transcript-not-matches (SW-113) reads the same main-thread
+    text blocks: a regex must match none of them in any turn. Tool calls, tool
+    results and subagent transcripts are not read. No transcript, or zero text
+    blocks, fails; -SelfTest checks both offline.
+
     -SelfTest first checks the auth plan offline (SW-106): an auth variable
     means no copy, no variable and no switch means exit 2, the switch means a
     copy. It needs no claude CLI and no auth, and a failure stops the
@@ -782,28 +787,63 @@ function Get-MainThreadTextBlocks {
     # (one per turn, SW-103; resumed turns share one). Tool calls (a Write's
     # content included) and subagent transcripts (subagents/, isSidechain)
     # are not reply text. Returns $null when no main transcript is found.
+    # Each block is { Turn; Text }: Turn counts the user prompts seen so far
+    # (a tool_result or isMeta entry is not a prompt), continuing across the
+    # session files in the order of $SessionIds (SW-113).
     param([string]$FakeHome, [string[]]$SessionIds)
     $projects = Join-Path $FakeHome '.claude' 'projects'
     if (-not (Test-Path -LiteralPath $projects)) { return $null }
     $files = @(Get-ChildItem -LiteralPath $projects -Recurse -File -Filter '*.jsonl' |
         Where-Object { $_.Directory.Name -ne 'subagents' })
     $wanted = @($SessionIds | Where-Object { $_ })
-    if ($wanted.Count -gt 0) { $files = @($files | Where-Object { $wanted -contains $_.BaseName }) }
+    if ($wanted.Count -gt 0) {
+        $files = @($files | Where-Object { $wanted -contains $_.BaseName } |
+            Sort-Object { [array]::IndexOf($wanted, $_.BaseName) })
+    }
     if ($files.Count -eq 0) { return $null }
-    $blocks = [System.Collections.Generic.List[string]]::new()
+    $blocks = [System.Collections.Generic.List[object]]::new()
+    $turn = 0
     foreach ($f in $files) {
         foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             $entry = $null
             try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
-            if ($entry.type -ne 'assistant' -or $entry.isSidechain -eq $true) { continue }
+            if ($entry.isSidechain -eq $true) { continue }
+            if ($entry.type -eq 'user' -and $entry.isMeta -ne $true -and $null -ne $entry.message) {
+                # A prompt the harness sent. Not one: a tool_result, or a message the CLI
+                # injected itself (a subagent's <task-notification> carries `origin`).
+                $isToolResult = @(@($entry.message.content) | Where-Object { $_.type -eq 'tool_result' }).Count -gt 0
+                $isInjected = ($null -ne $entry.origin) -or
+                    (($entry.message.content -is [string]) -and $entry.message.content.StartsWith('<task-notification>'))
+                if ($isToolResult -eq $false -and $isInjected -eq $false) { $turn++ }
+                continue
+            }
+            if ($entry.type -ne 'assistant') { continue }
             if ($null -eq $entry.message -or $null -eq $entry.message.content) { continue }
             foreach ($c in @($entry.message.content)) {
-                if ($c.type -eq 'text' -and $c.text) { $blocks.Add(([string]$c.text).Replace("`r`n", "`n")) }
+                if ($c.type -eq 'text' -and $c.text) {
+                    $blocks.Add([pscustomobject]@{ Turn = $turn; Text = ([string]$c.text).Replace("`r`n", "`n") })
+                }
             }
         }
     }
     return , $blocks.ToArray()
+}
+
+function Get-RunMainThreadTextBlocks {
+    # The one extraction path of the transcript-* assertions (SW-113): the
+    # main-thread text blocks of every session the run names. Returns $null
+    # when there is no main transcript; Write-Info says where it looked.
+    param([string]$FakeHome, $Run)
+    $sessionIds = @()
+    if ($Run -and $Run.SessionIds) { $sessionIds = @($Run.SessionIds) }
+    elseif ($Run -and $Run.Result -and $Run.Result.session_id) { $sessionIds = @([string]$Run.Result.session_id) }
+    $blocks = Get-MainThreadTextBlocks -FakeHome $FakeHome -SessionIds $sessionIds
+    if ($null -eq $blocks) {
+        Write-Info "no main-thread transcript found under $FakeHome (session '$($sessionIds -join ', ')')"
+        return $null
+    }
+    return , $blocks
 }
 
 function Get-BriefShownSections {
@@ -870,11 +910,9 @@ function Test-TranscriptContainsSections {
     $pattern = if ($Assertion.section) { [string]$Assertion.section } else { '^## Gate ' }
     $sections = Get-BriefShownSections -Path $p -SectionPattern $pattern
     if ($sections.Count -eq 0) { Write-Info "no section matches $pattern in $($Assertion.path)"; return $false }
-    $sessionIds = @()
-    if ($Run -and $Run.SessionIds) { $sessionIds = @($Run.SessionIds) }
-    elseif ($Run -and $Run.Result -and $Run.Result.session_id) { $sessionIds = @([string]$Run.Result.session_id) }
-    $blocks = Get-MainThreadTextBlocks -FakeHome $FakeHome -SessionIds $sessionIds
-    if ($null -eq $blocks) { Write-Info "no main-thread transcript found under $FakeHome (session '$($sessionIds -join ', ')')"; return $false }
+    $blockObjects = Get-RunMainThreadTextBlocks -FakeHome $FakeHome -Run $Run
+    if ($null -eq $blockObjects) { return $false }
+    $blocks = @($blockObjects | ForEach-Object { $_.Text })
     $allText = $blocks -join "`n"
     $ok = $true
     foreach ($s in $sections) {
@@ -892,6 +930,45 @@ function Test-TranscriptContainsSections {
         }
     }
     return $ok
+}
+
+function Find-TranscriptPatternHit {
+    # transcript-not-matches (SW-113): the first main-thread text block that
+    # matches $Pattern, case-insensitive like the file-not-matches it mirrors.
+    # Status is 'no-transcript' (no session file), 'no-text' (a transcript
+    # with no main-thread text block) or 'hit' / 'clean'. A hit carries the
+    # block's Turn and a short Excerpt around the match, never the block.
+    param([string]$FakeHome, $Run, [string]$Pattern)
+    $blocks = Get-RunMainThreadTextBlocks -FakeHome $FakeHome -Run $Run
+    if ($null -eq $blocks) { return [pscustomobject]@{ Status = 'no-transcript' } }
+    if ($blocks.Count -eq 0) { return [pscustomobject]@{ Status = 'no-text' } }
+    foreach ($b in $blocks) {
+        $m = [regex]::Match($b.Text, $Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($m.Success -eq $false) { continue }
+        $from = [Math]::Max(0, $m.Index - 40)
+        $to = [Math]::Min($b.Text.Length, $m.Index + $m.Length + 40)
+        $excerpt = ($b.Text.Substring($from, $to - $from) -replace '\s+', ' ').Trim()
+        return [pscustomobject]@{ Status = 'hit'; Turn = $b.Turn; Excerpt = $excerpt; Match = $m.Value }
+    }
+    return [pscustomobject]@{ Status = 'clean' }
+}
+
+function Test-TranscriptNotMatches {
+    # transcript-not-matches: the pattern matches no main-thread assistant text
+    # block of any turn. Tool calls, tool results and subagent transcripts are
+    # not text blocks. Fails - never passes vacuously - on no transcript or on
+    # a transcript with zero text blocks.
+    param($Assertion, [string]$FakeHome, $Run)
+    $hit = Find-TranscriptPatternHit -FakeHome $FakeHome -Run $Run -Pattern ([string]$Assertion.pattern)
+    switch ($hit.Status) {
+        'no-transcript' { return $false }
+        'no-text' { Write-Info 'transcript has zero main-thread text blocks; nothing to check'; return $false }
+        'hit' {
+            Write-Info "turn $($hit.Turn) reply text matches '$($Assertion.pattern)': ...$($hit.Excerpt)..."
+            return $false
+        }
+        default { return $true }
+    }
 }
 
 function Invoke-TranscriptAssertionSelfCheck {
@@ -1009,6 +1086,141 @@ function Invoke-TranscriptAssertionSelfCheck {
             } else {
                 Write-Bad "self-test: transcript-contains-section [$($c.Name)] : expected $want, got the opposite"
                 $allOk = $false
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $allOk
+}
+
+function Invoke-TranscriptNotMatchesSelfCheck {
+    # -SelfTest, offline (SW-113): transcript-not-matches against transcripts
+    # built here, with the three ID patterns scenarios 02, 13 and 14 assert on
+    # their briefs. An ID in main-thread text must fail and name its turn; the
+    # same ID in a tool call, a tool result, a thinking block or a subagent
+    # transcript must pass; no transcript and zero text blocks must fail, never
+    # pass empty. Returns $true when every case behaved as expected.
+    $sid = 'selftest-session'
+    $sid2 = 'selftest-session-2'
+    $patterns = @(
+        'ESC-[A-Z]+-\d+'
+        '\b(SL|VF|CL)\d{3}\b'
+        '[\w./-]+\.[A-Za-z]{1,5}:\d+'
+    )
+    $leakEsc = 'Phase 4 - applying ESC-REF-04 to the plan'
+    $leakLint = 'The spec check reports SL069 on the task list'
+    $leakLine = 'The fix is in src/domain/todo.js:12 now'
+    $allIds = 'ESC-REF-04 SL069 VF001 CL200 src/domain/todo.js:12'
+    $clean = 'Phase 3 - FEAT-selftest: T02 Count todos by status (src/service.js), H1 stale cache, P1, Gate 2 passed.'
+
+    function New-Entry {
+        param([object[]]$Content, [bool]$Sidechain = $false)
+        return ([ordered]@{
+            type = 'assistant'; isSidechain = $Sidechain; sessionId = $sid
+            message = [ordered]@{ role = 'assistant'; content = $Content }
+        } | ConvertTo-Json -Depth 10 -Compress)
+    }
+    function New-Text { param([string]$t) return [ordered]@{ type = 'text'; text = $t } }
+    function New-Prompt {
+        return ([ordered]@{
+            type = 'user'; sessionId = $sid; message = [ordered]@{ role = 'user'; content = 'yes' }
+        } | ConvertTo-Json -Depth 10 -Compress)
+    }
+    function New-ToolResult {
+        param([string]$t)
+        return ([ordered]@{
+            type = 'user'; sessionId = $sid
+            message = [ordered]@{ role = 'user'; content = @([ordered]@{
+                type = 'tool_result'; tool_use_id = 'toolu_1'; content = $t }) }
+        } | ConvertTo-Json -Depth 10 -Compress)
+    }
+    # A subagent's completion notice arrives as a user entry with `origin`: not a harness turn.
+    function New-TaskNotification {
+        return ([ordered]@{
+            type = 'user'; sessionId = $sid; origin = [ordered]@{ kind = 'task-notification' }
+            message = [ordered]@{ role = 'user'; content = '<task-notification><task-id>a1</task-id></task-notification>' }
+        } | ConvertTo-Json -Depth 10 -Compress)
+    }
+    $toolUse = [ordered]@{ type = 'tool_use'; id = 'toolu_1'; name = 'Bash'; input = [ordered]@{ command = "echo $allIds" } }
+
+    # Leak = the pattern index the leak text belongs to; Expect = pass/fail.
+    $cases = @(
+        @{ Name = 'esc-id-in-text'; Pattern = 0; Expect = $false; Status = 'hit'; Turn = 1
+           Main = @((New-Prompt), (New-Entry @((New-Text $leakEsc)))) }
+        @{ Name = 'lint-id-in-text'; Pattern = 1; Expect = $false; Status = 'hit'; Turn = 1
+           Main = @((New-Prompt), (New-Entry @((New-Text $leakLint)))) }
+        @{ Name = 'path-line-in-text'; Pattern = 2; Expect = $false; Status = 'hit'; Turn = 1
+           Main = @((New-Prompt), (New-Entry @((New-Text $leakLine)))) }
+        # Tool results and subagent notices are user entries that do not start a turn: the leak is in turn 2.
+        @{ Name = 'leak-in-turn-2'; Pattern = 0; Expect = $false; Status = 'hit'; Turn = 2
+           Main = @((New-Prompt), (New-Entry @($toolUse)), (New-ToolResult 'ok'), (New-TaskNotification),
+                    (New-Entry @((New-Text $clean))), (New-Prompt), (New-Entry @($toolUse)), (New-ToolResult 'ok'),
+                    (New-TaskNotification), (New-Entry @((New-Text $leakEsc)))) }
+        @{ Name = 'leak-in-forked-session'; Pattern = 0; Expect = $false; Status = 'hit'; Turn = 2
+           RunIds = @($sid, $sid2)
+           Main = @((New-Prompt), (New-Entry @((New-Text $clean))))
+           Main2 = @((New-Prompt), (New-Entry @((New-Text $leakEsc)))) }
+        @{ Name = 'leak-in-unnamed-session'; Pattern = 0; Expect = $true; Status = 'clean'
+           RunIds = @($sid)
+           Main = @((New-Prompt), (New-Entry @((New-Text $clean))))
+           Main2 = @((New-Prompt), (New-Entry @((New-Text $leakEsc)))) }
+        @{ Name = 'allowed-handles'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @((New-Text $clean)))) }
+        @{ Name = 'ids-in-tool-use'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @($toolUse, (New-Text $clean)))) }
+        @{ Name = 'ids-in-tool-result'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @($toolUse)), (New-ToolResult $allIds), (New-Entry @((New-Text $clean)))) }
+        @{ Name = 'ids-in-thinking'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @([ordered]@{ type = 'thinking'; thinking = $allIds }, (New-Text $clean)))) }
+        @{ Name = 'ids-in-sidechain-entry'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @((New-Text $allIds)) $true), (New-Entry @((New-Text $clean)))) }
+        @{ Name = 'ids-in-subagent-transcript'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @((New-Text $clean))))
+           Sub = @((New-Entry @((New-Text $allIds)) $true)) }
+        @{ Name = 'no-transcript'; Pattern = -1; Expect = $false; Status = 'no-transcript'; Main = $null }
+        @{ Name = 'zero-text-blocks'; Pattern = -1; Expect = $false; Status = 'no-text'
+           Main = @((New-Prompt), (New-Entry @($toolUse)), (New-ToolResult $allIds)) }
+    )
+
+    $allOk = $true
+    $root = New-EmptyTempDir -Prefix 'sd-e2e-transcript-not-matches-selftest'
+    try {
+        foreach ($c in $cases) {
+            $caseDir = Join-Path $root $c.Name
+            $fh = Join-Path $caseDir 'home'
+            if ($null -ne $c.Main) {
+                $proj = Join-Path $fh '.claude' 'projects' 'selftest-ws'
+                New-Item -ItemType Directory -Path $proj -Force | Out-Null
+                [System.IO.File]::WriteAllText((Join-Path $proj "$sid.jsonl"), (($c.Main -join "`n") + "`n"))
+                if ($c.Main2) {
+                    [System.IO.File]::WriteAllText((Join-Path $proj "$sid2.jsonl"), (($c.Main2 -join "`n") + "`n"))
+                }
+                if ($c.Sub) {
+                    $subDir = Join-Path $proj $sid 'subagents'
+                    New-Item -ItemType Directory -Path $subDir -Force | Out-Null
+                    [System.IO.File]::WriteAllText((Join-Path $subDir 'agent-1.jsonl'), (($c.Sub -join "`n") + "`n"))
+                }
+            }
+            $run = if ($c.RunIds) {
+                [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $c.RunIds[-1] }; SessionIds = $c.RunIds }
+            } else {
+                [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $sid } }
+            }
+            $indexes = if ($c.Pattern -ge 0) { @($c.Pattern) } else { 0..($patterns.Count - 1) }
+            foreach ($i in $indexes) {
+                $assertion = [pscustomobject]@{ type = 'transcript-not-matches'; pattern = $patterns[$i] }
+                $hit = Find-TranscriptPatternHit -FakeHome $fh -Run $run -Pattern $patterns[$i]
+                $got = Test-OneAssertion -Assertion $assertion -Workspace '' -Run $run -FakeHome $fh
+                $turnOk = ($null -eq $c.Turn) -or ($hit.Turn -eq $c.Turn)
+                $want = if ($c.Expect) { 'pass' } else { 'fail' }
+                if ($got -eq $c.Expect -and $hit.Status -eq $c.Status -and $turnOk) {
+                    Write-Ok "self-test: transcript-not-matches [$($c.Name) #$i] : $want, as expected"
+                } else {
+                    Write-Bad ("self-test: transcript-not-matches [$($c.Name) #$i] : expected $want / $($c.Status)" +
+                        " / turn $($c.Turn), got $got / $($hit.Status) / turn $($hit.Turn)")
+                    $allOk = $false
+                }
             }
         }
     } finally {
@@ -1159,6 +1371,9 @@ function Test-OneAssertion {
             return (Test-TranscriptContainsSections -Assertion $Assertion -Workspace $Workspace `
                 -FakeHome $FakeHome -Run $Run)
         }
+        'transcript-not-matches' {
+            return (Test-TranscriptNotMatches -Assertion $Assertion -FakeHome $FakeHome -Run $Run)
+        }
         default {
             throw "unknown assertion type '$type'"
         }
@@ -1182,6 +1397,7 @@ function Get-AssertionLabel {
             $section = if ($Assertion.section) { $Assertion.section } else { '^## Gate ' }
             return "transcript-contains-section: $($Assertion.path) [$section]"
         }
+        'transcript-not-matches' { return "transcript-not-matches: reply text !~ $($Assertion.pattern)" }
         default            { return "unknown: $($Assertion.type)" }
     }
 }
@@ -1436,6 +1652,9 @@ Assert-Prerequisites -ScenarioDirs $selectedDirs
 if ($SelfTest) {
     Write-Host '=== e2e self-test: transcript-contains-section must FAIL on a brief that was not printed ==='
     $allDetected = Invoke-TranscriptAssertionSelfCheck
+    Write-Host ''
+    Write-Host '=== e2e self-test: transcript-not-matches must see only main-thread reply text, offline ==='
+    if ((Invoke-TranscriptNotMatchesSelfCheck) -eq $false) { $allDetected = $false }
     Write-Host ''
     Write-Host '=== e2e self-test: output-matches / output-not-matches must scope a rule to one spec, offline ==='
     if ((Invoke-OutputAssertionSelfCheck) -eq $false) { $allDetected = $false }

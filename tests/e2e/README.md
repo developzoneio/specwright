@@ -2,7 +2,7 @@
 
 Drives real `claude -p` (headless) sessions against a throwaway copy of a fixture project and
 asserts on **produced artifacts** - files, frontmatter, status values - never on transcript
-wording (one assertion compares artifact text with the transcript; see the rule below). This is the only mechanism in the repo that exercises a real model session against the
+wording (two assertions read the transcript; see the rule below). This is the only mechanism in the repo that exercises a real model session against the
 engine's commands and hooks; everything else (`scripts/validate.*`, `tests/hooks/`,
 `tests/contract-lint/`) checks the *assets* (do commands/agents/skills reference each other
 correctly) or pipes fixture JSON directly into a hook script in isolation. Neither proves the
@@ -34,7 +34,22 @@ verbatim in the main thread's reply text. It meets the rule for three reasons:
 The transcript is this assertion's input, so a scenario that uses it keeps its session whatever
 `SD_E2E_TRANSCRIPT` says, and its fake home is still deleted afterwards. A missing transcript, a
 missing brief, or a brief with no matching section fails the assertion; it never passes empty.
-No other assertion may read the transcript, and no assertion may match model-written wording.
+No other assertion may read the transcript, and no assertion may match model-written wording,
+with one exception.
+
+**The exception: `transcript-not-matches` (SW-113).** `sd-gate-brief` "User-facing text" forbids
+internal IDs (`ESC-*`, lint and verify codes, `path:line`) in every line the user reads, not only
+in the brief file, and no file holds the narration. The assertion fails when a regex matches any
+main-thread assistant text block of any turn. It stays inside the rule because:
+
+- **It is negative and names an ID class, not a phrasing.** Scenarios 02, 13 and 14 reuse the
+  patterns their `file-not-matches` on `gate-briefs.md` already use. A different wording in the
+  next run cannot trip it; only a rule ID or a `path:line` in the reply can.
+- **It shares one extraction with `transcript-contains-section`.** Main-thread text blocks only:
+  tool calls, tool results, thinking blocks and subagent transcripts are not read, because they
+  legitimately carry IDs (the `escalation:` lines in `05-retro.md`, reviewer `file:line` citations).
+- **It never passes vacuously.** No transcript, or a transcript with zero main-thread text
+  blocks, fails with that reason. A failure names the turn and a short excerpt around the match.
 
 **First live run, 2026-10-22** (Linux, `claude` 2.1.308, API key, commit `90021f1`): `02` passed
 21/22 and failed only this assertion, at 0 of 22 shown lines. Each gate was written and answered,
@@ -517,6 +532,22 @@ the check costs nothing:
 
 `write-only` is the SW-88 / SW-89 F1 pattern. If any case behaves otherwise, `-SelfTest` exits 1.
 
+`-SelfTest` checks `transcript-not-matches` the same way (SW-113), with the three ID patterns of
+scenarios 13 and 14 (`ESC-*`, `SL/VF/CL` + 3 digits, `path:line`). A case marked "all 3" runs
+against each pattern:
+
+| Case | Transcript | Must |
+|---|---|---|
+| `esc-id-in-text`, `lint-id-in-text`, `path-line-in-text` | the ID in a main-thread text block | fail, naming turn 1 |
+| `leak-in-turn-2` | a clean turn 1, then the ID in turn 2; tool results and subagent notices (`origin`) do not start a turn | fail, naming turn 2 |
+| `leak-in-forked-session` | the ID in a second session file the run names | fail, naming turn 2 |
+| `leak-in-unnamed-session` | the ID in a session file the run does not name | pass |
+| `allowed-handles` (all 3) | spec ID, `T02` with its title, `H1`, `P1`, `Gate 2` and a bare file path | pass |
+| `ids-in-tool-use`, `ids-in-tool-result`, `ids-in-thinking` (all 3) | every ID class only in that content | pass |
+| `ids-in-sidechain-entry`, `ids-in-subagent-transcript` (all 3) | every ID class only in subagent text | pass |
+| `no-transcript` (all 3) | no session file at all | fail |
+| `zero-text-blocks` (all 3) | only tool calls and a tool result | fail |
+
 First of all, before the preflight, `-SelfTest` checks the auth plan offline (SW-106). It needs no
 `claude` CLI and no auth, and a failure exits 1 before any paid run. Each case sets the two auth
 variables to a dummy marker (the real values are saved and restored, never printed), points the
@@ -565,7 +596,7 @@ and exits 1.
 | # | Scenario | Claim under test |
 |---|---|---|
 | 1 | `01-setup` | `/sd:setup` on a bare, unscaffolded project produces `CLAUDE.md`, `.specs/`, `.claude/project-config.json`, `.claude/settings.json`, all BOM-free. |
-| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89), and every section's shown lines appear verbatim in the main thread's reply text (SW-99). Each gate reply (`yes` x3) and the constitution probe are sent as their own turns from `replies.txt`, so each gate ends a turn (SW-103). |
+| 2 | `02-feature-happy` | `/sd:feature` happy path on a small spec reaches `done` with a full artifact set and a passing `06-verify.md`. `events.jsonl` records all four allowed `spec_transition` edges (`-` -> `draft` -> `approved` -> `in-progress` -> `done`) and no `shell-write` gate, so an index move made through a shell instead of the Edit tool fails the run (SW-79). A final deliberate `Edit` to the protected `.specs/constitution.md` is in `permission_denials`, leaves the file unchanged, and records a `protected` block (SW-80). `gate-briefs.md` exists with Gate 1, 2 and 3 sections and holds no `ESC-*` or lint/verify rule ID (SW-89), and every section's shown lines appear verbatim in the main thread's reply text (SW-99), and no turn's reply text carries an `ESC-*` or lint/verify rule ID (SW-113). Each gate reply (`yes` x3) and the constitution probe are sent as their own turns from `replies.txt`, so each gate ends a turn (SW-103). |
 | 3 | `03-spec-gate-negative` | spec-gate denies a direct code edit with no in-progress spec recorded. The edit is granted, so only the hook's deny keeps `src/domain/todo.js` unchanged and puts it in `permission_denials` (SW-82). |
 | 4 | `04-closeout-negative` | spec-gate's verify-gate denies flipping an index row to `done` with no passing `06-verify.md`. The edit is granted, so only the hook's deny keeps the row `in-progress` and puts `.specs/index.md` in `permission_denials` (SW-82). |
 | 5 | `05-spec-lint-validate` | `/sd:spec validate --all` against `examples/spec-lint-fixture/broken` surfaces the seeded `SL0xx` findings, including `SL060` seeded by the lean-task-format `FEAT-BROKEN-017` (SW-93) and `SL068` seeded by `FEAT-BROKEN-018`, a task block whose `Files` drifted from the approved outline (SW-105). `SL068` is also asserted absent on `FEAT-BROKEN-014` (no outline) and `FEAT-BROKEN-017` (an agreeing outline) - the one command this harness must assert on output text, since `/sd:spec validate` is report-only with no artifact file. |
@@ -575,8 +606,8 @@ and exits 1.
 | 9 | `09-resume-approved` | `/sd:feature` re-invoked on a seeded `complexity: L` spec that is `approved` with no `02-tasks.md` and no impact map (the approving session ended before Phase 2): the state machine resumes at **Phase 2**, not Phase 3. `03-decisions.md` gains exactly one `## Impact analysis (sd-code-explorer)` section, `05-retro.md` carries the applied `escalation: sd-code-explorer haiku -> sonnet (trigger: ESC-FEAT-02)` line, Phase 3a writes the `01-plan.md` outline (ADR 0022) and no `02-tasks.md`, and the run stops at Gate 2 with status still `approved` and no code changed (SW-74). Under the pre-SW-74 table the first two assertions fail. |
 | 10 | `10-resume-impact-mapped` | Control for 09: the same spec with the impact analysis already in `03-decisions.md`. The resume goes straight to Phase 3a (`impact-mapped`): still exactly one impact section, no `ESC-FEAT-02` line, the `01-plan.md` outline written and no `02-tasks.md`, stopped at Gate 2 (SW-74). |
 | 11 | `11-escalation-rca-capped` | `/sd:rca` resumed at Phase 2 on a seeded `severity: P0` incident under `models.escalation.ceiling: "sonnet"`: `ESC-RCA-02` is capped to no movement and `05-retro.md` still carries exactly one `escalation: sd-debugger sonnet -> sonnet (trigger: ESC-RCA-02) capped` line - no `-> opus`, no `unapplied`, no second line. The hypothesis tree is filled, the run stops at Gate 2 with status `draft`, and no code changes (SW-62). A capped decision that left no line would look exactly like the policy not running. |
-| 13 | `13-bug-gate-brief` | `/sd:bug` on a seeded off-by-one (`validateTitle` rejects a 200-character title) runs Gates 1 to 5 with a `yes` each, sent as turns from `replies.txt`. `gate-briefs.md` has a section for each gate, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text. The failing-test output is saved under `04-artifacts/repro/`, the fix lands and the index row reaches `done` (SW-96). |
-| 14 | `14-refactor-gate-brief` | `/sd:refactor` extracts the lookup-or-throw step of `TodoService.completeTodo` into a private method, one task in one batch with coverage already above the bar, so Gate 3 is not reached. Gates 1, 2, 4, 5 and 6 each get a `yes` from `replies.txt`. `gate-briefs.md` has a section for each of them, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text. The batch test output and the after-refactor coverage are saved under `04-artifacts/`, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-109). |
+| 13 | `13-bug-gate-brief` | `/sd:bug` on a seeded off-by-one (`validateTitle` rejects a 200-character title) runs Gates 1 to 5 with a `yes` each, sent as turns from `replies.txt`. `gate-briefs.md` has a section for each gate, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn (SW-113). The failing-test output is saved under `04-artifacts/repro/`, the fix lands and the index row reaches `done` (SW-96). |
+| 14 | `14-refactor-gate-brief` | `/sd:refactor` extracts the lookup-or-throw step of `TodoService.completeTodo` into a private method, one task in one batch with coverage already above the bar, so Gate 3 is not reached. Gates 1, 2, 4, 5 and 6 each get a `yes` from `replies.txt`. `gate-briefs.md` has a section for each of them, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn (SW-113). The batch test output and the after-refactor coverage are saved under `04-artifacts/`, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-109). |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
@@ -630,6 +661,7 @@ gate prints none of it (ADR 0020).
 | `exit-code` | `value` | `claude -p` exited with that code |
 | `permission-denied` | `tool` (regex), `path` (suffix) | `permission_denials` holds a matching call (SW-80) |
 | `transcript-contains-section` | `path`, `section` (heading regex, default `^## Gate `) | every matching section has shown lines, and they appear verbatim and in order in one main-thread text block. Shown lines are those after the heading, blank lines excluded, up to `### More decisions` or `Reply:`. Tool calls and subagent transcripts do not count (SW-99) |
+| `transcript-not-matches` | `pattern` (regex, case-insensitive like `-match`) | no main-thread assistant text block of any turn matches. Tool calls, tool results, thinking blocks and subagent transcripts are not read. No transcript, or zero text blocks, fails; a match fails naming its turn and a short excerpt (SW-113) |
 
 A `path` may contain `*` for a name the run picks, such as the date in a `REF-<slug>-<YYYYMMDD>`
 spec ID. It must resolve to exactly one workspace file; none, or several, fails a `file-exists` or

@@ -13,6 +13,9 @@
   { "type": "file-not-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "file-not-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "file-not-matches", "path": ".specs/BUG-title-200/gate-briefs.md", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
+  { "type": "transcript-not-matches", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
   { "type": "file-matches", "path": "src/domain/todo.js", "pattern": "title\\.length > MAX_TITLE_LENGTH" },
   { "type": "file-matches", "path": ".specs/index.md", "pattern": "BUG-title-200\\s*\\|\\s*bug\\s*\\|\\s*done" },
   { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }
