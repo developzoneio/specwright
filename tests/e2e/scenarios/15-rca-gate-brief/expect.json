@@ -1,0 +1,19 @@
+[
+  { "type": "file-exists", "path": ".specs/RCA-e2e-brief-*/00-spec.md" },
+  { "type": "file-exists", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md" },
+  { "type": "file-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "(?m)^## Gate 1 - " },
+  { "type": "file-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
+  { "type": "file-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "(?m)^## Gate 3 - " },
+  { "type": "file-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "(?m)^Reply: yes\\b" },
+  { "type": "transcript-contains-section", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "section": "^## Gate " },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-brief-*/gate-briefs.md", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
+  { "type": "transcript-not-matches", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "file-not-matches", "path": ".specs/RCA-e2e-brief-*/00-spec.md", "pattern": "<<PHASE-2:|<<PHASE-3: root cause" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "RCA-e2e-brief-\\d{8}\\s*\\|\\s*rca\\s*\\|\\s*done" },
+  { "type": "file-matches", "path": "src/infrastructure/store.js", "pattern": "#nextId = 1;" },
+  { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }
+]

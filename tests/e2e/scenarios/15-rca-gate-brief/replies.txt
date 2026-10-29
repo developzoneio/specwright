@@ -1,0 +1,7 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# Gate 1 - evidence gathered
+yes
+# Gate 2 - hypotheses enumerated
+yes
+# Gate 3 - root cause confirmed
+yes

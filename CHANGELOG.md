@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gate brief for `/sd:rca` (SW-111, SW-96 part 4 of 5)** - every `/sd:rca` gate (1, 2, 3, all
+  HARD) writes a brief to `.specs/RCA-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it verbatim and
+  offers `details <target>`. Gate count unchanged, no code change in the workflow (ADR 0026).
+  - **Single source:** `sd-gate-brief` "Per-workflow parts" gains a `/sd:rca` part. The hypothesis
+    lines and the `tree` / `H<n>` targets are the `/sd:bug` ones by reference, read from
+    `00-spec.md`; new lines only for the incident (`Incident`, `Window`, `Timeline`, `Impact`,
+    `Recent changes`, `Evidence`, `Gaps`, `Explains`, `Timeline fit`) and new targets `timeline`,
+    `impact` and `rootcause`. `commands/rca.md` reads the skill in Phase 0 and names it at each gate.
+  - **Sources:** the main thread composes all three briefs. No agent or hook changes; the
+    architect's block for the empty skeleton is unused.
+  - **Lint:** `contractLint.gateBriefs` declares `commands/rca.md` (labels `1`, `2`, `3`). No new
+    fixture: the shapes are pinned by the feature and bug ones. e2e scenario `15-rca-gate-brief`.
 - **e2e `transcript-not-matches` assertion for narration (SW-113, SW-96 rollout)** - a regex
   must match no main-thread assistant text block of any turn, so an ID in phase narration,
   escalation narration or the closing summary fails a run, not only an ID in `gate-briefs.md`.
