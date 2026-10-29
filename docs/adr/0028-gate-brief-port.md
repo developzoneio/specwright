@@ -83,6 +83,10 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   the run also exercises plain-word narration of that escalation. It asserts the 6 sections, the
   `Reply:` lines, the transcript printout, the new saves, and the absence of internal IDs and
   unglossed deviation IDs in the file and in every assistant text block.
+  - It runs under skip-permissions, the `01-setup` exception of SW-83: the Phase 2 freeze appends
+    to `paths.protected` in `.claude/project-config.json`, which no grant opens in `-p` mode. The
+    first live run, under `dontAsk`, stopped there before Gate 1. The same limit applies to any
+    headless `/sd:port` run under a restricted permission mode.
   - **Not reached by the run**, covered by the lint only: the incomplete face of Gate 2, a dirty
     production tree at Gate 3, the red face of Gate 5, Case B of Gate 6, a bridged donor and a plan
     over the split threshold.

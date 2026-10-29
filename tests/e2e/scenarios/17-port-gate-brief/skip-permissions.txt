@@ -1,0 +1,7 @@
+/sd:port Phase 2 step 4 appends the frozen snapshot paths to paths.protected in
+.claude/project-config.json, a protected path no grant opens in -p mode (SW-83, the 01-setup
+reason). Re-probed 2026-10-29 for SW-112, claude 2.1.312, Windows: dontAsk with
+Edit(.claude/project-config.json) and Write(.claude/project-config.json), dontAsk with
+Edit(/.claude/**), and acceptEdits with Edit all refused the edit and left the file unchanged; the
+first live run of this scenario stopped there, before Gate 1. The scenario asserts no deny, so the
+posture guard allows this. allowed-tools.txt still lists the shell the prompt permits.
