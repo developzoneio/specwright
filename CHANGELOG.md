@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **e2e `transcript-not-matches` assertion for narration (SW-113, SW-96 rollout)** - a regex
+  must match no main-thread assistant text block of any turn, so an ID in phase narration,
+  escalation narration or the closing summary fails a run, not only an ID in `gate-briefs.md`.
+  Tool calls, tool results, thinking blocks and subagent transcripts are not read.
+  - **One extraction path:** `Get-MainThreadTextBlocks` now returns `{Turn, Text}` and a shared
+    `Get-RunMainThreadTextBlocks` resolves the run's sessions for both transcript assertions.
+  - **Never vacuous:** no transcript, or zero text blocks, fails with that reason; a hit names
+    its turn and a short excerpt.
+  - **Scenarios:** 02 (`ESC-*`, lint/verify code), 13 and 14 (those and `path:line`) reuse the
+    patterns their `file-not-matches` on `gate-briefs.md` already use.
+  - **`-SelfTest`:** 14 offline cases (ID in text fails and names its turn; the same ID in a tool
+    call, tool result, thinking block or subagent passes; no transcript and zero text fail).
+  - `tests/e2e/README.md` states the exception to "no assertion may match model-written wording".
 - **Gate brief for `/sd:refactor`, and `details` at Gate Re-plan (SW-109, SW-96 part 2 of 5)** -
   every `/sd:refactor` gate (1-6 HARD, plus the conditional Gate Re-plan) writes a brief to
   `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it verbatim and offers `details <target>`.
