@@ -64,13 +64,17 @@ is for changing the **plan**, not for doing the task.
 When a plan-invalidating discovery lands, the workflow returns to this gate. It is HARD - it STOPS
 and waits for explicit user approval; silence is not approval, and there is no override path.
 
-1. **Surface the trigger.** Present to the user: what was discovered, which task(s) it invalidates,
-   and the proposed delta. Ask:
+1. **Surface the trigger.** The main thread writes the Re-plan brief - what was discovered, which
+   task(s) it invalidates, and the proposed delta - to the spec's `gate-briefs.md` per
+   **sd-gate-brief**, which owns its section heading, its shown lines and its `details` targets,
+   then shows it verbatim. Ask:
 
-   > Re-plan `<SPEC-ID>`? Discovery: `<trigger>`. Affects `<task IDs>`. (approve / revise `<feedback>` / abort task)
+   > Re-plan `<SPEC-ID>`? Discovery: `<trigger>`. Affects `<task IDs>`. (approve / revise `<feedback>` / details `<target>` / abort task)
 
    - `approve` -> proceed to step 2.
-   - `revise` -> adjust the proposed delta and re-ask. Loop.
+   - `revise` -> adjust the proposed delta and re-ask, as a new pass of the brief. Loop.
+   - `details <target>` -> print what the target names per **sd-gate-brief**, then ask again. It
+     never approves.
    - `abort task` -> do not re-plan; return to the workflow's normal abort handling for that task.
 
 2. **Append a revision entry to `01-plan.md`** (never rewrite prior content - see format below).

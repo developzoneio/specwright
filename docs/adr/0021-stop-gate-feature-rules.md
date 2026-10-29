@@ -9,6 +9,7 @@
   (hook latency budget)
 - Supersedes: none. Extends ADR 0016's table with three rows and reverses its "feature specs are
   never checked" consequence, which the fixture `allow-feature-type` asserted.
+- Extended by: ADR 0025 (settles the Gate Re-plan section shape; Re-plan still has no rule; SW-109)
 
 ## Context
 

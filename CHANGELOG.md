@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gate brief for `/sd:refactor`, and `details` at Gate Re-plan (SW-109, SW-96 part 2 of 5)** -
+  every `/sd:refactor` gate (1-6 HARD, plus the conditional Gate Re-plan) writes a brief to
+  `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it verbatim and offers `details <target>`.
+  Gate counts unchanged (ADR 0025).
+  - **Single source:** `sd-gate-brief` "Per-workflow parts" gains a `/sd:refactor` part (targets
+    `invariants`, `coverage`, `impact`, `output`, plus the task ID, `plan` and `risks` targets).
+    `commands/refactor.md` reads the skill in Phase 0 and names it at each gate.
+  - **Sources:** Gates 1 and 4 reuse the architect's `gate: spec` / `gate: plan` blocks (Gate 4's
+    task table gains a `Batch` column); Gate 6 reuses `gate: review`, which gains an optional
+    `invariant:` line; the main thread composes Gates 2, 3 and 5. Gates 2, 3 and 5 get two faces
+    with slash option sets. Phase 5 saves each batch's test output and Phase 6 measures tests,
+    lint and coverage itself, both under `04-artifacts/`.
+  - **Gate Re-plan offers `details`** in `/sd:feature` and `/sd:refactor`, on the shared question
+    line `sd-replan-loop` owns. Its section heading is now `## Gate Re-plan - R<n> (pass <p>)` and
+    its shown lines gain `Risk:`. Amends ADR 0018 decision 5. No hook change: stop-gate reads no
+    reply in a Re-plan section.
+  - **Lint:** `contractLint.gateBriefs` declares `commands/refactor.md`,
+    `skills/sd-replan-loop/SKILL.md` and Re-plan `details` for `commands/feature.md`. New
+    fixtures `cl307-replan-details-dropped` and `fp-cl307-two-face-coverage-gate`; e2e scenario
+    `14-refactor-gate-brief`, whose date-stamped spec ID needed `*` in e2e assertion paths
+    (`run-e2e.ps1` resolves it to exactly one match, checked by `-SelfTest`).
 - **Gate brief for `/sd:bug` (SW-96, part 1 of 5)** - every `/sd:bug` gate (1, 2 HARD, 3a, 3, 4,
   5) now writes a brief to `.specs/BUG-<arg>/gate-briefs.md` and prints it verbatim, as
   `/sd:feature` does, and all six offer `details <target>`. Gate count unchanged.

@@ -1,0 +1,19 @@
+/sd:refactor extract-todo-lookup extract-method
+
+Refactor request: in src/application/todo-service.js, TodoService.completeTodo looks a todo up in
+the store and throws TodoNotFoundError when it is missing. Extract that lookup-or-throw step into a
+private method of TodoService and have completeTodo call it. Behavior must not change: the public
+API, the error type and its message stay exactly as they are. Keep it to one task in one batch;
+the existing tests already cover this code.
+
+This is a headless, scripted test run. The runner that started it types each gate reply as the
+next message of this session, the way a person would. Stop at each hard gate as the workflow says
+and wait for that message. After Phase 7 close-out, report the final spec ID and its status.
+
+This run grants shell access narrowly and refuses the rest, for you and for every subagent you
+start. The project's test command is allowed only as plain `npm test` (or `npm run test`) and its
+coverage command only as plain `npm run coverage`, run from the project root, optionally piped
+through `tail -n 40` or `Select-Object -Last 40`. A `cd`, a redirect to a file or to /dev/null,
+chaining with `;` or `||`, `node --test`, `node -e` and any shell write are refused. Make every
+change to a file under `.specs/`, including the `Reply:` line in `gate-briefs.md` and the saved
+test and coverage output, with the Edit or Write tool. Tell each subagent you start the same.

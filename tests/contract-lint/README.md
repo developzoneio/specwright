@@ -75,6 +75,7 @@ wording can improve in one commit while a divergence still fails.
 | `cl307-gate-brief-unwired` | CL307, a declared gate naming the skill only in a fence, a wired gate left undeclared, a declared gate absent from disk |
 | `cl307-gate-details-dropped` | CL307, `details` dropped from a gate and from one face of a two-face gate, and offered by an undeclared gate |
 | `cl307-sub-gate-label` | CL307, sub-gate `3a` wired while only `3` is declared (labels match exactly), and a slash parenthetical in a declared gate's prose read as an option set without `details` |
+| `cl307-replan-details-dropped` | CL307, Re-plan declared to offer `details` whose indented question inside a numbered step lost it, and a shared protocol block in a skill offering `details` with no `gateBriefs` entry for its file |
 | `cl400-hardcoded-npm-test` | CL400 |
 | `cl401-hardcoded-typescript` | CL401 |
 | `cl402-hardcoded-absolute-path` | CL402 |
@@ -108,9 +109,10 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-cl402-slash-command-reference` | `/sd:<name>` references and `~/.claude/...` install-target paths, not filesystem paths | throughout `commands/`, `agents/` |
 | `fp-cl009-phrase-outside-phase0` | bootstrap guard text inside the skill that owns it, in a fenced example, and outside Phase 0; a Phase 0 that reads the skill at runtime | `skills/sd-bootstrap-guard/SKILL.md`, the Phase 0 of every workflow command |
 | `fp-cl206-phrase-wrapped` | the `editToolOnly` phrase wrapped across two lines of a rules bullet | `## Rules (hard constraints)` of every command in `contractLint.editToolOnly` |
-| `fp-cl307-replan-brief-without-details` | a gate carrying a brief with no `details` by design, a two-face gate offering `details` on both faces, and the skill named outside gate blocks | `commands/feature.md` Gate Re-plan and Gate 2 |
-| `fp-cl307-non-brief-workflow` | a workflow absent from `gateBriefs` that names the skill outside its gate block | every workflow but `commands/feature.md` and `commands/bug.md` |
+| `fp-cl307-replan-brief-without-details` | a gate declared with a brief but not with `details`, a two-face gate offering `details` on both faces, and the skill named outside gate blocks | `commands/feature.md` Gate 2 |
+| `fp-cl307-non-brief-workflow` | a workflow absent from `gateBriefs` that names the skill outside its gate block | every workflow but `commands/feature.md`, `commands/bug.md` and `commands/refactor.md` |
 | `fp-cl307-hard-gate-details` | a HARD gate offering `details` beside descriptive option tokens and an allowed insist-and-proceed sentence, `3a` before `3` with both declared, and an option set on the question's second line | `commands/bug.md` Gates 2, 3a and 3 |
+| `fp-cl307-two-face-coverage-gate` | a HARD gate with two faces offering descriptive tokens (`add tests`, `exception <reason>`) plus `details`, prose with no slash parenthetical, and a Re-plan question offering `details` | `commands/refactor.md` Gates 2, 3, 5 and Gate Re-plan |
 | `fp-cl601-allow-comment` | a fully wired escalation tree, plus an invoking command exempted by `allow CL601` with a reason | `commands/adr.md`, `commands/explore.md`, `commands/review.md` |
 | `fp-cl605-alias-list` | an alias list, and "escalate" used about a tool allowlist | `commands/port.md`, `commands/explore.md` |
 

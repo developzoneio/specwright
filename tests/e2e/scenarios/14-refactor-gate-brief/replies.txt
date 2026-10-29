@@ -1,0 +1,12 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# Coverage is already above the bar, so Gate 3 (post-test coverage check) is not reached.
+# Gate 1 - spec approval
+yes
+# Gate 2 - coverage threshold met (HARD)
+yes
+# Gate 4 - plan approval (one batch)
+yes
+# Gate 5 - tests green, batch 1 of 1 (HARD)
+yes
+# Gate 6 - holistic review
+yes
