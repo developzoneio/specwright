@@ -247,7 +247,8 @@ Nothing else stopped a later edit from dropping either one. SW-96 wired `/sd:bug
 all six of its gates, `3a` included, carry a brief and offer `details`
 ([ADR 0024](adr/0024-gate-brief-bug.md)), and then `/sd:refactor`: Gates 1-6 and Gate Re-plan
 ([ADR 0025](adr/0025-gate-brief-refactor-replan-details.md)), and `/sd:rca`: Gates 1-3
-([ADR 0026](adr/0026-gate-brief-rca.md)).
+([ADR 0026](adr/0026-gate-brief-rca.md)), and `/sd:perf`: Gates 1-8
+([ADR 0027](adr/0027-gate-brief-perf.md)).
 
 - **Declared, not inferred.** `contractLint.gateBriefs.<file>` lists the gate labels that carry a
   brief (`briefs`) and the subset that offers `details` (`details`). Labels are the gate index's

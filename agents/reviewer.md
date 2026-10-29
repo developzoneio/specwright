@@ -131,6 +131,10 @@ Checklist:
 - [ ] No new behavior change beyond what spec's "Trade-offs accepted" allows.
 - [ ] Constitution compliant.
 
+End a `perf-final` report with the same `gate: review` `GATE_BRIEF` block as `holistic`, worded the
+same way: `/sd:perf` Gate 8 is presented from it. A kept change that is within noise and has no
+logged constitution exception is a `block:` line.
+
 ## Task type: `port-parity`
 
 Inputs (required): SPEC_REF, DIFF_REF, CHANGED_FILES

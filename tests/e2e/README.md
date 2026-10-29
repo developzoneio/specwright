@@ -42,7 +42,7 @@ internal IDs (`ESC-*`, lint and verify codes, `path:line`) in every line the use
 in the brief file, and no file holds the narration. The assertion fails when a regex matches any
 main-thread assistant text block of any turn. It stays inside the rule because:
 
-- **It is negative and names an ID class, not a phrasing.** Scenarios 02, 13, 14 and 15 reuse the
+- **It is negative and names an ID class, not a phrasing.** Scenarios 02, 13, 14, 15 and 16 reuse the
   patterns their `file-not-matches` on `gate-briefs.md` already use. A different wording in the
   next run cannot trip it; only a rule ID or a `path:line` in the reply can.
 - **It shares one extraction with `transcript-contains-section`.** Main-thread text blocks only:
@@ -84,7 +84,7 @@ dependency; it never shows up as a failed scenario assertion.
   `ANTHROPIC_API_KEY`. **No API key is needed**: a Claude subscription works. See [Auth](#auth)
   below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
-  `02-feature-happy`, `06`-`10`, `12`-`14`).
+  `02-feature-happy`, `06`-`10`, `12`-`14`, `16`).
 - Nothing extra for hooks on Linux or macOS. The fixture's committed `settings.json` calls
   `powershell`, which those systems lack, so the runner rewrites each workspace copy's hook
   commands to `pwsh` when not on Windows (SW-81). Without that, every hook exits 127, which Claude
@@ -609,6 +609,7 @@ and exits 1.
 | 13 | `13-bug-gate-brief` | `/sd:bug` on a seeded off-by-one (`validateTitle` rejects a 200-character title) runs Gates 1 to 5 with a `yes` each, sent as turns from `replies.txt`. `gate-briefs.md` has a section for each gate, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn (SW-113). The failing-test output is saved under `04-artifacts/repro/`, the fix lands and the index row reaches `done` (SW-96). |
 | 14 | `14-refactor-gate-brief` | `/sd:refactor` extracts the lookup-or-throw step of `TodoService.completeTodo` into a private method, one task in one batch with coverage already above the bar, so Gate 3 is not reached. Gates 1, 2, 4, 5 and 6 each get a `yes` from `replies.txt`. `gate-briefs.md` has a section for each of them, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn (SW-113). The batch test output and the after-refactor coverage are saved under `04-artifacts/`, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-109). |
 | 15 | `15-rca-gate-brief` | `/sd:rca` from the raw evidence in the prompt and a seeded incident log (`InMemoryStore.save` leaves `#nextId` at 1 after a snapshot restore), run fresh under `models.escalation.ceiling: "sonnet"` so the `severity: P0` rule fires but is capped. Gates 1, 2 and 3 each get a `yes` from `replies.txt`. `gate-briefs.md` has a section for each of them, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn. The spec has no unfilled tree or root cause field, the index row reaches `done`, and `store.js` is unchanged. The spec ID carries the run's date, so its paths use a wildcard (SW-111). The capped retro line stays with `11`. |
+| 16 | `16-perf-gate-brief` | `/sd:perf` on a seeded quadratic de-duplication in `InMemoryStore.list` (`bench/list-bench.js` measures `listTodos` over 3000 todos, about 15 ms at p95 against a goal of 2 ms), one hotspot and one hypothesis. Gates 1 to 8 each get a reply from `replies.txt` (`yes`, `yes`, `choose H1`, `choose H1a`, `yes`, `keep`, `yes`, `yes`). `gate-briefs.md` has a section for each of them, a `Reply:` for each kind, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn. The baseline, attempt and final measurements and the attempt and final test output are saved under `04-artifacts/`, the Results log has a `kept` row, `store.js` lost the de-duplication, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-110). Not reached by this run, and covered by the contract lint only: Gate 2 with the baseline already at the goal, the red face of Gate 5, Gate 6 within noise, the `Already reverted` line of Gate 4, a second hotspot, and the narration of the two model escalation rules. |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the

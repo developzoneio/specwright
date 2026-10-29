@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gate brief for `/sd:perf` (SW-110, SW-96 part 3 of 5)** - every `/sd:perf` gate (1-8, all
+  HARD) writes a brief to `.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it verbatim and
+  offers `details <target>`. Gate count unchanged, HARD gates list no override and the `CL305` allow
+  comment is untouched (ADR 0027).
+  - **Single source:** `sd-gate-brief` "Per-workflow parts" gains a `/sd:perf` part. It reuses the
+    spec-approval, review and two-face shapes by reference; new lines exist only for baseline
+    against target, the hotspot list and keep-or-revert per hypothesis with its measured delta.
+    `commands/perf.md` reads the skill in Phase 0 and names it at each gate.
+  - **Measured numbers come from the saved file:** a brief reads its figures from the artifact
+    under `04-artifacts/`, with unit and run count, and `details measurement` / `details output`
+    print those files verbatim. New saves: `attempt-<N>-tests.txt`, `final-<ts>.json`,
+    `final-tests.txt`; baseline and attempt files now hold each run's figures.
+  - **Sources:** `sd-spec-architect` (Gate 1) and `sd-reviewer` (Gate 8, `perf-final` now returns
+    `gate: review` as `bug-fix-final` does) return blocks; the main thread composes Gates 2 to 7.
+    Hypotheses are numbered `H<n>a`, `H<n>b` per hotspot. Gate 5 is two-faced; on a red attempt
+    the revert still happens first and the gate then waits for `continue`.
+  - **Lint:** `contractLint.gateBriefs` declares `commands/perf.md` (labels `1` to `8`). No new
+    fixture. e2e scenario `16-perf-gate-brief` reaches all 8 gates on the happy path.
 - **Gate brief for `/sd:rca` (SW-111, SW-96 part 4 of 5)** - every `/sd:rca` gate (1, 2, 3, all
   HARD) writes a brief to `.specs/RCA-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it verbatim and
   offers `details <target>`. Gate count unchanged, no code change in the workflow (ADR 0026).

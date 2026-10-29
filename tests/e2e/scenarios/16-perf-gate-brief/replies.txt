@@ -1,0 +1,18 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# One hotspot, one hypothesis, and the goal is met after the first kept attempt, so the loop runs once.
+# Gate 1 - target defined
+yes
+# Gate 2 - baseline measured (HARD), the baseline is below the goal
+yes
+# Gate 3 - hotspot identified
+choose H1
+# Gate 4 - select hypothesis
+choose H1a
+# Gate 5 - correctness verified, all green
+yes
+# Gate 6 - keep or revert, the gain is far above noise
+keep
+# Gate 7 - regression pass
+yes
+# Gate 8 - final review pass
+yes

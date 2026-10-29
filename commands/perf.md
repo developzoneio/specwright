@@ -47,7 +47,12 @@ Drives an optimization from a measured baseline to a measured improvement, with 
    applied at Phase 4a step 4; this file names only rule IDs and trigger inputs. If that file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
-4. Detect state. Print resume plan.
+4. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
+   (`gate-briefs.md`), what each gate shows (its `/sd:perf` part), the `details` option and the
+   wording of every user-facing line; this file names only the gates it applies to. If that file
+   is unreadable, STOP: "specwright install incomplete - gate brief skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+5. Detect state. Print resume plan.
 
 ---
 
@@ -63,11 +68,15 @@ Drives an optimization from a measured baseline to a measured improvement, with 
 
 ### ⛔ Gate 1 - Target defined
 
-STOP. Display Target + Methodology. Ask:
+STOP. The main thread writes the Gate 1 brief to
+`.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the architect's `GATE_BRIEF` block and the Target and
+Measurement methodology sections, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Target and methodology approved? Note: nothing is optimized until baseline is measured. (yes / refine / abort)
+> Target and methodology approved? Note: nothing is optimized until baseline is measured. (yes / refine / details <target> / abort)
 
 - `yes` -> status=`approved`, append to index, proceed.
+- `refine` -> loop with architect. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -75,6 +84,7 @@ STOP. Display Target + Methodology. Ask:
 
 1. Set up the measurement per "Measurement methodology" (tool, test script, warm-up, duration, reps, DB state, cache state).
 2. Run the measurement. Save raw output to `.specs/PERF-<slug>-<YYYYMMDD>/04-artifacts/baseline-<YYYYMMDD-HHmm>.json` (or .txt for human-readable summary).
+   The file holds each run's figures as well as the summary, so the gate can state the spread.
 3. Fill `00-spec.md` Target "Current observed" with measured numbers (p50, p95, p99, req/s, CPU, memory).
 4. Add **row 0** to the Results log:
 
@@ -84,18 +94,23 @@ STOP. Display Target + Methodology. Ask:
 
 ### ⛔ Gate 2 - Baseline measured (HARD)
 
-STOP. Two cases:
+STOP. The main thread writes the Gate 2 brief to
+`.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the baseline file and Results log row 0, per
+**sd-gate-brief**, then shows it verbatim. The brief takes one of two faces, one per case.
 
 **Case A: baseline already meets SLA goal.**
 <!-- contract-lint: allow CL305 - Case A is the already-at-goal branch; 'proceed anyway' there buys a logged constitution exception, not a way past the baseline requirement, which stays unconditional -->
-> Baseline p95=<X> already meets SLA goal p95<<goal>. No optimization needed. Close PERF-<slug> as 'done' with no changes? (yes / proceed anyway / abort)
+> Baseline p95=<X> already meets SLA goal p95<<goal>. No optimization needed. Close PERF-<slug> as 'done' with no changes? (yes / proceed anyway / details <target> / abort)
 - `yes` -> set status=`in-progress` (no hotspot work occurs, but the state machine has no
   approved -> done shortcut), then jump to Phase 6 close-out with summary "no work needed".
 <!-- contract-lint: allow CL305 - same exception as the option line above; the bullet only explains what selecting it costs -->
 - `proceed anyway` -> requires explicit constitution exception ("optimizing past SLA"). Log to retro.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 **Case B: baseline below SLA goal.**
-> Baseline p95=<X>, goal p95<<goal>. Proceed to hotspot analysis? (yes / refine methodology / abort)
+> Baseline p95=<X>, goal p95<<goal>. Proceed to hotspot analysis? (yes / refine methodology / details <target> / abort)
+
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 This gate is HARD - the workflow CANNOT enter Phase 3 without a checked-in baseline artifact and a filled Results log row 0.
 
@@ -113,12 +128,15 @@ This gate is HARD - the workflow CANNOT enter Phase 3 without a checked-in basel
 
 ### ⛔ Gate 3 - Hotspot identified
 
-STOP. Display hotspot ranking. Ask:
+STOP. The main thread writes the Gate 3 brief to
+`.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the hotspot ranking it appended to `03-decisions.md`, per
+**sd-gate-brief**, then shows it verbatim. Ask:
 
-> Select hotspot to attack first: <H1>, <H2>, ... (choose / refine / abort)
+> Select hotspot to attack first: <H1>, <H2>, ... (choose / refine / details <target> / abort)
 
 - `choose <H#>` -> proceed with that hotspot.
-- `refine` -> loop with debugger for more data.
+- `refine` -> loop with debugger for more data. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -139,7 +157,8 @@ For each selected hotspot, repeat this entire loop. Multiple hotspots = multiple
    - Expected impact (e.g. "p95 -200ms based on current 350ms in this function").
    - Implementation cost (S / M / L).
    - Risk profile (correctness risk, scope of change, reversibility).
-3. Main thread appends the returned hypotheses to `03-decisions.md` (debugger has no write tool).
+3. Main thread appends the returned hypotheses to `03-decisions.md` (debugger has no write tool),
+   numbering them `H<n>a`, `H<n>b`, ... for hotspot `H<n>`, in the order the debugger listed them.
 4. **Model escalation check, before every return to Gate 4.** Each "loop back to Gate 4" below
    passes through this step first. Apply rule `ESC-PERF-04` of **sd-model-escalation** (read in
    Phase 0). Trigger input: the Results-log rows with decision `reverted` whose hypothesis belongs
@@ -148,14 +167,20 @@ For each selected hotspot, repeat this entire loop. Multiple hotspots = multiple
 
 ### ⛔ Gate 4 - Select hypothesis
 
-STOP. Display hypotheses. Ask:
+STOP. The main thread writes the Gate 4 brief to
+`.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the hypotheses it appended to `03-decisions.md` and
+the hotspot's `reverted` Results-log rows, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Select hypothesis to apply: <H#a>, <H#b>, ... (choose / abort hotspot / abort workflow)
+> Select hypothesis to apply: <H#a>, <H#b>, ... (choose / abort hotspot / details <target> / abort workflow)
 
 - `choose` -> proceed to 4b.
 - `abort hotspot` -> mark hotspot as deferred, return to Phase 3 with remaining hotspots.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ### 4b. Apply
+
+The attempt number `N` is the next Results-log row number. Every attempt has a row, reverted
+ones included.
 
 1. **Model escalation check, then the implementer.** Apply rule `ESC-PERF-04b` of
    **sd-model-escalation** (read in Phase 0). Trigger input: the `Reversibility` value in the
@@ -170,19 +195,31 @@ STOP. Display hypotheses. Ask:
 
 ### 4c. Correctness tests
 
-1. Run the full test suite via `commands.test`.
+1. Run the full test suite via `commands.test`. Save its output with the Write tool to
+   `.specs/PERF-<slug>-<YYYYMMDD>/04-artifacts/attempt-<N>-tests.txt`, so the gate can print it verbatim.
 
 ### ⛔ Gate 5 - Correctness verified
 
-STOP. Display test results.
+STOP. The main thread writes the Gate 5 brief to
+`.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the saved test output, per **sd-gate-brief**, then
+shows it verbatim. The brief takes one of two faces.
 
-- All green -> proceed to 4d.
-- Any red -> REVERT immediately. Log failed attempt to Results log with `reverted` decision. Loop back to Gate 4 (via 4a step 4) to select a different hypothesis.
+**Face A - all green.** Ask:
+
+> Attempt <N> passes all tests for PERF-<slug>. Re-measure? (yes / details <target> / abort)
+
+**Face B - any red.** REVERT immediately, before the brief is written. Log failed attempt to Results log with `reverted` decision. Ask:
+
+> Attempt <N> broke tests and was reverted for PERF-<slug>. (continue / details <target> / abort)
+
+- `yes` (Face A) -> proceed to 4d.
+- `continue` (Face B) -> loop back to Gate 4 (via 4a step 4) to select a different hypothesis.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ### 4d. Re-measure
 
 1. Re-run the baseline measurement under IDENTICAL conditions to Phase 2.
-2. Save artifact to `04-artifacts/attempt-<N>-<YYYYMMDD-HHmm>.json`.
+2. Save artifact to `04-artifacts/attempt-<N>-<YYYYMMDD-HHmm>.json`, with each run's figures as well as the summary.
 3. Add row to Results log:
 
 ```
@@ -191,7 +228,9 @@ STOP. Display test results.
 
 ### ⛔ Gate 6 - Keep or revert decision
 
-STOP. Compare new measurement to previous best in Results log. Display:
+STOP. Compare new measurement to previous best in Results log. The main thread writes the Gate 6
+brief to `.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the attempt's measurement file and
+the Results log, per **sd-gate-brief**, then shows it verbatim. The brief states:
 - Previous p95 -> new p95 (delta).
 - Whether the improvement exceeds measurement noise (rule of thumb: must be > 5% AND >= absolute noise
   floor of the methodology).
@@ -200,7 +239,7 @@ Branch on the noise check - the gate offers different choices depending on wheth
 
 **Case A - improvement is measurable** (> 5% AND >= noise floor). Ask:
 
-> Keep change or revert? (keep / revert)
+> Keep change or revert? (keep / revert / details <target>)
 
 - `keep` -> update row decision to `kept`. Commit. Loop back to Gate 4 with the next hypothesis OR finalize this hotspot if SLA now met.
 - `revert` -> update row decision to `reverted`. Revert the code. Loop back to Gate 4 (via 4a step 4).
@@ -209,13 +248,17 @@ Branch on the noise check - the gate offers different choices depending on wheth
 either the improvement is real and measurable, or it does not exist. Default to revert. Ask:
 
 > Within measurement noise - no real improvement. Default: revert.
-> To keep anyway, state a constitution-exception reason; it will be logged. (revert / keep-with-reason)
+> To keep anyway, state a constitution-exception reason; it will be logged. (revert / keep-with-reason / details <target>)
 
 - `revert` (default) -> update row decision to `reverted`. Revert the code. Loop back to Gate 4 (via 4a step 4).
 - `keep-with-reason` -> allowed ONLY with an explicit written reason. Update the row decision to
   `kept (exception)` with that reason, and log a constitution exception to `05-retro.md`
   (`Constitution exception: kept within-noise change at <hotspot>. Reason: <reason>.`). Commit, then
   loop back to Gate 4. With no reason supplied, this option is refused and the change is reverted.
+
+In both cases:
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- A `details` reply never decides the gate, and a re-presented gate (a new attempt) is a new brief section.
 
 Continue the loop until:
 - SLA goal is met (jump to Phase 5), OR
@@ -227,18 +270,23 @@ Continue the loop until:
 ## Phase 5 - Regression check
 
 1. Run the full test suite via `commands.test` (one more time, as the final pre-close gate).
-2. Run lint via `commands.lint`.
-3. Re-run baseline measurement one final time to confirm the kept improvements are stable.
+2. Run lint via `commands.lint`. Save the test and lint output with the Write tool to
+   `.specs/PERF-<slug>-<YYYYMMDD>/04-artifacts/final-tests.txt`, so the gate can print it verbatim.
+3. Re-run baseline measurement one final time to confirm the kept improvements are stable. Save it
+   to `04-artifacts/final-<YYYYMMDD-HHmm>.json`, with each run's figures as well as the summary.
 4. Add a final row to Results log labeled "final".
 
 ### ⛔ Gate 7 - Regression pass
 
-STOP. Display final test results + final measurement. Ask:
+STOP. The main thread writes the Gate 7 brief to
+`.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the saved test and lint output, the final
+measurement file and the Results log, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> All clean and stable for final review? (yes / investigate / abort)
+> All clean and stable for final review? (yes / investigate / details <target> / abort)
 
 - `yes` -> proceed.
-- `investigate` -> drop back to debugger if a regression appeared.
+- `investigate` -> drop back to debugger if a regression appeared. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -253,12 +301,15 @@ STOP. Display final test results + final measurement. Ask:
 
 ### ⛔ Gate 8 - Final review pass
 
-STOP. Display reviewer verdict. Ask:
+STOP. Log the reviewer's suggestions to `05-retro.md`. The main thread then writes the Gate 8 brief
+to `.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` from the reviewer's `GATE_BRIEF` block and the
+final Results-log row, per **sd-gate-brief**, and shows it verbatim. Ask:
 
-> PERF-<slug> close-out? (yes / address findings / abort)
+> PERF-<slug> close-out? (yes / address findings / details <target> / abort)
 
 - `yes` -> proceed to close-out.
-- Any 🔴 BLOCK -> loop to implementer or revert.
+- Any 🔴 BLOCK -> loop to implementer or revert. The next pass is a new brief section.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ### Close-out
 
@@ -279,7 +330,7 @@ STOP. Display reviewer verdict. Ask:
    ID to `.specs/index.md`; an index row exists only once the real spec directory does (see
    `/sd:spec`, "Index <-> folder symmetry").
 4. Set status=`done`. Update index.
-5. Print 5-line summary: target, baseline, final, kept attempts, deferred hotspots.
+5. Print 5-line summary, worded per **sd-gate-brief**: target, baseline, final, kept attempts, deferred hotspots.
 
 ---
 
@@ -294,7 +345,12 @@ STOP. Display reviewer verdict. Ask:
 - Reverted attempts are LOGGED, not deleted. They are knowledge.
 - **Model escalation follows `sd-model-escalation` only.** Rule `ESC-PERF-04` is applied at Phase 4a
   step 4, and `ESC-PERF-04b` at Phase 4b step 1; the ladder, precedence, `models.escalation` config
-  and the `05-retro.md` line format live in the skill and are not restated here.
+  and the `05-retro.md` line format live in the skill and are not restated here. Narrating a fired
+  rule to the user follows **sd-gate-brief**.
+- **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above writes its
+  brief to `.specs/PERF-<slug>-<YYYYMMDD>/gate-briefs.md` before showing it. The brief shape and
+  language, the `details` targets and the rule for every line the user reads live in the skill and
+  are not restated here.
 - Correctness tests must remain unchanged. If the optimization requires changing a test, it changes behavior - that needs a FEAT-* or BUG-* spec, not PERF-*.
 - Database access (via the project's MCP tool or CLI) for hotspot analysis is read-only: SELECT / EXPLAIN only.
 - If SLA cannot be met after exhausting hypotheses, close the PERF spec with the documented gap and lessons. Do not "ship anyway".
