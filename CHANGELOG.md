@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **stop-gate rules for `/sd:bug`, `/sd:refactor` and Gate Re-plan (SW-108)** - with
+  `hooks.stopGate.enabled`, a bug or refactor spec past a gate whose `gate-briefs.md` section has
+  no approving `Reply:` now blocks the stop, the way feature gates do (ADR 0029, extends ADR 0016
+  and ADR 0021). No `gate-briefs.md`, or a gate before the brief's first section, never blocks.
+  - **Bug Gates 1, 2, 3a, 3, 4, 5.** Each gate's evidence is the first artifact written after it:
+    the failing-test output is evidence past Gate 3 (it is saved before Gate 4's brief), status
+    `in-progress` past Gate 4. BUG-G2 keeps its `## Reproduction` check and adds the reply; the
+    logged constitution exception excuses both. Gate 3a is checked only when presented, and
+    `re-enumerate` / `observe` answer it. `3` and `3a` are separate labels.
+  - **Refactor Gates 1-6.** Gates 2 and 3 are one coverage decision: an approving reply in either
+    (`yes` or `exception <reason>`) passes, `add tests` does not.
+  - **Gate Re-plan (feature and refactor).** Every `R<n>` under `01-plan.md` `## Revisions` needs
+    an approving reply in some `## Gate Re-plan - R<n>` section; `revise` and `details` do not
+    approve. A revision older than the first Re-plan section, or a brief with none, is not checked.
+  - **Close-out marker.** Phase 7 of `/sd:bug` and `/sd:refactor` opens its `05-retro.md` entry
+    with `## Close-out`, the evidence past bug Gate 5 and refactor Gate 6. At bug Gate 2, the
+    answer that follows `partial` is recorded as one more `Reply:` line in the same section.
+  - **One reader.** `read_brief` / `Get-BriefState` take the workflow's gate labels as data; adding
+    a workflow (SW-114) is a table entry plus its rules. Feature output is byte-identical.
+  - **Tests.** 38 new conformance fixtures (both twins, identical decisions; no existing fixture
+    changed) and 12 `smoke-hooks` cases plus a re-fire. Latency (30 iterations, one Windows
+    workstation): stop-gate p95 623 ms under pwsh and 493 ms under PowerShell 5.1, against
+    budgets of 1300 and 1000 ms. The bash twin is unchanged within noise.
 - **Gate brief for `/sd:port` (SW-112, SW-96 part 5 of 5)** - every `/sd:port` gate (1-6; Gates
   1, 2, 3 and 6 HARD) writes a brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md`, prints it
   verbatim and offers `details <target>`. Gate count unchanged, HARD gates list no override

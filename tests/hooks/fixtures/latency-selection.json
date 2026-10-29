@@ -28,7 +28,9 @@
     "silent-default-off",
     "block-bug-repro-skipped",
     "block-port-multiple-gates",
-    "block-feat-g3-no-reply"
+    "block-feat-g3-no-reply",
+    "block-bug-g3-dig-only",
+    "block-ref-replan-revise-details"
   ],
   "handoff-integrity": [
     "silent-default-off",

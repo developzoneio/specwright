@@ -316,7 +316,8 @@ verbatim. Ask:
 
 ## Phase 7 - Close-out
 
-1. Append to `05-retro.md`:
+1. Append to `05-retro.md`, under a `## Close-out` heading (stop-gate reads it as evidence that
+   Gate 6 was passed):
    - Tasks completed (count + IDs).
    - Coverage before / after.
    - Invariants verified (table).

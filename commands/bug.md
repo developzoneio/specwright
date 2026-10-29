@@ -105,7 +105,9 @@ STOP. This gate is HARD - no overrides. The main thread writes the Gate 2 brief 
 > Is reproduction confirmed? (yes - I can trigger it / partial - intermittent / no - cannot reproduce / details <target>)
 
 - `yes` -> status=`approved`, proceed.
-- `partial` -> ask user if they accept investigating with partial repro, from logs and traces only. Log the decision and risks to retro.
+- `partial` -> ask user if they accept investigating with partial repro, from logs and traces only.
+  Record their answer as one more `Reply:` line in the same Gate 2 section, per **sd-gate-brief**.
+  Log the decision and risks to retro.
 - `no` -> **REFUSE to proceed**. Tell the user: investigation without reproduction risks fixing the wrong thing. Options: gather more telemetry, add observability, or close as "cannot reproduce".
 - `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
@@ -262,7 +264,8 @@ it verbatim. Ask:
 
 ## Phase 7 - Close-out
 
-1. Append to `05-retro.md`:
+1. Append to `05-retro.md`, under a `## Close-out` heading (stop-gate reads it as evidence that
+   Gate 5 was passed):
    - Root cause one-liner.
    - Lessons learned (focus on prevention).
    - Rejected hypotheses (knowledge preservation).

@@ -369,6 +369,87 @@ run_hook "$repo_root/hooks/bash/stop-gate.sh" "${fpayload/\"stop_hook_active\":f
 assert_exit0 "stop-gate feature re-fire" "$CODE"
 assert_empty "stop-gate feature re-fire" "$STDOUT"
 
+# ---- stop-gate: /sd:bug, /sd:refactor and Gate Re-plan (SW-108) ------------
+
+bg="$fixture/stop-gate-brief-ws"
+mkdir -p "$bg/.claude"
+printf '%s\n' '{"spec":{"dir":".specs"},"hooks":{"stopGate":{"enabled":true}}}' > "$bg/.claude/project-config.json"
+bpayload="$(printf '{"session_id":"smoke-stop-brief","cwd":"%s","transcript_path":"%s/transcript.jsonl","stop_hook_active":false}' "$bg" "$bg")"
+
+# brief_state <type> <status> <files> <briefs>
+# <files> is a space-separated subset of: decisions failing closeout plan
+# plan-r1 tasks-done. <briefs> is '-' for no gate-briefs.md, else gate=reply
+# pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
+brief_state() {
+    local id g lab f
+    [[ "$1" == "bug" ]] && id="BUG-SMOKE-3" || id="REF-SMOKE-4"
+    rm -rf "$bg/.specs"
+    bd="$bg/.specs/$id"
+    mkdir -p "$bd"
+    printf '{"type":"user","message":{"content":"continue %s"}}\n' "$id" > "$bg/transcript.jsonl"
+    printf -- '---\nid: %s\ntype: %s\nstatus: %s\n---\n' "$id" "$1" "$2" > "$bd/00-spec.md"
+    for f in $3; do
+        case "$f" in
+            decisions) printf '# Decisions\n' > "$bd/03-decisions.md" ;;
+            failing) mkdir -p "$bd/04-artifacts/repro"; printf 'FAIL\n' > "$bd/04-artifacts/repro/failing-test-output.txt" ;;
+            closeout) printf '# Retro\n\n## Close-out\n' > "$bd/05-retro.md" ;;
+            plan) printf '# Plan\n' > "$bd/01-plan.md" ;;
+            plan-r1) printf '# Plan\n\n## Revisions\n\n### R1 - 2026-10-29T10:00:00Z\n' > "$bd/01-plan.md" ;;
+            tasks-done) printf -- '### T01 - Extract\n\n- **Status**: done\n' > "$bd/02-tasks.md" ;;
+        esac
+    done
+    [[ "$4" == "-" ]] && return 0
+    printf '# Gate briefs - %s\n' "$id" > "$bd/gate-briefs.md"
+    for g in $4; do
+        lab="${g%%=*}"
+        [[ "$lab" == R* ]] && lab="Re-plan - $lab"
+        printf '\n## Gate %s - smoke (pass 1)\n\nProceed? (yes / abort)\n' "$lab" >> "$bd/gate-briefs.md"
+        [[ -n "${g#*=}" ]] && printf '\nReply: %s\n' "${g#*=}" >> "$bd/gate-briefs.md"
+    done
+    return 0
+}
+
+# brief_case <label> <'silent' | substring of the block reason> <brief_state args...>
+brief_case() {
+    local label="$1" expect="$2"
+    shift 2
+    brief_state "$@"
+    section "stop-gate (bash): $label"
+    run_hook "$repo_root/hooks/bash/stop-gate.sh" "$bpayload"
+    assert_exit0 "stop-gate $label" "$CODE"
+    if [[ "$expect" == "silent" ]]; then
+        assert_empty "stop-gate $label" "$STDOUT"
+    else
+        assert_contains "stop-gate $label" "$STDOUT" '"decision":"block"'
+        assert_contains "stop-gate $label" "$STDOUT" "$expect"
+    fi
+}
+
+brief_case "bug Gate 1 passed without a reply - blocks" "Gate 1 (Symptom captured)" bug approved "decisions" "1="
+brief_case "bug Gate 2 partial only - blocks" "(last reply: partial)" bug approved "decisions" "1=yes 2=partial"
+brief_case "bug Gate 3a reply does not answer Gate 3 - blocks" "Gate 3 (Root cause confirmed)" \
+    bug approved "decisions failing" "1=yes 2=yes 3a=re-enumerate 3="
+brief_case "bug at Gate 4 - silent" silent bug approved "decisions failing" "1=yes 2=yes 3=yes 4="
+brief_case "bug past Gate 4, no brief - silent" silent bug in-progress "decisions failing" "-"
+brief_case "bug Gate 5 closed out without a reply - blocks" "Gate 5 (Regression and review)" \
+    bug in-progress "decisions failing closeout" "1=yes 2=yes 3=yes 4=yes 5="
+brief_case "refactor Gate 2 add tests only - blocks" "Gate 2 (Coverage threshold met)" \
+    refactor approved "decisions plan" "1=yes 2=add"
+brief_case "refactor Gate 2 add, Gate 3 yes - silent" silent refactor approved "decisions plan" "1=yes 2=add 3=yes"
+brief_case "refactor Gate 5 passed without a reply - blocks" "Gate 5 (Tests green per batch)" \
+    refactor in-progress "decisions plan tasks-done" "1=yes 2=yes 4=yes 5="
+brief_case "refactor Re-plan revise only - blocks" "Gate Re-plan R1" \
+    refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes R1=revise"
+brief_case "refactor Re-plan approved - silent" silent refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes R1=approve"
+brief_case "refactor revision with no Re-plan section - silent" silent \
+    refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes"
+
+section "stop-gate (bash): bug/refactor re-fire with stop_hook_active - silent"
+brief_state refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes R1=revise"
+run_hook "$repo_root/hooks/bash/stop-gate.sh" "${bpayload/\"stop_hook_active\":false/\"stop_hook_active\":true}"
+assert_exit0 "stop-gate brief re-fire" "$CODE"
+assert_empty "stop-gate brief re-fire" "$STDOUT"
+
 # The shipped example: FEAT-todo-priority is done and has no gate-briefs.md.
 # Its project enables stop-gate, so the nightly e2e runs these rules there.
 section "stop-gate (bash): examples/fixture-project FEAT-todo-priority - silent, unchanged"
