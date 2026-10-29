@@ -56,7 +56,12 @@ frontmatter first and is never resumed from its task markers.
    applied at Phase 4 step 0; this file names only rule IDs and trigger inputs. If that file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
-5. Detect state. Print resume plan.
+5. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
+   (`gate-briefs.md`), what each gate shows (its `/sd:refactor` part), the `details` option and the
+   wording of every line the user reads, phase narration included. If that file is unreadable,
+   STOP: "specwright install incomplete - gate brief skill not found under `~/.claude/skills/sd/`.
+   Re-run the installer."
+6. Detect state. Print resume plan.
 
 ---
 
@@ -72,12 +77,16 @@ frontmatter first and is never resumed from its task markers.
 
 ### ⛔ Gate 1 - Spec approval
 
-STOP. Display spec summary, especially Invariants and Out-of-scope. Ask:
+STOP. The main thread writes the Gate 1 brief to `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md`
+from the architect's `GATE_BRIEF` block and the invariants in `00-spec.md`, per
+**sd-gate-brief**, then shows it verbatim. Ask:
 
-> Approve refactor spec REF-<slug>? (yes / refine / abort)
+> Approve refactor spec REF-<slug>? (yes / refine <feedback> / details <target> / abort)
 
 - `yes` -> status=`approved`, append to index, proceed.
 - `refine <feedback>` -> loop with architect.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- `abort` -> status=`archived`, exit.
 
 ---
 
@@ -108,27 +117,53 @@ No gate here - read-only.
 
 ### ⛔ Gate 2 - Coverage threshold met
 
-STOP. Compare measured vs threshold.
+STOP. This gate is HARD. Compare measured vs threshold, then the main thread writes the Gate 2
+brief to `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md` from the measurement Phase 3 wrote to
+`00-spec.md`, per **sd-gate-brief**, and shows it verbatim. The brief takes one of two faces.
 
-- **If measured >= threshold** -> proceed to Phase 4.
-- **If measured < threshold** -> REFUSE. Display:
-  > Coverage on affected files is <measured>%, below threshold <threshold>%. Refactor is blocked.
-  > Options: (1) add characterization tests now (recommended), (2) lower threshold for this spec with explicit constitution exception, (3) abort.
+**Face A - measured >= threshold.** Ask:
 
-If user picks (1), enter the characterization sub-loop:
+> Coverage meets the bar for REF-<slug>. Continue to planning? (yes / details <target> / abort)
+
+**Face B - measured < threshold.** Refactor is blocked. Ask:
+
+> Coverage on affected files is <measured>%, below the <threshold>% bar. (add tests / exception <reason> / details <target> / abort)
+
+- `yes` (Face A) -> proceed to Phase 4.
+- `add tests` (Face B, recommended) -> enter the characterization sub-loop below.
+- `exception <reason>` (Face B) -> lower the threshold for this spec as an explicit constitution
+  exception: document the reduction and the reason in `05-retro.md`, log it as a constitution
+  exception, then proceed to Phase 4.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- `abort` -> status=`archived`, exit.
+
+Characterization sub-loop:
 1. Identify uncovered branches via coverage report.
 2. Invoke `sd-implementer` with `TASK_DETAILS = <characterization test task for the uncovered area>`, `SPEC_REF = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`, `WORKFLOW_TYPE = refactor`, `INVARIANTS = <invariants list from spec>` per uncovered area.
 3. Each new test must FAIL FAST if current behavior changes - characterization tests pin the CURRENT behavior, correct or not.
-4. Re-measure coverage.
+4. Re-measure coverage and update "Test coverage prerequisite" in `00-spec.md`, then present
+   Gate 3.
 
 ### ⛔ Gate 3 - Post-test coverage check
 
-STOP. After characterization tests are added, re-run coverage.
+STOP. After characterization tests are added, re-run coverage. The main thread writes the Gate 3
+brief to `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md` from the new measurement and the tests the
+implementer added, per **sd-gate-brief**, and shows it verbatim. The brief takes one of two faces.
 
-- Coverage now >= threshold -> proceed.
-- Still below -> loop, or escalate to constitution exception with user approval.
+**Face A - coverage now >= threshold.** Ask:
 
-If user picks (2) explicit exception, document the threshold reduction in `05-retro.md` with reasoning. Log as a constitution exception.
+> Coverage now meets the bar for REF-<slug>. Continue to planning? (yes / details <target> / abort)
+
+**Face B - still below.** Ask:
+
+> Coverage on affected files is still <measured>%, below the <threshold>% bar. (add tests / exception <reason> / details <target> / abort)
+
+- `yes` (Face A) -> proceed to Phase 4.
+- `add tests` (Face B) -> loop through the characterization sub-loop, then this gate again.
+- `exception <reason>` (Face B) -> as at Gate 2: document it in `05-retro.md` with the reason, log
+  it as a constitution exception, proceed to Phase 4.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- `abort` -> status=`archived`, exit.
 
 ---
 
@@ -152,11 +187,18 @@ If user picks (2) explicit exception, document the threshold reduction in `05-re
 
 ### ⛔ Gate 4 - Plan approval
 
-STOP. Display batch groupings. Ask:
+STOP. The main thread writes the Gate 4 brief to `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md`
+from the architect's `GATE_BRIEF` block, with each task's batch from its `Parallel batch` field,
+per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Approve plan with <N> batches? (yes / refine / abort)
+> Approve plan with <N> batches? (yes / refine <feedback> / details <target> / abort)
 
 - `yes` -> status=`in-progress`, update index, proceed.
+- `refine <feedback>` -> invoke `sd-spec-architect` with `TASK = refine`,
+  `SPEC = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`, `FEEDBACK = <user feedback>`, then re-plan
+  through Phase 4.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- `abort` -> status=`archived`, exit.
 
 ---
 
@@ -178,15 +220,31 @@ For each batch (up to 3 tasks in parallel):
      - `WORKFLOW_TYPE = refactor`
      - `INVARIANTS = <invariants list from spec>`
    - Implementer's constraint set is tightest in refactor mode: NO new public API, NO new feature, ONLY restructure.
-3. **Post-batch**: run full test suite via `commands.test`.
+3. **Post-batch**: run full test suite via `commands.test`. Save its output with the Write tool to
+   `.specs/REF-<slug>-<YYYYMMDD>/04-artifacts/batches/batch-<b>-tests.txt`, `<b>` being the batch
+   number, so the gate can print it verbatim.
 
 ### ⛔ Gate 5 - Tests green per batch
 
-STOP after every batch. Display test results.
+STOP after every batch. This gate is HARD. The main thread writes the Gate 5 brief to
+`.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md` from the saved test output, per **sd-gate-brief**,
+then shows it verbatim. The brief takes one of two faces.
 
-- All green -> check off the batch's tasks in `02-tasks.md` (set each `Status` line to `done`, per
-  the "Check-off marker" section of the **sd-atomic-task-format** skill), proceed to next batch.
-- Any red -> REFUSE to proceed. Revert the batch or fix the regression. The point of batched-with-tests-between is to localize failures.
+**Face A - all green.** Ask:
+
+> Batch <b> of <B> is green for REF-<slug>. Continue? (yes / details <target> / abort)
+
+**Face B - any red.** Refuse to proceed. Ask:
+
+> Batch <b> of <B> broke tests for REF-<slug>. (revert / fix / details <target> / abort)
+
+- `yes` (Face A) -> check off the batch's tasks in `02-tasks.md` (set each `Status` line to `done`,
+  per the "Check-off marker" section of the **sd-atomic-task-format** skill), proceed to next batch.
+- `revert` (Face B) -> revert the batch's changes and re-run it.
+- `fix` (Face B) -> route the failure to the implementer, then run the post-batch suite and this
+  gate again. The point of batched-with-tests-between is to localize failures.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- `abort` -> status=`archived`, exit.
 
 ### Gate Re-plan (HARD) - adaptive re-plan on a plan-invalidating discovery
 
@@ -194,9 +252,12 @@ Reachable from Phase 5 (a batch reveals a task's premise is false or an invarian
 as planned) **and** Phase 6 (a holistic-review finding that the plan itself is wrong). Follow the
 **sd-replan-loop** skill - the same protocol `/sd:feature` uses, defined there once. In brief:
 
-1. STOP. Surface the trigger, the affected task IDs, and the proposed delta. Ask:
+1. STOP. The main thread writes the Re-plan brief (trigger, affected tasks, proposed delta) to
+   `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md` per **sd-gate-brief**, then shows it verbatim. Ask:
 
-   > Re-plan REF-<slug>? Discovery: <trigger>. Affects <task IDs>. (approve / revise <feedback> / abort task)
+   > Re-plan REF-<slug>? Discovery: <trigger>. Affects <task IDs>. (approve / revise <feedback> / details <target> / abort task)
+
+   `details <target>` prints what the target names per **sd-gate-brief**, then asks again.
 
 <!-- contract-lint: allow CL102 - scoped re-plan passes REPLAN_SCOPE/REVISION instead of SPEC/IMPACT, per the Scoped re-plan sub-path documented in agents/spec-architect.md -->
 2. `approve` -> invoke `sd-spec-architect` with `TASK = plan`, `MODE = refactor`,
@@ -215,6 +276,11 @@ Runs only while the spec is `in-progress`; never re-plans a `done` spec.
 
 After all batches complete:
 
+0. Run the full test suite via `commands.test`, lint via `commands.lint` and coverage via
+   `commands.coverage`, filtered to the same files as Phase 3. Save the coverage output with the
+   Write tool to `.specs/REF-<slug>-<YYYYMMDD>/04-artifacts/coverage/after-refactor.txt`. These
+   are the measured results Gate 6 shows next to the review; the reviewer compares nothing it did
+   not read.
 1. Invoke `sd-reviewer` with:
    - `TASK_TYPE = holistic`
    - `SPEC_REF = .specs/REF-<slug>-<YYYYMMDD>/00-spec.md`
@@ -225,15 +291,22 @@ After all batches complete:
    - No new constitution exceptions introduced.
    - No public API drift (unless spec stated otherwise).
    - No opportunistic feature additions.
-   - Test coverage did not decrease (run coverage again, compare to Phase 3 number).
+   - Test coverage did not decrease (step 0's measurement against the Phase 3 number).
+   It ends its report with a `GATE_BRIEF` block for Gate 6, one `invariant:` line per invariant.
 
 ### ⛔ Gate 6 - Holistic review pass
 
-STOP. Display reviewer verdict counts + invariant verification table. Ask:
+STOP. The main thread logs every 🟡 SUGGEST to `05-retro.md` without asking, then writes the
+Gate 6 brief to `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md` from the reviewer's `GATE_BRIEF`
+block plus the step 0 test, lint and coverage results, per **sd-gate-brief**, and shows it
+verbatim. Ask:
 
-> Refactor REF-<slug> ready for close-out? (yes / address findings / abort)
+> Refactor REF-<slug> ready for close-out? (yes / address findings / details <target> / abort)
 
-- `yes` -> proceed.
+- `yes` -> proceed; log each 🟠 WARN to `05-retro.md` as a follow-up.
+- `address findings` -> route the findings, WARN included, to the implementer, then Phase 6 again.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+- `abort` -> status=`archived`, exit.
 - Any 🔴 BLOCK that is a **code defect** -> loop to implementer with the finding.
 - Any 🔴 BLOCK that reveals the **plan itself was wrong** (e.g. a planned step cannot preserve an
   invariant) -> enter **Gate Re-plan** (Phase 5) with `Phase: review`, recording the wrong step as a
@@ -257,6 +330,7 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
    specs here, and do NOT add a reserved ID to `.specs/index.md`; an index row exists only once
    the real spec directory does (see `/sd:spec`, "Index <-> folder symmetry").
 3. Set status=`done`. Update index.
+4. Print a 5-line summary to the user, worded per **sd-gate-brief**.
 
 ---
 
@@ -272,7 +346,11 @@ STOP. Display reviewer verdict counts + invariant verification table. Ask:
 - **Model escalation follows `sd-model-escalation` only.** Rules `ESC-REF-02` and `ESC-REF-04` are
   applied at Phase 2 step 0 and Phase 4 step 0, and `ESC-REF-05` / `ESC-REF-05b` at Phase 5 step 2;
   the ladder, precedence, `models.escalation` config and the `05-retro.md` line format live in the
-  skill and are not restated here.
+  skill and are not restated here. Narrating a fired rule to the user follows **sd-gate-brief**.
+- **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above, Gate
+  Re-plan included, writes its brief to `.specs/REF-<slug>-<YYYYMMDD>/gate-briefs.md` before
+  showing it. The brief shape and language, the `details` targets and the rule for every line the
+  user reads live in the skill and are not restated here.
 - Max 3 parallel tasks per batch. More -> tests-between granularity is too coarse.
 - Each batch's tests must finish before the next batch starts. No "tests run in background while next batch starts".
 - **Gate Re-plan is a conditional gate, not a seventh always-on gate.** It fires only on a

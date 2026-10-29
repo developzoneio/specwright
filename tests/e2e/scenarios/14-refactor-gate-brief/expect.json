@@ -1,0 +1,20 @@
+[
+  { "type": "file-exists", "path": ".specs/REF-extract-todo-lookup-*/00-spec.md" },
+  { "type": "file-exists", "path": ".specs/REF-extract-todo-lookup-*/02-tasks.md" },
+  { "type": "file-exists", "path": ".specs/REF-extract-todo-lookup-*/04-artifacts/batches/batch-1-tests.txt" },
+  { "type": "file-exists", "path": ".specs/REF-extract-todo-lookup-*/04-artifacts/coverage/after-refactor.txt" },
+  { "type": "file-exists", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md" },
+  { "type": "file-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "(?m)^## Gate 1 - " },
+  { "type": "file-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
+  { "type": "file-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "(?m)^## Gate 4 - " },
+  { "type": "file-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "(?m)^## Gate 5 - " },
+  { "type": "file-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "(?m)^## Gate 6 - " },
+  { "type": "file-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "(?m)^Reply: yes\\b" },
+  { "type": "transcript-contains-section", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "section": "^## Gate " },
+  { "type": "file-not-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "file-not-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
+  { "type": "file-not-matches", "path": ".specs/REF-extract-todo-lookup-*/gate-briefs.md", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "file-matches", "path": "src/application/todo-service.js", "pattern": "#\\w+\\(id\\)" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "REF-extract-todo-lookup-\\d{8}\\s*\\|\\s*refactor\\s*\\|\\s*done" },
+  { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }
+]

@@ -9,6 +9,7 @@
 - Supersedes: none
 - Extended by: ADR 0019 (`details` targets, brief language, plan-face decisions; SW-102); ADR 0020
   (printed means reply text, closing summary, phase narration, e2e transcript assertion; SW-99)
+- Amended by: ADR 0025 (decision 5: Gate Re-plan now offers `details`; SW-109)
 
 ## Context
 

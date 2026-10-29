@@ -245,12 +245,14 @@ prose intent, not pure structure.
 `sd-gate-brief`, and Gates 1, 2 and 3 offer `details` ([ADR 0018](adr/0018-gate-brief-artifact.md)).
 Nothing else stopped a later edit from dropping either one. SW-96 wired `/sd:bug` the same way:
 all six of its gates, `3a` included, carry a brief and offer `details`
-([ADR 0024](adr/0024-gate-brief-bug.md)).
+([ADR 0024](adr/0024-gate-brief-bug.md)), and then `/sd:refactor`: Gates 1-6 and Gate Re-plan
+([ADR 0025](adr/0025-gate-brief-refactor-replan-details.md)).
 
 - **Declared, not inferred.** `contractLint.gateBriefs.<file>` lists the gate labels that carry a
   brief (`briefs`) and the subset that offers `details` (`details`). Labels are the gate index's
-  (`1`, `2a`, `Re-plan`). Gate Re-plan is in `briefs` but not in `details`: it keeps its option
-  set because its protocol is shared with `/sd:refactor`.
+  (`1`, `2a`, `Re-plan`). Gate Re-plan is in both lists for every file that wires it, the
+  protocol's own block in `skills/sd-replan-loop/SKILL.md` included: its question line is shared,
+  so offering `details` there and not declaring it would fire (ADR 0025).
 - **Both directions, the `CL304` shape.** A declared gate whose block never names the skill on a
   non-fenced line fires, and so does a block that names it without being declared. The same goes
   for `details`. A declared label with no gate on disk fires on line 1. The skill name is a

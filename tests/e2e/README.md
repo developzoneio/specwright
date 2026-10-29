@@ -69,7 +69,7 @@ dependency; it never shows up as a failed scenario assertion.
   `ANTHROPIC_API_KEY`. **No API key is needed**: a Claude subscription works. See [Auth](#auth)
   below.
 - Node.js (`node`, `npm`), only for scenarios that declare it in `requires.txt` (`01-setup`,
-  `02-feature-happy`, `06`-`10`, `12`).
+  `02-feature-happy`, `06`-`10`, `12`-`14`).
 - Nothing extra for hooks on Linux or macOS. The fixture's committed `settings.json` calls
   `powershell`, which those systems lack, so the runner rewrites each workspace copy's hook
   commands to `pwsh` when not on Windows (SW-81). Without that, every hook exits 127, which Claude
@@ -576,6 +576,7 @@ and exits 1.
 | 10 | `10-resume-impact-mapped` | Control for 09: the same spec with the impact analysis already in `03-decisions.md`. The resume goes straight to Phase 3a (`impact-mapped`): still exactly one impact section, no `ESC-FEAT-02` line, the `01-plan.md` outline written and no `02-tasks.md`, stopped at Gate 2 (SW-74). |
 | 11 | `11-escalation-rca-capped` | `/sd:rca` resumed at Phase 2 on a seeded `severity: P0` incident under `models.escalation.ceiling: "sonnet"`: `ESC-RCA-02` is capped to no movement and `05-retro.md` still carries exactly one `escalation: sd-debugger sonnet -> sonnet (trigger: ESC-RCA-02) capped` line - no `-> opus`, no `unapplied`, no second line. The hypothesis tree is filled, the run stops at Gate 2 with status `draft`, and no code changes (SW-62). A capped decision that left no line would look exactly like the policy not running. |
 | 13 | `13-bug-gate-brief` | `/sd:bug` on a seeded off-by-one (`validateTitle` rejects a 200-character title) runs Gates 1 to 5 with a `yes` each, sent as turns from `replies.txt`. `gate-briefs.md` has a section for each gate, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text. The failing-test output is saved under `04-artifacts/repro/`, the fix lands and the index row reaches `done` (SW-96). |
+| 14 | `14-refactor-gate-brief` | `/sd:refactor` extracts the lookup-or-throw step of `TodoService.completeTodo` into a private method, one task in one batch with coverage already above the bar, so Gate 3 is not reached. Gates 1, 2, 4, 5 and 6 each get a `yes` from `replies.txt`. `gate-briefs.md` has a section for each of them, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text. The batch test output and the after-refactor coverage are saved under `04-artifacts/`, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-109). |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
@@ -629,6 +630,10 @@ gate prints none of it (ADR 0020).
 | `exit-code` | `value` | `claude -p` exited with that code |
 | `permission-denied` | `tool` (regex), `path` (suffix) | `permission_denials` holds a matching call (SW-80) |
 | `transcript-contains-section` | `path`, `section` (heading regex, default `^## Gate `) | every matching section has shown lines, and they appear verbatim and in order in one main-thread text block. Shown lines are those after the heading, blank lines excluded, up to `### More decisions` or `Reply:`. Tool calls and subagent transcripts do not count (SW-99) |
+
+A `path` may contain `*` for a name the run picks, such as the date in a `REF-<slug>-<YYYYMMDD>`
+spec ID. It must resolve to exactly one workspace file; none, or several, fails a `file-exists` or
+`file-matches` rather than picking one (`-SelfTest` checks all three cases, SW-109).
 
 ## Cost and CI placement
 

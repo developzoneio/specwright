@@ -845,13 +845,27 @@ function Test-BlockHasLinesInOrder {
     return $true
 }
 
+function Resolve-AssertionPath {
+    # A scenario path may use a wildcard for a name the run picks, such as the
+    # date in a REF-<slug>-<YYYYMMDD> spec ID (SW-109). It resolves to the one
+    # match under the workspace. No match, or more than one, returns the literal
+    # join, which no Test-Path -LiteralPath finds: a file-exists or file-matches
+    # on an ambiguous path fails instead of picking one.
+    param([string]$Workspace, [string]$Path)
+    $p = Join-Path $Workspace $Path
+    if ($Path.Contains('*') -eq $false) { return $p }
+    $hits = @(Resolve-Path -Path $p -ErrorAction SilentlyContinue)
+    if ($hits.Count -eq 1) { return $hits[0].ProviderPath }
+    return $p
+}
+
 function Test-TranscriptContainsSections {
     # transcript-contains-section: every matching section's shown lines appear,
     # verbatim and in order, inside one main-thread text block. Fails - never
     # passes vacuously - on a missing brief, no matching section, an empty
     # section, or no main transcript. Says what is missing via Write-Info.
     param($Assertion, [string]$Workspace, [string]$FakeHome, $Run)
-    $p = Join-Path $Workspace $Assertion.path
+    $p = Resolve-AssertionPath -Workspace $Workspace -Path $Assertion.path
     if (-not (Test-Path -LiteralPath $p)) { Write-Info "brief not found: $($Assertion.path)"; return $false }
     $pattern = if ($Assertion.section) { [string]$Assertion.section } else { '^## Gate ' }
     $sections = Get-BriefShownSections -Path $p -SectionPattern $pattern
@@ -1003,6 +1017,38 @@ function Invoke-TranscriptAssertionSelfCheck {
     return $allOk
 }
 
+function Invoke-PathWildcardSelfCheck {
+    # -SelfTest, offline (SW-109): a wildcard path resolves to its one match,
+    # and an absent or ambiguous one never passes file-exists.
+    $allOk = $true
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) ('sd-e2e-glob-' + [guid]::NewGuid().ToString('N'))
+    try {
+        foreach ($d in @('REF-one-20260101', 'REF-two-20260101', 'REF-two-20260102')) {
+            $dir = Join-Path $root (Join-Path '.specs' $d)
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Set-Content -LiteralPath (Join-Path $dir 'gate-briefs.md') -Value '## Gate 1 - x'
+        }
+        $cases = @(
+            @{ Name = 'one match'; Path = '.specs/REF-one-*/gate-briefs.md'; Expect = $true },
+            @{ Name = 'no match'; Path = '.specs/REF-three-*/gate-briefs.md'; Expect = $false },
+            @{ Name = 'two matches'; Path = '.specs/REF-two-*/gate-briefs.md'; Expect = $false }
+        )
+        foreach ($c in $cases) {
+            $assertion = [pscustomobject]@{ type = 'file-exists'; path = $c.Path }
+            $got = Test-OneAssertion -Assertion $assertion -Workspace $root -Run $null -FakeHome ''
+            if ($got -eq $c.Expect) {
+                Write-Ok "self-test: wildcard path [$($c.Name)] : $($c.Expect), as expected"
+            } else {
+                Write-Bad "self-test: wildcard path [$($c.Name)] : expected $($c.Expect), got $got"
+                $allOk = $false
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $allOk
+}
+
 function Invoke-OutputAssertionSelfCheck {
     # -SelfTest, offline (SW-105): output-matches / output-not-matches against
     # a built report in the layout /sd:spec validate prints (one '### <id>: ...'
@@ -1055,21 +1101,21 @@ function Test-OneAssertion {
     $type = $Assertion.type
     switch ($type) {
         'file-exists' {
-            $p = Join-Path $Workspace $Assertion.path
+            $p = Resolve-AssertionPath -Workspace $Workspace -Path $Assertion.path
             return (Test-Path -LiteralPath $p)
         }
         'file-not-exists' {
-            $p = Join-Path $Workspace $Assertion.path
+            $p = Resolve-AssertionPath -Workspace $Workspace -Path $Assertion.path
             return (-not (Test-Path -LiteralPath $p))
         }
         'file-matches' {
-            $p = Join-Path $Workspace $Assertion.path
+            $p = Resolve-AssertionPath -Workspace $Workspace -Path $Assertion.path
             if (-not (Test-Path -LiteralPath $p)) { return $false }
             $content = Get-Content -LiteralPath $p -Raw
             return ($content -match $Assertion.pattern)
         }
         'file-not-matches' {
-            $p = Join-Path $Workspace $Assertion.path
+            $p = Resolve-AssertionPath -Workspace $Workspace -Path $Assertion.path
             if (-not (Test-Path -LiteralPath $p)) { return $true }
             $content = Get-Content -LiteralPath $p -Raw
             return ($content -notmatch $Assertion.pattern)
@@ -1090,7 +1136,7 @@ function Test-OneAssertion {
             return ($Run.ExitCode -eq [int]$Assertion.value)
         }
         'file-no-bom' {
-            $p = Join-Path $Workspace $Assertion.path
+            $p = Resolve-AssertionPath -Workspace $Workspace -Path $Assertion.path
             if (-not (Test-Path -LiteralPath $p)) { return $false }
             $bytes = [System.IO.File]::ReadAllBytes($p)
             if ($bytes.Length -lt 3) { return $true }
@@ -1393,6 +1439,9 @@ if ($SelfTest) {
     Write-Host ''
     Write-Host '=== e2e self-test: output-matches / output-not-matches must scope a rule to one spec, offline ==='
     if ((Invoke-OutputAssertionSelfCheck) -eq $false) { $allDetected = $false }
+    Write-Host ''
+    Write-Host '=== e2e self-test: a wildcard assertion path must resolve to exactly one match ==='
+    if ((Invoke-PathWildcardSelfCheck) -eq $false) { $allDetected = $false }
     Write-Host ''
     Write-Host '=== e2e self-test: harness must DETECT a removed or malformed guard ==='
     foreach ($mutation in $guardMutations) {

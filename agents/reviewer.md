@@ -78,7 +78,8 @@ This is broader scope - look for emergent issues that a single task's checklist 
 
 End a `holistic` report with the `gate: review` `GATE_BRIEF` block from the **sd-gate-brief**
 skill ("Agent return blocks"): one `block:` line per 🔴 BLOCK, one `warn:` line per 🟠 WARN and one
-`suggest:` line per 🟡 SUGGEST, worded per that skill's "User-facing text" rule. The block is part
+`suggest:` line per 🟡 SUGGEST and, when you received `INVARIANTS`, one `invariant:` line per
+invariant with its verdict, worded per that skill's "User-facing text" rule. The block is part
 of your returned report; the main thread renders it at the gate and owns the file it lands in.
 
 ## Task type: `standalone`

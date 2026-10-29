@@ -1,0 +1,19 @@
+{
+  "note": "Re-plan is declared to offer details but its indented question line lost it, and a shared protocol block in a skill offers details with no gateBriefs entry for its file (SW-109)",
+  "findings": [
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "commands/alpha.md",
+      "anchor": "seed",
+      "seed": "replan-details-dropped"
+    },
+    {
+      "rule": "CL307",
+      "severity": "BLOCK",
+      "file": "skills/sd-demo-loop/SKILL.md",
+      "anchor": "seed",
+      "seed": "protocol-details-undeclared"
+    }
+  ]
+}

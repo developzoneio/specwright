@@ -1,0 +1,18 @@
+# Permission rules granted under dontAsk (SW-80), one per line: file writes plus commands.test and
+# commands.coverage (npm test, npm run coverage in the fixture), through either shell tool (SW-105),
+# and the two read-only pipe stages a PowerShell run uses. No rule grants a writer verb, so only a
+# visible redirect can reach a path, and spec-gate's shell-write rule denies that for a protected path.
+Edit
+Write
+MultiEdit
+Bash(npm test:*)
+Bash(npm run test:*)
+Bash(npm run coverage:*)
+PowerShell(npm test)
+PowerShell(npm test *)
+PowerShell(npm run test)
+PowerShell(npm run test *)
+PowerShell(npm run coverage)
+PowerShell(npm run coverage *)
+PowerShell(Select-Object *)
+PowerShell(Select-String *)

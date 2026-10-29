@@ -3,14 +3,16 @@
 Gate brief discipline for specwright workflows: what a gate shows the user, where that text is
 kept, and how every user-facing line is worded. This file is the single owner of the brief
 artifact, its language, the per-gate shapes, the decision ranking rule, the `details` targets,
-the agent return blocks and the narration rule. `/sd:feature` and `/sd:bug` read it at runtime
-in Phase 0 (commands cannot load skills via frontmatter) and name only where each rule applies.
-`sd-spec-architect` and `sd-reviewer` load it via `skills:` so they know the block they return.
+the agent return blocks and the narration rule. `/sd:feature`, `/sd:bug` and `/sd:refactor` read
+it at runtime in Phase 0 (commands cannot load skills via frontmatter) and name only where each
+rule applies; **sd-replan-loop** names it at Gate Re-plan. `sd-spec-architect` and `sd-reviewer`
+load it via `skills:` so they know the block they return.
 
 Origin: ADR 0018 ("Gate brief artifact"), Jira SW-89; extended by ADR 0019 (details targets,
 brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means reply text, the
 closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `details` from the
-outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96. Measured "before":
+outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96, and ADR 0025 (the
+`/sd:refactor` gates, `details` at Gate Re-plan), Jira SW-109. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -51,8 +53,14 @@ presented a gate without printing a line of it.
 ## Gate 2 - Plan approval (pass <n>)
 ## Gate 2 - Complexity (pass <n>)
 ## Gate 3 - Integration and review (pass <n>)
-## Gate Re-plan - R<n>
+## Gate Re-plan - R<n> (pass <p>)
 ```
+
+- **Gate Re-plan sections** are shared by every workflow that re-plans (**sd-replan-loop**). `R<n>`
+  is the revision number this re-plan would take; `<p>` counts the passes for that `R<n>`. A
+  `revise` re-presents the gate as a new section with the next pass; a `details` reply stays in the
+  open section. After `abort task` no revision is written, so the next discovery presents the same
+  `R<n>` with the next pass number.
 
 - **Collapsed decisions live under the section** in a `### More decisions (shown on details)`
   subsection, written in the same write as the brief. It is part of the record, not of the shown
@@ -133,7 +141,7 @@ Per gate, for `/sd:feature`:
   the brief is written, without asking. Warning and suggestion detail goes in the collapsed
   subsection.
 - **Re-plan** - `Discovery: <trigger>`, `Affects: <task IDs and titles>`, `Change: <the delta>`,
-  then the question.
+  `Risk:`, then the question. The same shape serves every workflow that re-plans.
 
 ## Decision ranking
 
@@ -156,23 +164,27 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 ## The details option
 
 In `/sd:feature`, Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3
-offer it with an optional target: `details <target>`. Every `/sd:bug` gate offers it, with the
-targets in "Per-workflow parts"; the rules of this section apply to them. Gate Re-plan carries a brief but keeps its own option set,
-which has no `details` (ADR 0018). A `details` reply is never an approval and never advances the
+offer it with an optional target: `details <target>`. Every `/sd:bug` and `/sd:refactor` gate
+offers it, with the targets in "Per-workflow parts"; the rules of this section apply to them. Gate
+Re-plan offers `details <target>` in every workflow that reaches it (ADR 0025): its delta exists
+only in the brief until `approve` writes the revision, so the user needs to see the tasks it
+rewrites. A `details` reply is never an approval and never advances the
 workflow. Each one prints, records `Reply: <reply verbatim>` in the open section, then asks the
 same question again. The printout is not appended: it is either already in the section or a copy
 of an artifact that is on disk.
 
 | Reply | Prints | Offered at |
 |---|---|---|
-| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | Gate 1, Gate 2 faces, Gate 3 |
-| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line; before Phase 3b has written `02-tasks.md`, the `## Outline` table's header, separator and that task's row from `01-plan.md`, verbatim | Gate 2 faces, Gate 3 |
-| `details plan` | `01-plan.md`, verbatim | Gate 2 faces, Gate 3 |
+| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | Gate 1, Gate 2 faces, Gate 3, Gate Re-plan |
+| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line; before Phase 3b has written `02-tasks.md`, the `## Outline` table's header, separator and that task's row from `01-plan.md`, verbatim | Gate 2 faces, Gate 3, Gate Re-plan |
+| `details plan` | `01-plan.md`, verbatim, `## Revisions` included | Gate 2 faces, Gate 3, Gate Re-plan |
 | `details risks` | the risks section of `01-plan.md` and the `### Risk assessment` section of `03-decisions.md`, verbatim | Gate 2 faces, Gate 3 |
 
 A target that names nothing at this gate (an unknown task ID, a target the gate does not offer)
 prints one line naming the valid targets, then asks again. A task ID is valid at a Gate 2 face when
-it names an outline row or, for a plan with no outline, a task block. `details` never points at a
+it names an outline row or, for a plan with no outline, a task block; at Gate Re-plan, when it
+names a task block or an outline row (a new task the delta adds has neither yet: its target is the
+`Change:` line). `details` never points at a
 `02-tasks.md` that does not exist. Spec approval offers a bare `details`
 only: no plan, task list or impact analysis exists yet.
 
@@ -219,8 +231,13 @@ gate: review
 block: <plain title> | <file> | <direction>
 warn: <plain title> | <file>
 suggest: <plain title> | <file>
+invariant: <plain statement> | <held | broken | unverified> | <file>
 END_GATE_BRIEF
 ```
+
+`invariant:` repeats once per entry of `INVARIANTS`, in the spec's order, and appears only when the
+review received `INVARIANTS` (a `/sd:refactor` holistic review). A `broken` invariant is also a
+`block:` line.
 
 Each field is English and follows the user-facing text rule below, so the main thread can render
 it into the conversation language (see "Language") without first removing IDs.
@@ -294,6 +311,77 @@ Shown lines, replacing lines 1-5 of "Brief shape":
 
 Gate 1 offers a bare `details` only: nothing but the spec exists yet. `details` is never an
 override, so the HARD Gate 2 offers it like any other gate.
+
+### /sd:refactor
+
+Section headings (Gate Re-plan uses the shared heading above):
+
+```text
+## Gate 1 - Spec approval (pass <n>)
+## Gate 2 - Coverage threshold met (pass <n>)
+## Gate 3 - Post-test coverage check (pass <n>)
+## Gate 4 - Plan approval (pass <n>)
+## Gate 5 - Tests green per batch (pass <n>)
+## Gate 6 - Holistic review (pass <n>)
+```
+
+Each batch's Gate 5 is a new pass. Sources. Gate 1 comes from the architect's `gate: spec` block,
+Gate 4 from its `gate: plan` block (a refactor plan has no complexity face), and Gate 6 from the
+reviewer's `gate: review` block plus the test, lint and coverage results the main thread measured
+in Phase 6. The main thread composes Gates 2, 3 and 5 itself from what it already wrote: the
+`## Test coverage prerequisite` section of `00-spec.md`, the characterization tests the
+implementer returned, and the saved batch test output.
+
+Shown lines, replacing lines 1-5 of "Brief shape":
+
+- **Spec approval** - lines 1-4 of "Brief shape", with the "Spec approval" decision rule of
+  `/sd:feature` (public API changes, which invariants hold, where scope ends), then
+  `Invariants: <n> to preserve - reply details invariants to list them.`, counted from the spec.
+- **Coverage threshold met** - `Coverage: <measured>% on <k> affected files, bar <threshold>% -
+  <met | <gap> points short>.`, then `Lowest: <file> <n>%` for up to 3 files, lowest first, then,
+  below the bar only, `Uncovered: <what has no test, in plain words>`, then `Recommended: <continue
+  | add characterization tests | exception> - <why, one clause>`, then `Risk:`. Files are named by
+  path, never by `path:line`.
+- **Post-test coverage check** - `Coverage: <before>% -> <now>%, bar <threshold>% - <met | <gap>
+  points short>.`, `Added: <n> characterization tests in <test files>.`, `Pinned behavior: <the
+  current behavior the new tests lock in, one clause>` (say so when it looks wrong: the tests pin
+  it either way), `Still uncovered: <plain words>` or `Still uncovered: none`, `Risk:`.
+- **Plan approval** - the `/sd:feature` "Plan approval" shape and decision rule, with
+  `What changes: <N> tasks in <B> batches - <one plain sentence>`. The task table gains a first
+  column and lists rows in batch order, each batch number from the task block's `Parallel batch`
+  field:
+
+```text
+| Batch | Task | What it does | Main file |
+|---|---|---|---|
+| 1 | T01 | <plain-language title> | <path> |
+```
+
+- **Tests green per batch** - `Batch <b> of <B>`, the table above with this batch's rows only, then
+  `Tests: <passed> of <total> pass.` or `Tests: <n> failed.` followed by up to 3 lines
+  `Failing: "<test name>" - <reason, one line>`, then `Next: batch <b + 1> of <B>` or
+  `Next: holistic review`, then `Risk:`. A red batch is never shown as green: the shown lines state
+  the failure and the question offers only revert or fix.
+- **Holistic review** - the `/sd:feature` "Integration and review" lines, unchanged, with
+  `Tests: <summary>. Coverage: <before>% -> <after>%. Lint: <summary>.` as the first line and
+  `Invariants: <k> of <n> held.` after the `Review:` line, plus `, <u> not verifiable - reply
+  details to see them` when some are `unverified`. A broken invariant shows as a `Blocking:` line.
+  The full invariant list, one line per `invariant:` entry, goes in the collapsed subsection.
+
+`details` targets:
+
+| Reply | Prints | Offered at |
+|---|---|---|
+| `details` | the collapsed subsection when the section has one, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate |
+| `details invariants` | the `## Invariants - MUST preserve` section of `00-spec.md`, verbatim | Gates 1, 4, 6 |
+| `details coverage` | the `## Test coverage prerequisite` section of `00-spec.md`, verbatim; at Gate 6 also `04-artifacts/coverage/after-refactor.txt` | Gates 2, 3, 6 |
+| `details impact` | the impact analysis Phase 2 appended to `03-decisions.md`, verbatim | Gates 2, 3, 4 |
+| `details <task ID>`, `details plan` | as in "The details option" | Gates 4, 5, 6 |
+| `details risks` | as in "The details option" | Gate 4 |
+| `details output` | `04-artifacts/batches/batch-<b>-tests.txt` of the batch this section reports, verbatim | Gate 5 |
+
+Gate 1 offers `details invariants` besides the bare `details`: the spec is the only artifact yet.
+The HARD Gates 2, 3 and 5 offer `details` like any other gate; it is never an override.
 
 ## User-facing text
 

@@ -264,9 +264,10 @@ with `/sd:refactor`. In brief:
 1. STOP. The main thread writes the Re-plan brief (trigger, affected tasks, proposed delta) to
    `.specs/FEAT-<arg>/gate-briefs.md` per **sd-gate-brief**, then shows it verbatim. Ask:
 
-   > Re-plan FEAT-<arg>? Discovery: <trigger>. Affects <task IDs>. (approve / revise <feedback> / abort task)
+   > Re-plan FEAT-<arg>? Discovery: <trigger>. Affects <task IDs>. (approve / revise <feedback> / details <target> / abort task)
 
    - `approve` -> proceed. `revise` -> adjust the delta and re-ask. `abort task` -> normal task abort.
+   - `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 <!-- contract-lint: allow CL102 - scoped re-plan passes REPLAN_SCOPE/REVISION instead of SPEC/IMPACT, per the Scoped re-plan sub-path documented in agents/spec-architect.md -->
 2. Invoke `sd-spec-architect` with `TASK = plan`, `REPLAN_SCOPE = <affected task IDs>`,
    `REVISION = R<n>` (next contiguous number). It appends the `## Revisions` entry to `01-plan.md`
