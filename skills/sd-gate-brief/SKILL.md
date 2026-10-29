@@ -3,8 +3,8 @@
 Gate brief discipline for specwright workflows: what a gate shows the user, where that text is
 kept, and how every user-facing line is worded. This file is the single owner of the brief
 artifact, its language, the per-gate shapes, the decision ranking rule, the `details` targets,
-the agent return blocks and the narration rule. `/sd:feature`, `/sd:bug`, `/sd:refactor` and
-`/sd:rca` read it at runtime in Phase 0 (commands cannot load skills via frontmatter) and name only
+the agent return blocks and the narration rule. `/sd:feature`, `/sd:bug`, `/sd:refactor`,
+`/sd:rca` and `/sd:perf` read it at runtime in Phase 0 (commands cannot load skills via frontmatter) and name only
 where each rule applies; **sd-replan-loop** names it at Gate Re-plan. `sd-spec-architect` and `sd-reviewer`
 load it via `skills:` so they know the block they return.
 
@@ -13,7 +13,7 @@ brief language, plan-face decisions), Jira SW-102, and ADR 0020 (printed means r
 closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `details` from the
 outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96, and ADR 0025 (the
 `/sd:refactor` gates, `details` at Gate Re-plan), Jira SW-109, and ADR 0026 (the `/sd:rca` gates),
-Jira SW-111. Measured "before":
+Jira SW-111, and ADR 0027 (the `/sd:perf` gates), Jira SW-110. Measured "before":
 `docs/spikes/SW-88-feature-baseline.md`.
 
 ---
@@ -165,8 +165,8 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 ## The details option
 
 In `/sd:feature`, Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3
-offer it with an optional target: `details <target>`. Every `/sd:bug`, `/sd:refactor` and
-`/sd:rca` gate offers it, with the targets in "Per-workflow parts"; the rules of this section apply to them. Gate
+offer it with an optional target: `details <target>`. Every `/sd:bug`, `/sd:refactor`,
+`/sd:rca` and `/sd:perf` gate offers it, with the targets in "Per-workflow parts"; the rules of this section apply to them. Gate
 Re-plan offers `details <target>` in every workflow that reaches it (ADR 0025): its delta exists
 only in the brief until `approve` writes the revision, so the user needs to see the tasks it
 rewrites. A `details` reply is never an approval and never advances the
@@ -223,7 +223,7 @@ risk: <one line>
 END_GATE_BRIEF
 ```
 
-`sd-reviewer` ends a `holistic` or a `bug-fix-final` review with one block. The main thread adds
+`sd-reviewer` ends a `holistic`, a `bug-fix-final` or a `perf-final` review with one block. The main thread adds
 the test and lint summary it measured itself.
 
 ```text
@@ -435,6 +435,102 @@ evidence and the tree is ranked, not chosen, so a gate here shows no `Decisions`
 
 `details` is never an override, so the HARD gates offer it like any other gate.
 
+### /sd:perf
+
+Section headings, the titles of the gates in `commands/perf.md`:
+
+```text
+## Gate 1 - Target defined (pass <n>)
+## Gate 2 - Baseline measured (pass <n>)
+## Gate 3 - Hotspot identified (pass <n>)
+## Gate 4 - Select hypothesis (pass <n>)
+## Gate 5 - Correctness verified (pass <n>)
+## Gate 6 - Keep or revert decision (pass <n>)
+## Gate 7 - Regression pass (pass <n>)
+## Gate 8 - Final review pass (pass <n>)
+```
+
+Gates 3 to 6 repeat, once per hotspot or per attempt, and each repeat is a new pass, like a
+`refine` or a `revise`. Sources. Gate 1 comes from the architect's `gate: spec` block and Gate 8
+from the reviewer's `gate: review` block (a `perf-final` review) plus the final row of the Results
+log. The main thread composes Gates 2 to 7 itself from what it already
+wrote: the saved measurement files, the saved test output, the hotspot ranking and the hypotheses
+in `03-decisions.md`, and the Results log. `sd-debugger` returns no block: it also serves
+`/sd:bug` and `/sd:rca`.
+
+**Measured numbers come from the saved file.** Every number in a brief (a latency, a rate, a
+test count) is read from the artifact named in the table below when the section is written, never
+from memory of the run, and carries its unit and the number of runs it summarizes. An estimate the
+debugger made (a hotspot share, an expected gain) is labelled as one.
+
+**Hypothesis IDs.** A hotspot is `H<n>`, in the debugger's ranking order; a hypothesis for it is
+`H<n>` plus a letter, `H1a`, `H1b`, in the order the debugger listed them. An attempt is numbered
+`N`, the number of its Results-log row, assigned when it is applied: every attempt has a row,
+reverted ones included.
+
+Shown lines, replacing lines 1-5 of "Brief shape":
+
+- **Target defined** - `What changes: <the target in plain words: metric, goal, workload; nothing
+  is optimized yet>`, then lines 2-4 of "Brief shape" with the "Spec approval" decision rule of
+  `/sd:feature` (the goal when the request left it open, the load profile, how many runs and what
+  counts as noise), `Target: <metric> under <goal> <unit> on <workload>, load <profile>`, and
+  `Method: <tool>, <n> runs, warm-up <duration>, <cache state>`.
+- **Baseline measured** - `Baseline: p95 <x> <unit> (p50 <x>, p99 <x>), median of <n> runs`,
+  `Target: p95 under <goal> <unit>`, `Gap: <x> <unit> (<pct>%) over the goal` or `Gap: none -
+  already meets the goal`, `Spread: <min> to <max> <unit> across <n> runs - the noise floor of
+  Gate 6`, `Conditions: <environment, load, cache state>`, `Evidence: <the baseline file under
+  04-artifacts/>`, `Recommended: <continue | close, no work needed | refine methodology> - <why,
+  one clause>`, `Risk:`. The gate has two faces, one per question: the baseline already meets the
+  goal, or it does not.
+- **Hotspot identified** - `Hotspots: <N> found, ranked by share of <metric>.`, then up to 3 lines
+  `H<n> <where the time goes, plain> in <file path> - about <pct>% - basis: <profile | code
+  read>`, then `<n> more - reply details hotspots to list them.` when there are more,
+  `Recommended: choose H<n> - <why, one clause>`, `Risk:`. A file is named by path, never by
+  `path:line`.
+- **Select hypothesis** - `Hotspot: H<n> <plain statement>`, `Hypotheses: <k> untried.`, then one
+  line per untried hypothesis, at most 4, `H<n><x> <the change, plain> - expected <delta> <unit> -
+  cost <S | M | L> - undo: <trivial | moderate | hard>`, then, when this hotspot has reverted
+  attempts, `Already reverted: H<n><x> (<delta> <unit>)` for each, `Recommended: choose H<n><x> -
+  <why, one clause>`, `Risk:`.
+- **Correctness verified** - `Attempt <N>: H<n><x> <the change, plain>`, then one of two faces.
+  Green: `Tests: <passed> of <total> pass.`, `Changed: <file paths>`, `Next: re-measure under the
+  baseline conditions`. Red: `Tests: <n> failed.` followed by up to 3 lines `Failing: "<test
+  name>" - <reason, one line>`, `Reverted: yes - the change is out of the tree`, `Next: another
+  hypothesis for H<n>`. Then `Risk:`. A red attempt is never shown as green, and the revert has
+  already happened when the gate is shown.
+- **Keep or revert decision** - `Attempt <N>: H<n><x> <the change, plain>`, `p95: <previous best>
+  -> <new> <unit> (<delta> <unit>, <pct>%) over <n> runs`, `Noise: spread <x> <unit>; a real gain
+  is above 5% and above that spread`, `Verdict: <real improvement | within noise>`, `Goal: p95
+  under <goal> <unit> - <met | <gap> <unit> to go>`, `Others: <the other metrics against the
+  previous best> - <no regression | what got worse>`, `Recommended: <keep | revert> - <why, one
+  clause>`, `Risk:`. Within noise the recommendation is `revert`, and the question is the second
+  face.
+- **Regression pass** - `Tests: <passed> of <total> pass. Lint: <summary>.`, `Final: p95 <x>
+  <unit> over <n> runs, baseline <x> <unit> - <pct>% faster`, `Goal: <met | <gap> <unit> to go>`,
+  `Stable: <the final run against the best kept attempt, one clause>`, `Kept: <k> of <A> attempts,
+  <r> reverted, <d> hotspots deferred.`, `Risk:`.
+- **Final review pass** - the "Integration and review" lines of `/sd:feature`, with `Result: p95
+  <baseline> -> <final> <unit> (<pct>%), goal <met | <gap> <unit> to go>.` as the first line in
+  place of the `Tests:` line, which Gate 7 already showed. Suggestions are logged to `05-retro.md`
+  before the brief is written.
+
+`details` targets. Each prints the file named, verbatim:
+
+| Reply | Prints | Offered at |
+|---|---|---|
+| `details` | the collapsed subsection when the section has one, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | every gate |
+| `details target` | the `## Target`, `## Measurement methodology` and `## Constraints` sections of `00-spec.md` | Gates 1, 2 |
+| `details hotspots` | the hotspot ranking the debugger returned, as appended to `03-decisions.md` | Gates 3, 4 |
+| `details H<n>`, `details H<n><x>`, e.g. `details H1`, `details H1b` | that hotspot's ranking row and its hypotheses, or that one hypothesis with its expected impact, cost, risk profile and verification approach, from `03-decisions.md` | Gates 3, 4, 5, 6 |
+| `details results` | the `## Results log` table of `00-spec.md` | Gates 4, 6, 7, 8 |
+| `details measurement` | the raw measurement the section reports: `baseline-<ts>.json` at Gate 2, `attempt-<N>-<ts>.json` at Gate 6, `final-<ts>.json` at Gate 7, from `04-artifacts/` | Gates 2, 6, 7 |
+| `details output` | `attempt-<N>-tests.txt` at Gate 5, `final-tests.txt` at Gate 7, from `04-artifacts/` | Gates 5, 7 |
+
+Gate 1 offers `target` besides the bare `details`: the spec is the only artifact yet. A target the
+gate does not offer, or a hotspot or hypothesis ID that is not in the ranking, prints one line
+naming the valid targets, then asks again. `details` is never an override, so the HARD gates offer
+it like any other gate.
+
 ## User-facing text
 
 Applies to every line the user reads: `gate-briefs.md` and all reply text of the session, from
@@ -449,7 +545,8 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
   reference (`SC-<n>`, `AC-<n>`, `D<n>`), or a `path:line` citation. Say what the thing is
   instead.
 - **Allowed handles.** The spec ID, a task ID on the same line as its plain title, a hypothesis ID
-  (`H<n>`) on the same line as its plain statement, a bug severity (`P0`-`P3`), gate names, file
+  (`H<n>`, or `H<n><x>` for a `/sd:perf` hypothesis of hotspot `H<n>`) on the same line as its
+  plain statement, a bug severity (`P0`-`P3`), gate names, file
   paths, and the option tokens of the question line.
 - **Narrate a model escalation in plain words**: what runs on a stronger model and why, for
   example "planning with a stronger model because the spec was sized large". The rule ID stays in

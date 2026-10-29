@@ -1,0 +1,24 @@
+/sd:perf list-latency
+
+Performance request: TodoService.listTodos gets slow when the store is large. Target: the p95
+latency of listTodos under 2 ms with 3000 todos in the store. Workload: read-heavy, the store
+seeded with 3000 todos by the benchmark. Measure with `node bench/list-bench.js`, run from the
+project root: it prints one JSON line in milliseconds with three runs (each after its own warm-up)
+and their median. Use that command as the tool, the median of its three runs as the number, and
+the spread between the three runs as the noise. Behavior must not change and the existing tests
+must keep passing; keep it to one hotspot and one change.
+
+This is a headless, scripted test run. The runner that started it types each gate reply as the
+next message of this session, the way a person would. Stop at each hard gate as the workflow says
+and wait for that message. The spec ID carries today's UTC date. If you are asked to reserve
+follow-up specs at close-out, there are none. After close-out, report the final spec ID and its
+status.
+
+This run grants shell access narrowly and refuses the rest, for you and for every subagent you
+start. The project's test command is allowed only as plain `npm test` (or `npm run test`), and the
+measurement only as plain `node bench/list-bench.js`, both run from the project root, optionally
+piped through `tail -n 40` or `Select-Object -Last 40`. A `cd`, a redirect to a file or to
+/dev/null, chaining with `;` or `||`, `node --test`, `node -e` and any shell write are refused.
+Make every change to a file under `.specs/`, including the `Reply:` line in `gate-briefs.md` and
+every saved measurement and test output, with the Edit or Write tool. Tell each subagent you
+start the same.
