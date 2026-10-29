@@ -112,6 +112,9 @@ Checklist:
 - [ ] Constitution compliant (run the constitution check sections).
 - [ ] If root cause indicated a constitution gap, recommendation logged for amendment (SUGGEST).
 
+End a `bug-fix-final` report with the same `gate: review` `GATE_BRIEF` block as `holistic`, worded
+the same way: `/sd:bug` Gate 5 is presented from it.
+
 ## Task type: `perf-final`
 
 Inputs (required): SPEC_REF, CHANGED_FILES, RESULTS_LOG

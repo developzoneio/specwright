@@ -243,7 +243,9 @@ prose intent, not pure structure.
 
 `CL307` guards the gate-brief wiring SW-89 put into `/sd:feature`: each gate block names
 `sd-gate-brief`, and Gates 1, 2 and 3 offer `details` ([ADR 0018](adr/0018-gate-brief-artifact.md)).
-Nothing else stopped a later edit from dropping either one.
+Nothing else stopped a later edit from dropping either one. SW-96 wired `/sd:bug` the same way:
+all six of its gates, `3a` included, carry a brief and offer `details`
+([ADR 0024](adr/0024-gate-brief-bug.md)).
 
 - **Declared, not inferred.** `contractLint.gateBriefs.<file>` lists the gate labels that carry a
   brief (`briefs`) and the subset that offers `details` (`details`). Labels are the gate index's
@@ -258,7 +260,10 @@ Nothing else stopped a later edit from dropping either one.
   parenthetical of its block, read through `gate_options` / `Get-GateOptions`. `/sd:feature`'s
   Gate 2 is one block with two option sets, one per face, so dropping `details` from Face B
   fires while Face A still has it. A bullets-only option set needs a `details` bullet. A block
-  with no option set at all is left to `CL301`.
+  with no option set at all is left to `CL301`. A prose parenthetical with a slash, such as
+  `(logs / traces only)`, is an option set to both linters, so a declared gate's prose words it
+  without one.
+- **Labels match exactly.** `3` and `3a` are separate gates; declaring one never covers the other.
 - **Blind spot.** It proves the wiring is written, not that the model shows the brief. That is
   the e2e harness's job (SW-99).
 

@@ -1,0 +1,11 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# Gate 1 - symptom captured
+yes
+# Gate 2 - reproduction confirmed (HARD)
+yes
+# Gate 3 - root cause confirmed
+yes
+# Gate 4 - failing test confirmed
+yes
+# Gate 5 - regression and review
+yes

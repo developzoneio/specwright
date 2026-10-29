@@ -408,14 +408,16 @@
     ],
 
     "gateBriefs": {
-      "commands/feature.md": { "briefs": ["1", "2", "3", "Re-plan"], "details": ["1", "2", "3"] }
+      "commands/feature.md": { "briefs": ["1", "2", "3", "Re-plan"], "details": ["1", "2", "3"] },
+      "commands/bug.md":     { "briefs": ["1", "2", "3a", "3", "4", "5"], "details": ["1", "2", "3a", "3", "4", "5"] }
     },
 
     "$gateBriefsComment": [
       "CL307's contract (SW-101): which gate blocks carry a gate brief (name sd-gate-brief) and",
       "which of those offer the details option. Declared, not derived, like gates: deriving it",
-      "from the blocks would compare disk against itself. Labels are the gate index's: 1, 2a,",
-      "Re-plan. Re-plan carries a brief but keeps its option set (ADR 0018). Both directions are",
+      "from the blocks would compare disk against itself. Labels are the gate index's: 1, 3a,",
+      "Re-plan; 3 and 3a are distinct labels (commands/bug.md, ADR 0024). Re-plan carries a",
+      "brief but keeps its option set (ADR 0018). Both directions are",
       "checked, so deleting this key fails every wired gate instead of turning the rule off. A",
       "gate declared to offer details needs it in every option set of its block - Gate 2's two",
       "faces each have one. A listed file that does not exist, or a details label missing from",

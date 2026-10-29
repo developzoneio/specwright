@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gate brief for `/sd:bug` (SW-96, part 1 of 5)** - every `/sd:bug` gate (1, 2 HARD, 3a, 3, 4,
+  5) now writes a brief to `.specs/BUG-<arg>/gate-briefs.md` and prints it verbatim, as
+  `/sd:feature` does, and all six offer `details <target>`. Gate count unchanged.
+  - **Single source:** `sd-gate-brief` gains a `## Per-workflow parts` section with the `/sd:bug`
+    headings, shown lines and `details` targets (`repro`, `tree`, `H<n>`, `rootcause`, `output`,
+    `fix`). `commands/bug.md` reads the skill in Phase 0 and only names it at each gate.
+  - **Sources:** Gate 1 from a new architect block `gate: symptom`; Gate 5 reuses the `/sd:feature`
+    Gate 3 shape and the reviewer's `gate: review` block, now also returned by `bug-fix-final`;
+    the main thread composes Gates 2, 3a, 3 and 4 from what it already wrote. `sd-debugger` is
+    unchanged. Phase 4 saves the failing run's output to `04-artifacts/repro/` for `details output`.
+  - **Wording:** hypothesis IDs and bug severity become allowed handles; escalation narration and
+    the new close-out summary follow the no-internal-ID rule.
+  - **Lint:** `contractLint.gateBriefs` declares all six `/sd:bug` labels; fixtures
+    `cl307-sub-gate-label` and `fp-cl307-hard-gate-details`. e2e scenario `13-bug-gate-brief`.
+    ADR 0024. stop-gate's bug rules are unchanged (follow-up).
 - **`SL069`: a covering task needs a witness test at plan time (SW-107)** - `/sd:spec validate`
   now flags a task block whose `Covers` is not `none` and that has neither a legacy `Test` value nor
   a path-like token in `Acceptance`, instead of leaving it for `/sd:verify` to fail in Phase 6. One

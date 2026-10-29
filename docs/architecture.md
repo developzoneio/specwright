@@ -168,7 +168,7 @@ The split exists for three reasons:
 | `sd-retro-lessons` | `scripts/validate-lessons.*`, `scripts/aggregate-lessons.*` (runtime read) | The `lesson` line format, tag vocabulary, and reusability bar for retro lessons. The one skill with no agent consumer - declared in `contractLint.skillConsumers`. |
 | `sd-bootstrap-guard` | `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port`, `/sd:adr` (runtime read) | Phase 0 Layer-2 reads (`CLAUDE.md`, constitution, project-config, index) and their WARN/STOP messages. Single owner; contract-lint `CL009` blocks a command whose Phase 0 restates them. |
 | `sd-model-escalation` | `sd-spec-architect`, `sd-implementer`, `sd-debugger`; `/sd:feature`, `/sd:bug`, `/sd:rca`, `/sd:refactor`, `/sd:perf`, `/sd:port` (runtime read) | Model escalation policy: `haiku -> sonnet -> opus` ladder, invariants, trigger table with stable rule IDs (`ESC-FEAT-02`, `ESC-BUG-03`, ...), precedence over `models.escalation` in project-config, and the `escalation:` line each fired decision appends to `05-retro.md`. Single owner; commands name a rule ID and its trigger inputs only. Contract-lint `CL601`-`CL605` hold the table, the ladder and each command's wiring to `contractLint.escalationTriggers` (SW-63). |
-| `sd-gate-brief` | `sd-spec-architect`, `sd-reviewer`; `/sd:feature` (runtime read) | Gate brief: the append-only `gate-briefs.md` artifact (one section per gate pass, the exact text shown), the per-gate shape (at most 10 lines plus one row per task), top-3 decision ranking with the rest collapsed behind `details`, the `details <target>` printouts (a task ID, `plan`, `risks`), the conversation-language rule (file and chat are the same text), plan-face decisions limited to what the plan adds, the `GATE_BRIEF` return blocks, the no-internal-ID rule for every user-facing line, the closing summary included, printing as reply text (a file write is not a print), and one narrated line per phase (ADR 0018, SW-89; ADR 0019, SW-102; ADR 0020, SW-99). |
+| `sd-gate-brief` | `sd-spec-architect`, `sd-reviewer`; `/sd:feature`, `/sd:bug` (runtime read) | Gate brief: the append-only `gate-briefs.md` artifact (one section per gate pass, the exact text shown), the per-gate shape (at most 10 lines plus one row per task), top-3 decision ranking with the rest collapsed behind `details`, the `details <target>` printouts (a task ID, `plan`, `risks`), the conversation-language rule (file and chat are the same text), plan-face decisions limited to what the plan adds, the `GATE_BRIEF` return blocks, the no-internal-ID rule for every user-facing line, the closing summary included, printing as reply text (a file write is not a print), and one narrated line per phase, and the per-workflow parts of `/sd:bug` (ADR 0018, SW-89; ADR 0019, SW-102; ADR 0020, SW-99; ADR 0024, SW-96). |
 | `sd-port-fidelity` | `sd-spec-architect`, `sd-reviewer` | Cross-project port fidelity: structural mirror default, four-group deviation allowlist, anti-simplification rules, three gate table schemas, parity artifact layout, closed five-class hunk vocabulary plus the two whole-artifact checks. |
 
 Agents declare the skills they apply via a `skills:` list in YAML frontmatter:
@@ -449,7 +449,7 @@ Every workflow writes to a structured folder under `.specs/<ID>/`:
 ├── 04-artifacts/     Evidence: logs, queries, traces, baselines, ticket snapshots, donor snapshots
 ├── 05-retro.md       Append-only log: status transitions, surprises, follow-ups
 ├── 06-verify.md      /sd:verify result; gates the done transition
-└── gate-briefs.md    Append-only record of what each /sd:feature gate showed (ADR 0018)
+└── gate-briefs.md    Append-only record of what each /sd:feature and /sd:bug gate showed (ADR 0018)
 ```
 
 This is not documentation written after the fact. It is the **input contract** every subagent reads. The implementer reads `02-tasks.md` to know what to edit. The reviewer reads `00-spec.md` to know what acceptance criteria to verify. Future engineers (and future Claude sessions) read all of it to understand why the code is shaped this way.
@@ -467,7 +467,7 @@ append-only memory, not scratch space:
 | `03-decisions.md` | `sd-code-explorer` (impact) + `sd-debugger` (hypotheses / verdicts); append-only | impact + investigation phases | `sd-implementer`, `sd-reviewer` |
 | `04-artifacts/` | any agent (logs, baselines, repro evidence, ticket snapshots, donor snapshots) | throughout | any agent + future sessions |
 | `05-retro.md` | main thread (status transitions); append-only | every gate transition | resume logic + future sessions |
-| `gate-briefs.md` | main thread, from the `GATE_BRIEF` blocks of `sd-spec-architect` / `sd-reviewer`; append-only | every `/sd:feature` gate pass, before it is shown | the user, `details` on resume, the e2e harness (file and, since SW-99, the transcript) |
+| `gate-briefs.md` | main thread, from the `GATE_BRIEF` blocks of `sd-spec-architect` / `sd-reviewer`; append-only | every `/sd:feature` and `/sd:bug` gate pass, before it is shown | the user, `details` on resume, the e2e harness (file and, since SW-99, the transcript) |
 
 The cross-phase fields inside `00-spec.md` are intentionally left empty at creation
 (`<!-- Filled by Phase N -->`) so the workflow enforces sequencing - the architect does not pre-fill a

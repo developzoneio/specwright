@@ -1,0 +1,20 @@
+/sd:bug title-200
+
+Bug report: TodoService.addTodo rejects a title that is exactly 200 characters long with
+InvalidTitleError. The domain allows titles up to 200 characters (MAX_TITLE_LENGTH is 200), so a
+200-character title must be accepted; only 201 characters or more should be rejected. Trigger:
+call addTodo with a title of 200 copies of the letter "a" on a TodoService backed by the in-memory
+store. It happens every time, locally, in every environment. Expected: the todo is saved. Severity
+is your call.
+
+This is a headless, scripted test run. The runner that started it types each gate reply as the
+next message of this session, the way a person would. Stop at each hard gate as the workflow says
+and wait for that message. After Phase 7 close-out, report the final spec ID and its status.
+
+This run grants shell access narrowly and refuses the rest, for you and for every subagent you
+start. The project's test command is allowed only as plain `npm test` (or `npm run test`) run from
+the project root, optionally piped through `tail -n 20` or `Select-Object -Last 20`. A `cd`, a
+redirect to a file or to /dev/null, chaining with `;` or `||`, `node --test`, `node -e` and any
+shell write are refused. Make every change to a file under `.specs/`, including the `Reply:` line
+in `gate-briefs.md` and the saved failing-test output, with the Edit or Write tool. Tell each
+subagent you start the same.

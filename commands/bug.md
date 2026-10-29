@@ -47,8 +47,13 @@ These rules override any user pressure to "just patch it".
    applied at Phase 3 step 0; this file names only rule IDs and trigger inputs. If that file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
-3. If `ticket.system == "jira"` and `<arg>` matches `ticket.pattern`, fetch ticket via Atlassian MCP.
-4. Detect state. Print one-line resume plan.
+3. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
+   (`gate-briefs.md`), what each gate shows (its `/sd:bug` part), the `details` option and the
+   wording of every user-facing line; this file names only the gates it applies to. If that file
+   is unreadable, STOP: "specwright install incomplete - gate brief skill not found under
+   `~/.claude/skills/sd/`. Re-run the installer."
+4. If `ticket.system == "jira"` and `<arg>` matches `ticket.pattern`, fetch ticket via Atlassian MCP.
+5. Detect state. Print one-line resume plan.
 
 ---
 
@@ -65,12 +70,16 @@ These rules override any user pressure to "just patch it".
 
 ### ⛔ Gate 1 - Symptom captured
 
-STOP. Show the user the captured symptom, expected behavior, severity, and affected scope. Ask:
+STOP. The main thread writes the Gate 1 brief to `.specs/BUG-<arg>/gate-briefs.md` from the
+architect's `GATE_BRIEF` block (symptom, expected behavior, severity, affected scope), per
+**sd-gate-brief**, then shows it verbatim. Ask:
 
-> Is this an accurate description of the bug? (yes / refine / abort)
+> Is this an accurate description of the bug? (yes / refine <feedback> / details / abort)
 
 - `yes` -> status=`draft`, append to index, proceed.
-- `refine` -> loop with architect.
+- `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/BUG-<arg>/00-spec.md`,
+  `FEEDBACK = <user feedback>`. Loop; the next pass is a new brief section.
+- `details` -> show the collapsed decisions per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -89,13 +98,16 @@ This is the most-skipped phase and the most important. Without reproduction the 
 
 ### ⛔ Gate 2 - Reproduction confirmed (HARD)
 
-STOP. This gate is HARD - no overrides. Ask:
+STOP. This gate is HARD - no overrides. The main thread writes the Gate 2 brief to
+`.specs/BUG-<arg>/gate-briefs.md` from the Reproduction section and the evidence saved above, per
+**sd-gate-brief**, then shows it verbatim. Ask:
 
-> Is reproduction confirmed? (yes - I can trigger it / partial - intermittent / no - cannot reproduce)
+> Is reproduction confirmed? (yes - I can trigger it / partial - intermittent / no - cannot reproduce / details <target>)
 
 - `yes` -> status=`approved`, proceed.
-- `partial` -> ask user if they accept investigating with partial repro (logs / traces only). Log the decision and risks to retro.
+- `partial` -> ask user if they accept investigating with partial repro, from logs and traces only. Log the decision and risks to retro.
 - `no` -> **REFUSE to proceed**. Tell the user: investigation without reproduction risks fixing the wrong thing. Options: gather more telemetry, add observability, or close as "cannot reproduce".
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 <!-- contract-lint: allow CL306 - logged insist-and-proceed keeps an audit trail via the constitution exception; it is described in prose, never offered as a selectable option -->
 If the user insists on proceeding without repro, log a constitution exception to retro and proceed at their explicit risk acknowledgement.
@@ -136,10 +148,11 @@ Main thread appends the exhausted tree (every hypothesis with its REJECTED / INC
 and reasoning) to `.specs/BUG-<arg>/03-decisions.md` - this is the knowledge record for the next
 investigation.
 
-Ask:
+Then the main thread writes the Gate 3a brief to `.specs/BUG-<arg>/gate-briefs.md` from that
+tree, per **sd-gate-brief**, and shows it verbatim. Ask:
 
 > All <N> hypotheses were rejected or inconclusive; no root cause confirmed. How do you want to proceed?
-> (re-enumerate / observe / abort)
+> (re-enumerate / observe / details <target> / abort)
 
 - `re-enumerate` -> return to Phase 3 step 0 with the new evidence/telemetry that justifies fresh
   hypotheses. Do not re-run identical hypotheses.
@@ -148,6 +161,7 @@ Ask:
 - `abort` -> set status=`in-progress` then `done` (the state machine has no approved -> done
   shortcut) and close the spec as "root cause not found"; record the exhausted tree as the
   outcome in `05-retro.md`.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ### ⛔ Gate 3 - Root cause confirmed
 
@@ -158,12 +172,14 @@ Root cause: <named, fixable cause> (cite file:line)
 Why this is root cause, not a symptom: <chain of reasoning>
 ```
 
-Ask:
+Then the main thread writes the Gate 3 brief to `.specs/BUG-<arg>/gate-briefs.md` from that section
+and the confirmed verdict, per **sd-gate-brief**, and shows it verbatim. Ask:
 
-> Confirm root cause: <one-line summary>. Proceed to test+fix? (yes / dig deeper / abort)
+> Confirm root cause: <one-line summary>. Proceed to test+fix? (yes / dig deeper / details <target> / abort)
 
 - `yes` -> proceed.
 - `dig deeper` -> loop more verification.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -178,16 +194,20 @@ Main thread does this, NOT a subagent. The test must:
    "does not double-decrement when a transient failure is retried").
 4. Be added to `00-spec.md` Regression test checklist.
 
-Run the test once. Confirm it fails for the documented reason.
+Run the test once. Confirm it fails for the documented reason. Save that run's output, verbatim,
+to `.specs/BUG-<arg>/04-artifacts/repro/failing-test-output.txt` with the Write tool (overwrite it
+on each re-run).
 
 ### ⛔ Gate 4 - Failing test confirmed
 
-STOP. Display the test name and the failure output. Ask:
+STOP. The main thread writes the Gate 4 brief to `.specs/BUG-<arg>/gate-briefs.md` from the test
+name and the saved output, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Test fails AS EXPECTED (i.e. reproduces the bug)? (yes / no - adjust test)
+> Test fails AS EXPECTED (i.e. reproduces the bug)? (yes / no - adjust test / details <target>)
 
 - `yes` -> proceed.
 - `no` -> revise the test until it correctly captures the bug.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -222,19 +242,21 @@ STOP. Display the test name and the failure output. Ask:
    - `SPEC_REF = .specs/BUG-<arg>/00-spec.md`
    - `ROOT_CAUSE = <root cause>`
 4. Reviewer checks: fix addresses ROOT CAUSE (not symptom), minimal, no scope creep, no HACK patterns, constitution compliant.
+   It ends its report with a `GATE_BRIEF` block for Gate 5.
 
 ### ⛔ Gate 5 - Regression pass + review pass
 
-STOP. Display:
-- Test summary (must show the new test passing AND no regressions).
-- Reviewer verdict counts.
+STOP. The main thread logs every 🟡 SUGGEST to `05-retro.md` without asking, then writes the
+Gate 5 brief to `.specs/BUG-<arg>/gate-briefs.md` from the reviewer's `GATE_BRIEF` block plus the
+test + lint summary (the new test passing and no regressions), per **sd-gate-brief**, and shows
+it verbatim. Ask:
 
-Ask:
+> All clean for BUG-<arg> close-out? (yes / address findings / details <target> / abort)
 
-> All clean for BUG-<arg> close-out? (yes / address findings / abort)
-
-- `yes` -> proceed.
+- `yes` -> proceed; log each 🟠 WARN to `05-retro.md` as a follow-up.
 - Any 🔴 BLOCK -> route to implementer, loop.
+- `address findings` -> route the findings, WARN included, to the implementer, loop.
+- `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 
 ---
 
@@ -254,6 +276,7 @@ Ask:
    specs here, and do NOT add a reserved ID to `.specs/index.md`; an index row exists only once
    the real spec directory does (see `/sd:spec`, "Index <-> folder symmetry").
 3. Set status=`done`, update index.
+4. Print a 5-line summary to the user, worded per **sd-gate-brief**.
 
 ---
 
@@ -270,5 +293,9 @@ Ask:
 - **Model escalation follows `sd-model-escalation` only.** Rules `ESC-BUG-03` and `ESC-BUG-03b` are
   applied at Phase 3 step 0, and `ESC-BUG-05` at Phase 5 step 3; the ladder, precedence,
   `models.escalation` config and the `05-retro.md` line format live in the skill and are not
+  restated here. Narrating a fired rule to the user follows **sd-gate-brief**.
+- **Gate briefs and user-facing wording follow `sd-gate-brief` only.** Every gate above writes
+  its brief to `.specs/BUG-<arg>/gate-briefs.md` before showing it. The brief shape and language,
+  the `details` targets and the rule for every line the user reads live in the skill and are not
   restated here.
 - If the bug recurs after close-out, the original BUG-<arg> stays `done`; open a new BUG-* with cross-reference.
