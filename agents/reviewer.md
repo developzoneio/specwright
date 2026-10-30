@@ -145,9 +145,9 @@ Inputs: `SPEC_REF` (the port spec carrying the path mapping, member manifest and
 `CHANGED_FILES`, optionally `SNAPSHOT_REF` (`04-artifacts/source/`, for `MANIFEST.md` member
 ranges).
 
-Apply the **sd-port-fidelity** skill's `Hunk classification` and `Whole-artifact checks` sections -
-they define the vocabulary and the two counts; the checklist below is what a complete adjudication
-looks like.
+Apply the **sd-port-fidelity** skill's `Hunk classification`, `Whole-artifact checks` and `Pinning
+files` sections - they define the vocabulary, the two counts and the pinning-diff rule; the
+checklist below is what a complete adjudication looks like.
 
 Checklist:
 - [ ] Every diff file listed in `DIFF_REF` was read. A row you could not open is a 🔴 BLOCK, never a
@@ -161,6 +161,9 @@ Checklist:
 - [ ] Member completeness: reported as `<n>/<total>`, one 🔴 BLOCK per absent row naming its
   `Donor path`, `Member` and `Ordinal`.
 - [ ] Path conformance: one 🔴 BLOCK per changeset file absent from the path mapping table.
+- [ ] Pinning diffs (`Mapping row` `pinning`): not a changeset file, so never a path conformance
+  BLOCK. Read the mechanism from the `## Behavior pinning` section of the sibling
+  `03-decisions.md`; one 🔴 BLOCK per hunk outside what that mechanism lets change.
 - [ ] `justified` hunks counted in the summary line, not written up one by one.
 
 Findings only. The parity gate belongs to the caller, and so does every resolution - you have no

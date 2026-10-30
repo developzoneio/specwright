@@ -277,7 +277,9 @@ section in `03-decisions.md`:
 - `pattern` -> **skipped.** Record `Phase 5 skipped - scope is pattern; there is no donor instance
   to pin against.` The gate below still runs and records the skip; the empty-diff proof still runs.
 
-1. Write the pinning tests under `paths.tests`.
+1. Write the pinning tests under `paths.tests`. Name every file written on a `Pinning files:` line
+   of the `## Behavior pinning` section (`Pinning files: none` when skipped). Phase 8 treats them
+   per `sd-port-fidelity`'s "Pinning files" section.
 2. Invoke `sd-implementer` with:
    - `TASK_DETAILS = <the pinning-test task block>`
    - `SPEC_REF = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
@@ -289,6 +291,9 @@ section in `03-decisions.md`:
    `paths.src` and every `paths.layers[].path`, then `git status --porcelain --` over the same set
    to catch untracked additions. Both must return empty. Save each command and its output (or
    `(empty)`) with the Write tool to `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/pinning/tree-check.txt`.
+5. Once the tests are green, save a copy of each pinning file with the Write tool to
+   `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/pinning/as-pinned/<path, / replaced by __>`. A
+   `re-pin` pass overwrites the copies.
 
 ### ⛔ Gate 3 - Behavior pinned and green (HARD)
 
@@ -430,16 +435,17 @@ Move to the next batch. Repeat until every batch is checked off.
    section: one unified diff per non-`omit` path-mapping row (snapshot side first, host side
    second, at least 3 lines of context), file name = `Host path` with `/` replaced by `__`, suffix
    `.diff`; an all-deletion diff for a row whose host file is absent; an all-addition diff for
-   every changeset file with no mapping row; `INDEX.md` at the parity root, columns `Diff file |
-   Snapshot path | Host path | Mapping row`. Regenerated and overwritten every run - nothing under
-   `parity/` is frozen or appended to `paths.protected`. A row whose diff could not be produced
-   says so in its `Mapping row` cell rather than being dropped.
+   every changeset file with no mapping row; a pinning diff for each file on the `Pinning files:`
+   line; `INDEX.md` at the parity root, columns `Diff file | Snapshot path | Host path | Mapping
+   row`. Regenerated and overwritten every run - nothing under `parity/` is frozen or appended to
+   `paths.protected`. A row whose diff could not be produced says so in its `Mapping row` cell
+   rather than being dropped.
 2. Run `commands.test` and `commands.lint`.
 3. Invoke `sd-reviewer` with:
    - `TASK_TYPE = port-parity`
    - `SPEC_REF = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
    - `DIFF_REF = .specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/parity/INDEX.md`
-   - `CHANGED_FILES = <all host files changed across every batch>`
+   - `CHANGED_FILES = <all host files changed across every batch, less the pinning files>`
    - `SNAPSHOT_REF = .specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/source/`
 4. Save the reviewer's report, without its `GATE_BRIEF` block, with the Write tool to
    `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/parity/REPORT.md`. Like the rest of `parity/`, it is overwritten on every
@@ -462,7 +468,8 @@ hunk is named by its host file and the member it touches.
 > PORT-<slug> parity: <B> BLOCK finding(s). Choose a resolution: (revert-to-snapshot <hunks> / add-deviation <rows> / re-run parity / details <target>)
 
 - `revert-to-snapshot <hunks>` -> route the named hunks to `sd-implementer` to restore the
-  snapshot form, regenerate `04-artifacts/parity/`, re-invoke the reviewer.
+  snapshot form (for a pinning file, its pinned copy), regenerate `04-artifacts/parity/`,
+  re-invoke the reviewer.
 - `add-deviation <rows>` -> route to `sd-spec-architect` (`TASK = refine`) to add rows whose group
   and citation hold up, regenerate, re-invoke.
 - `re-run parity` -> regenerate and re-invoke with no spec or code change.

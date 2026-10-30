@@ -174,8 +174,11 @@ overwrites the previous one.
   what makes a `missing` member visible without the reviewer listing the host tree itself.
 - Every changeset file with no mapping row gets an all-addition diff, named the same way. Path
   conformance is then a property of the diff set rather than a second traversal.
+- Every pinning file (see "Pinning files" below) gets a diff from its pinned copy to its host
+  form, named the same way. It is not a changeset file, so it never gets the all-addition diff.
 - `INDEX.md` at the parity root, one row per diff file: `Diff file`, `Snapshot path`, `Host path`,
-  `Mapping row` (the path mapping row number, or `-` when there is none).
+  `Mapping row` (the path mapping row number, `pinning` for a pinning file, whose `Snapshot path`
+  cell holds its pinned copy, or `-` when there is none).
 
 `INDEX.md` is the reviewer's `DIFF_REF`. A run that cannot produce a diff for a row says so in that
 row's `Mapping row` cell instead of dropping the row - a silently absent row reads as a clean file.
@@ -221,11 +224,31 @@ is the evidence the check ran.
 Both belong to the reviewer rather than to `/sd:verify`, which decides everything from the spec's
 own artifacts and reads no host source - the reasoning is recorded in `docs/architecture.md`.
 
+### Pinning files
+
+The behavior-pinning tests are written under `paths.tests` before any host code exists, and are
+listed on the `Pinning files:` line of the `## Behavior pinning` section of `03-decisions.md`,
+with a pinned copy of each saved under `04-artifacts/pinning/as-pinned/`. They pin the donor's
+behavior; they port nothing, so the path mapping table has no row for them and never needs one.
+
+- **Not changeset files.** A pinning file is left out of the changeset that path conformance
+  reads, even when a task later edited it (re-pointing a characterization test from donor to
+  host is such an edit). Counting it there would block every port that pins, and neither
+  resolution would fit: there is no snapshot form to revert to, and a deviation row for it would
+  be derived from the diff.
+- **Still adjudicated.** Its pinning diff (`Mapping row` `pinning` in `INDEX.md`) is read like any
+  other. The pinned assertions must be the ones Gate 3 approved, so the diff may touch only what
+  the recorded mechanism allows to change: the one construction-seam factory method for
+  characterization tests, the target parameter for a contract suite. Any other hunk is one BLOCK
+  naming the file and what it changed. It is not one of the five classes, and its revert target
+  is the pinned copy, not the snapshot.
+
 ### The parity gate
 
-A HARD gate. Any BLOCK from the classification or from either whole-artifact check refuses
-close-out. Two resolutions exist: revert the host toward the snapshot, or add a deviation row whose
-group and citation hold up, then regenerate the parity artifacts and re-run. There is no third, and
+A HARD gate. Any BLOCK from the classification, from either whole-artifact check, or from a
+pinning diff refuses close-out. Two resolutions exist: revert the host toward the snapshot (a
+pinning file toward its pinned copy), or add a deviation row whose group and citation hold up,
+then regenerate the parity artifacts and re-run. There is no third, and
 no override - a gate that can be waived measures nothing. Deriving the missing rows from the
 unexplained hunks is not a resolution either; it makes the diff justify itself.
 
