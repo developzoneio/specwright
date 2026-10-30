@@ -296,6 +296,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `coverage/` rule in `.gitignore` kept that file out of the SW-108 commit, so CI saw a refactor
   with no evidence past Gate 5 and the stop-gate allowed. The file is now tracked and
   `.gitignore` re-includes `coverage/` under `tests/hooks/fixtures/`. No hook change.
+- **`/sd:verify` reply text carries no rule IDs (SW-116)** - the command told the model to report
+  findings as `VF0xx` and print the whole traceability table, which conflicts with the `sd-gate-brief`
+  "User-facing text" rule when `/sd:verify` runs inside a close-out (seen once: "Verification passed
+  (VF010-VF030...)"). `verify.md` now reads that section in Phase 0 and points at it for the reply:
+  checks, scenarios and criteria are named in plain words, the STOP messages say what is missing, and
+  the reply ends with the path of `06-verify.md`. The artifact is unchanged: it keeps the `VF0xx`
+  IDs, `SC-`/`AC-` IDs and `file:line` citations. Applies to a standalone run as well. `feature.md`
+  close-out no longer names `VF030`. No hook or gate-count change.
 - **`/sd:port` Gate 6 no longer blocks every port on its own pinning tests (SW-117)** - Phase 5
   lists the files it writes on a `Pinning files:` line of `## Behavior pinning` and saves a pinned
   copy of each under `04-artifacts/pinning/as-pinned/`. Phase 8 leaves them out of the changeset
