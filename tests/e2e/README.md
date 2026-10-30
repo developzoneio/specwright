@@ -71,6 +71,14 @@ commit `caad4e1`: 5/5, with all three briefs printed byte-for-byte (8/8, 16/16, 
 internal ID in user-visible text, 7 tasks, 4 turns, 740 s, $2.81. In both multi-turn runs a phase
 that starts right after a gate reply was sometimes not narrated (Phase 6 in both, Phase 4 in M).
 
+**SW-116 runs, 2026-10-30** (Windows, `claude` 2.1.314, subscription token, commit `a160317` plus
+the SW-116 diff): SW-108's verification run had `02` fail only the `\b(SL|VF|CL)\d{3}\b`
+`transcript-not-matches`, at the `/sd:verify` turn ("Verification passed (VF010-VF030...)").
+After `verify.md` pointed its reply text at `sd-gate-brief` "User-facing text", two runs of `02`
+passed 27/27 (324 s, $1.46; 338 s, $1.33). `06-verify.md` was `result: pass` in both. A clean pass
+records `Findings: none`, so the `VF` IDs appear in the artifact only when a finding or
+`VF023` exists (one run had them in a model-added "Checks run" line, the other had none).
+
 ## Prerequisites
 
 The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the

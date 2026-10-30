@@ -336,7 +336,7 @@ Treat findings:
 
 1. Review each `AC-<n>` checkbox in `00-spec.md` against evidence (a passing test, a measured
    value, a reviewer verdict) and check it only with a `file:line` or test citation logged to
-   `.specs/FEAT-<arg>/05-retro.md`. Never tick a box just to make VF030 pass - an unearned
+   `.specs/FEAT-<arg>/05-retro.md`. Never tick a box just to make verification pass - an unearned
    checkbox is a fabricated result, not a shortcut.
 2. Run `/sd:verify FEAT-<arg>`. It must report `result: pass`.
    - On FAIL: address the findings (uncovered criterion -> the plan is incomplete, so enter

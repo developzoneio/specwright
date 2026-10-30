@@ -17,8 +17,8 @@ records `result: pass`. Re-run the command after fixing findings; it overwrites 
 
 | Condition | State | Behavior |
 |---|---|---|
-| Spec folder missing | not-found | STOP with VF001 |
-| `02-tasks.md` missing | not-planned | STOP with VF002 |
+| Spec folder missing | not-found | STOP, saying the spec folder is missing |
+| `02-tasks.md` missing | not-planned | STOP, saying the spec has no task list yet |
 | Otherwise | verifiable | Run all applicable checks, write artifact |
 
 Any status may be verified (verification before `in-progress` is allowed and useful), but the
@@ -34,12 +34,15 @@ artifact only matters to the hook at the `in-progress -> done` transition.
    - `~/.claude/skills/sd/sd-severity-taxonomy/SKILL.md`
    - `~/.claude/skills/sd/sd-evidence-citation/SKILL.md`
    - `~/.claude/skills/sd/sd-atomic-task-format/SKILL.md` (the "Witness test" section)
+   - `~/.claude/skills/sd/sd-gate-brief/SKILL.md` (the "User-facing text" section only). It owns
+     the wording of every line the user reads, this command's reply text included.
 
 ## Checks
 
-Stable rule IDs (report every finding as `VF0xx`, severity per sd-severity-taxonomy, citing
-`file:line` relative to project root). Generic rules apply to all spec types; traceability
-rules apply when the corresponding section exists in `00-spec.md`.
+Stable rule IDs (record every finding in the artifact as `VF0xx`, severity per
+sd-severity-taxonomy, citing `file:line` relative to project root). The IDs belong to the
+artifact; the reply names each check in plain words (see "Output"). Generic rules apply to all
+spec types; traceability rules apply when the corresponding section exists in `00-spec.md`.
 
 | ID | Applies | Check | Severity |
 |---|---|---|---|
@@ -111,7 +114,14 @@ VF023) do not fail the run but must appear under Findings.
 
 ## Output
 
-Print to the user: the traceability table, the findings list, the artifact path, and one of:
+Reply text is user-facing text: it follows the "User-facing text" section of **sd-gate-brief**,
+whether `/sd:verify` runs on its own or inside a workflow close-out, and is not restated here.
+The `VF0xx` IDs, the `SC-<n>` / `AC-<n>` IDs and the `file:line` citations stay in
+`06-verify.md`, the machine record.
+
+Print to the user: a traceability summary (each scenario and criterion by its plain title, the
+tasks that cover it, the tests by name), the findings in plain words (what was checked and what
+failed), the artifact path as the place the full record lives, and one of:
 
 - `[OK] <ID> verified - result: pass recorded in <spec.dir>/<ID>/06-verify.md`
 - `[FAIL] <ID> verification failed (<n> BLOCK findings) - result: fail recorded. Close-out is
@@ -122,4 +132,4 @@ Print to the user: the traceability table, the findings list, the artifact path,
 - Never edit any file except `<spec.dir>/<ID>/06-verify.md`.
 - Never invoke a subagent.
 - Never mark a criterion covered without a concrete task ID + existing test citation.
-- Findings without a `file:line` citation are invalid (sd-evidence-citation).
+- Findings without a `file:line` citation in the artifact are invalid (sd-evidence-citation).
