@@ -90,6 +90,15 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   - **Not reached by the run**, covered by the lint only: the incomplete face of Gate 2, a dirty
     production tree at Gate 3, the red face of Gate 5, Case B of Gate 6, a bridged donor and a plan
     over the split threshold.
+- **Fixed after the second live run (SW-117).** That run went red at 31/33 on two defects.
+  Gate 6 path conformance blocked the Phase 5 pinning test file, which no path mapping row names,
+  so every port that pins landed in Case B with no resolution that fit. `sd-port-fidelity` now
+  defines pinning files: listed on a `Pinning files:` line of `## Behavior pinning`, left out of
+  the changeset path conformance reads, and still adjudicated through a diff from a pinned copy
+  saved at Gate 3. And a valid-targets line showed a bare deviation ID; `sd-gate-brief` now
+  requires its gloss there too. The third run reached Case A and `done`, but its closing summary
+  glossed `D01` in prose and cited a constitution section, so the rule now names the closing
+  summary as well. The fourth run was green, 33/33, Gate 6 Case A ($3.06, 717 s, claude 2.1.314).
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).

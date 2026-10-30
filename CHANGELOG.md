@@ -291,6 +291,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` Gate 6 no longer blocks every port on its own pinning tests (SW-117)** - Phase 5
+  lists the files it writes on a `Pinning files:` line of `## Behavior pinning` and saves a pinned
+  copy of each under `04-artifacts/pinning/as-pinned/`. Phase 8 leaves them out of the changeset
+  path conformance reads and gives each a diff from its pinned copy; the reviewer blocks a hunk
+  outside what the pinning mechanism lets change (`sd-port-fidelity` "Pinning files"). A deviation
+  ID in a valid-targets line or the closing summary now carries its `donor -> host` gloss
+  (`sd-gate-brief`). ADR 0028 consequences updated.
 - **`run-e2e.ps1` no longer copies your CLI credentials by default (SW-106)** - it copied the real
   `~/.claude/.credentials.json` into every fake home whenever the file existed. A copy forks a
   single-use OAuth refresh token, so a sandbox run that refreshed it could log out the real CLI
