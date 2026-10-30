@@ -98,6 +98,8 @@ gradle/
 
 # ---- Misc build outputs ----
 coverage/
+# Hook fixtures carry a spec's 04-artifacts/coverage/ evidence on purpose (SW-118)
+!tests/hooks/fixtures/**/coverage/
 .nyc_output/
 tmp/
 temp/

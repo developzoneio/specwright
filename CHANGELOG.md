@@ -291,6 +291,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **Hook conformance is green again on `develop/v1` (SW-118)** - the `block-ref-g5-revert-only`
+  fixture needs `04-artifacts/coverage/after-refactor.txt` as its later-phase evidence, but the
+  `coverage/` rule in `.gitignore` kept that file out of the SW-108 commit, so CI saw a refactor
+  with no evidence past Gate 5 and the stop-gate allowed. The file is now tracked and
+  `.gitignore` re-includes `coverage/` under `tests/hooks/fixtures/`. No hook change.
 - **`/sd:port` Gate 6 no longer blocks every port on its own pinning tests (SW-117)** - Phase 5
   lists the files it writes on a `Pinning files:` line of `## Behavior pinning` and saves a pinned
   copy of each under `04-artifacts/pinning/as-pinned/`. Phase 8 leaves them out of the changeset
