@@ -82,10 +82,21 @@ records `Findings: none`, so the `VF` IDs appear in the artifact only when a fin
 **SW-91 runs, 2026-10-30** (Windows, `claude` 2.1.314, subscription token, commit `6b4c7dc` plus
 the SW-91 diff): the three close-out scenarios passed on their first run - `18-closeout-quiet`
 14/14, `19-closeout-followup` 12/12, `20-closeout-unearned` 13/13. `02-feature-happy` passed 27/27
-after the Phase 6 rewrite, and `-SelfTest` detected all four mutated guards. Run costs were not
-recorded. In `18` the absence of a question is shown by the run reaching `done` in one turn, since
-a question would have ended the turn first; `19` is the only scenario that asserts a question was
-asked.
+after the Phase 6 rewrite, and `-SelfTest` detected all four mutated guards. A second run at commit
+`dc6fe39` passed all three again with the figures below (the first run's costs were not recorded):
+
+| Scenario | Assertions | Turns | Cost | Duration |
+|---|---|---|---|---|
+| `18-closeout-quiet` | 14/14 | 1 | $0.39 | 54 s |
+| `19-closeout-followup` | 12/12 | 2 | $0.46 | 65 s |
+| `20-closeout-unearned` | 13/13 | 1 | $0.46 | 67 s |
+
+The absence of a question in `18` is shown two ways: the run reaches `done` in one turn, since a
+question would have ended the turn first, and its kept transcript holds the question sentence only
+in the user message (the expanded command text) and the API request, never in an assistant text
+block. The `19` transcript holds the same two lines plus one `assistant` text block, the question
+itself. Counting raw lines of the sentence does not discriminate, because the command text carries
+it; classify the line's `type` instead.
 
 ## Prerequisites
 
