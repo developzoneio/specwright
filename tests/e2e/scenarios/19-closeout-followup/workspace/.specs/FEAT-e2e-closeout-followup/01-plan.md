@@ -1,0 +1,8 @@
+# Plan - FEAT-e2e-closeout-followup
+
+Seeded plan for tests/e2e scenario 19. Gate 2 already passed (status `in-progress`).
+
+## Approach
+
+Add two read-only query methods to `TodoService`, each derived from `listTodos()`, each with its
+own test in `tests/todo-service.test.js`. Both tasks have been executed and checked off.

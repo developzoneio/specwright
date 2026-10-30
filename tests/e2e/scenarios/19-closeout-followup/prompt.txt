@@ -1,0 +1,16 @@
+/sd:feature e2e-closeout-followup
+
+FEAT-e2e-closeout-followup is a synthetic fixture spec seeded by this e2e scenario. It is `in-progress`,
+every task is checked off, and Gate 3 was already approved (the `Reply: yes` is in
+`gate-briefs.md`). Detect where to resume from the workflow's state machine exactly as written. The
+review raised one warning, already logged in `05-retro.md` as a deferred follow-up.
+
+This is a headless, scripted test run with no human available to reply mid-workflow. If the
+workflow asks the user a question, stop and wait for the reply instead of answering it yourself.
+Otherwise run the workflow through close-out, including `/sd:verify`, and report the final spec ID
+and its status.
+
+This run grants shell access narrowly and refuses the rest, for you and for every subagent you
+start. The project's test command is allowed only as plain `npm test` (or `npm run test`) run from
+the project root. Make every change to a file under `.specs/` with the Edit or Write tool. Tell
+each subagent you start the same.

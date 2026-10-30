@@ -1,0 +1,14 @@
+[
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-followup/00-spec.md", "pattern": "(?m)^status:\\s*done\\s*$" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-closeout-followup\\s*\\|\\s*feature\\s*\\|\\s*done" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-followup/00-spec.md", "pattern": "(?m)^- \\[ \\] AC-" },
+  { "type": "file-exists", "path": ".specs/FEAT-e2e-closeout-followup/06-verify.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-followup/06-verify.md", "pattern": "(?im)^result:\\s*pass\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-followup/05-retro.md", "pattern": "(?m)^[-*\\s]*Follow-up question:\\s*1 deferred\\.\\s*Reply:\\s*yes\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-followup/05-retro.md", "pattern": "(?s)Follow-up question:.*Follow-up question:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-followup/00-spec.md", "pattern": "(?m)^\\|\\s*(FEAT|BUG|REF|PERF|RCA|PORT)-[^|\\n]+\\|" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-followup/00-spec.md", "pattern": "(?m)^\\|\\s*[A-Z]+-[^\\n]*\\n\\|\\s*[A-Z]+-" },
+  { "type": "file-not-matches", "path": ".specs/index.md", "pattern": "(?m)^\\|\\s*(FEAT|BUG|REF|PERF|RCA|PORT)-(?!todo-priority|e2e-closeout-followup)" },
+  { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" }
+]

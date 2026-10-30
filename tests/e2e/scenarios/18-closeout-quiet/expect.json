@@ -1,0 +1,16 @@
+[
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-quiet/00-spec.md", "pattern": "(?m)^status:\\s*done\\s*$" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-closeout-quiet\\s*\\|\\s*feature\\s*\\|\\s*done" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-quiet/00-spec.md", "pattern": "(?m)^- \\[ \\] AC-" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-quiet/00-spec.md", "pattern": "(?m)^- \\[[xX]\\] AC-1:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-quiet/00-spec.md", "pattern": "(?m)^- \\[[xX]\\] AC-2:" },
+  { "type": "file-exists", "path": ".specs/FEAT-e2e-closeout-quiet/06-verify.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-quiet/06-verify.md", "pattern": "(?im)^result:\\s*pass\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-quiet/05-retro.md", "pattern": "(?m)^[-*\\s]*AC-1:.*T01" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-quiet/05-retro.md", "pattern": "(?m)^[-*\\s]*AC-2:.*T02" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-quiet/05-retro.md", "pattern": "Follow-up question:" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-quiet/00-spec.md", "pattern": "(?m)^\\|\\s*(FEAT|BUG|REF|PERF|RCA|PORT)-" },
+  { "type": "file-not-matches", "path": ".specs/index.md", "pattern": "(?m)^\\|\\s*(FEAT|BUG|REF|PERF|RCA|PORT)-(?!todo-priority|e2e-closeout-quiet)" },
+  { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" }
+]

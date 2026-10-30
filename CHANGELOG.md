@@ -257,6 +257,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `02-feature-happy` asserts it.
 
 ### Changed
+- **Quiet `/sd:feature` close-out - at most one question (SW-91)** - Phase 6 collects AC
+  evidence itself: an `AC-<n>` box is ticked, with a citation in `05-retro.md`, only when every
+  covering task is `done`, has an existing witness test and the Gate 3 suite was green; otherwise
+  it stays unchecked, is reported, and `/sd:verify` still fails on the unchecked criterion.
+  Deferred follow-ups go to `05-retro.md` without asking. The old per-item "reserve an ID?"
+  prompt is replaced by one question, asked only when there is at least one:
+  `N follow-ups were deferred - reserve spec IDs? (yes / no)`. The state machine gains a
+  `review-passed` row (all tasks checked and an approving `Reply:` in the Gate 3 section) that
+  resumes at Phase 6. Three seeded e2e scenarios cover it: `18-closeout-quiet` (zero questions),
+  `19-closeout-followup` (exactly one) and `20-closeout-unearned` (an uncovered criterion stays
+  unchecked and verify fails).
 - **Lean task format - five core fields (SW-93, ADR 0023)** - `sd-atomic-task-format`'s task
   block now requires only `Files`, `Acceptance`, `Covers`, `Depends on` and `Status`. Reconciled
   with ADR 0022's outline shape rather than redesigned. Changes:
