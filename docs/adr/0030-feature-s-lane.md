@@ -1,4 +1,4 @@
-# ADR 0024: S lane for /sd:feature - one combined approval, bounded discovery, automatic fallback
+# ADR 0030: S lane for /sd:feature - one combined approval, bounded discovery, automatic fallback
 
 - Status: accepted
 - Date: 2026-10-26
@@ -6,7 +6,8 @@
 - Relates to: ADR 0016 (the stop-gate invariant table that hosts the gate evidence rules); ADR 0021
   (stop-gate's `/sd:feature` rules, amended here); ADR 0022 (the outline-first plan, amended here
   for the S lane's status timing and resume rows); ADR 0023 (the lean task format the S lane
-  expands to, unchanged); ADR 0002 (the decompose thresholds, which keep governing M and L)
+  expands to, unchanged); ADR 0002 (the decompose thresholds, which keep governing M and L);
+  ADR 0029 (the label-generic brief reader the `## Gate 1+2` heading is parsed by)
 - Supersedes: none. Amends ADR 0021's parse contract and FEAT-G1/FEAT-G2 rows by one heading form,
   and ADR 0022's rule that the outline is written after Gate 1.
 

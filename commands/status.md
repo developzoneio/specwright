@@ -124,7 +124,7 @@ Skipped entirely for a plain `/sd:status` invocation - the default read contract
 passed, additionally glob `<spec.dir>/*/02-tasks.md`, `<spec.dir>/*/03-decisions.md` and
 `<spec.dir>/*/05-retro.md` for every spec directory present, at any lifecycle status - a thin corpus
 needs every data point it has, not only `done` ones. A spec with no `03-decisions.md` is normal, not
-an error: the S lane (ADR 0024) never writes one.
+an error: the S lane (ADR 0030) never writes one.
 
 For each spec directory found, from `02-tasks.md`:
 - **Tasks**: count `### T<NN>` headings, tolerant of the `✅`-prefixed variant (`### ✅ T01`) per

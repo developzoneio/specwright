@@ -318,7 +318,7 @@ fpayload="$(printf '{"session_id":"smoke-stop-feat","cwd":"%s","transcript_path"
 # feat_state <status> <T01 status|''> <06-verify result|''> <briefs>
 # <briefs> is '-' for no gate-briefs.md (a spec from before SW-89), else
 # space-separated gate=reply pairs; an empty reply leaves that section open.
-# The gate key 12 writes the S lane's combined `## Gate 1+2` heading (ADR 0024).
+# The gate key 12 writes the S lane's combined `## Gate 1+2` heading (ADR 0030).
 feat_state() {
     local g n
     rm -f "$fd"/*.md

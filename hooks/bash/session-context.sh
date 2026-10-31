@@ -301,7 +301,7 @@ phase_hint() {
     case "${status}" in
         draft)
             # An outline written before approval is the S lane's combined
-            # spec and outline gate (ADR 0024); a fallen-back S spec keeps its
+            # spec and outline gate (ADR 0030); a fallen-back S spec keeps its
             # draft outline under a different heading, so it never matches.
             if has_outline "${plan}"; then
                 printf '%s' 'open gate: spec and plan approval'

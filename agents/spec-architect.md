@@ -133,7 +133,7 @@ decompose decided - before a full task block exists.
 
 ### S-lane outline (`STEP = outline` with `LANE = s`)
 
-`/sd:feature` Phase 1S (ADR 0024). The spec is still `draft`, nothing is approved, and no `IMPACT`
+`/sd:feature` Phase 1S (ADR 0030). The spec is still `draft`, nothing is approved, and no `IMPACT`
 exists. Do everything `STEP = outline` says except where this section differs.
 
 - **Bounded discovery.** Before writing, run at most 2 Glob/Grep rounds (a round is one batch of

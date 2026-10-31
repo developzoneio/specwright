@@ -1,5 +1,5 @@
 ---
-description: Spec-driven feature workflow. Spec -> impact -> outline (complexity triage) -> expand -> execute -> batch review -> close. 3 hard gates.
+description: Spec-driven feature workflow. Spec -> impact -> outline (complexity triage; S lane: one combined approval) -> expand -> execute -> batch review -> close. 3 hard gates.
 argument-hint: <JIRA-ID or slug>
 ---
 
@@ -45,7 +45,7 @@ reads exactly as it did. Such a spec at `plan-drafted` presents its plan for Gat
 `02-tasks.md` as before.
 
 **S lane** means: the `complexity` frontmatter of `00-spec.md` is `S` **and** `05-retro.md` has no
-`s-lane: fallback` line (ADR 0024). The three S rows are checked first, before the rows they refine;
+`s-lane: fallback` line (ADR 0030). The three S rows are checked first, before the rows they refine;
 every other row keeps its condition. An M or L spec, and an S spec that is already `approved` or
 later, can match none of them, so they resolve exactly as before. `## Outline` is the exact
 heading: the `## Outline (S-lane draft)` section a fallen-back S spec keeps is not it, so a fallen-back
@@ -122,7 +122,7 @@ Ask:
 ## Phase 1S - S lane (complexity S only)
 
 Applies when the spec is on the S lane (see the state machine). It replaces Phase 2 and Phase 3a for
-this spec and ends at Face S of Gate 1 (ADR 0024). The S limits live in **sd-spec-templates**
+this spec and ends at Face S of Gate 1 (ADR 0030). The S limits live in **sd-spec-templates**
 ("S-lane thresholds"); this file never restates them. No model escalation rule applies: the rules
 of **sd-model-escalation** that read `complexity` fire on `L`, and this lane runs only for `S`.
 

@@ -90,7 +90,7 @@ Why each row exists:
   Phase 3a would rewrite the outline the user just approved, which is immutable. The two rows
   escalate two different invocations, so a spec sized `L` that is approved through `no-split` gets
   one line for each.
-- **The S lane has no row of its own** (ADR 0024). Its outline invocation (`/sd:feature` Phase 1S)
+- **The S lane has no row of its own** (ADR 0030). Its outline invocation (`/sd:feature` Phase 1S)
   replaces Phase 2 and Phase 3a and has no step 0, so `ESC-FEAT-02` and `ESC-FEAT-03` cannot apply:
   both read `complexity: L`, and the lane runs only for `S`. A spec that falls back to the full path
   still reads `S`, so its Phase 2 and Phase 3a run at the default models. `ESC-FEAT-03b` keys on

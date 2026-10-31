@@ -302,7 +302,7 @@ function Get-PhaseHint {
     switch -CaseSensitive ($Status) {
         'draft' {
             # An outline written before approval is the S lane's combined spec
-            # and outline gate (ADR 0024); a fallen-back S spec keeps its draft
+            # and outline gate (ADR 0030); a fallen-back S spec keeps its draft
             # outline under a different heading, so it never matches.
             if (Test-HasOutline -PlanFile $planFile) { return 'open gate: spec and plan approval' }
             return 'open gate: spec approval'

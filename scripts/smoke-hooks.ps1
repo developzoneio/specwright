@@ -348,7 +348,7 @@ function Set-FeatState {
     $text = "# Gate briefs - FEAT-SMOKE-2`n"
     foreach ($g in ($Briefs -split ' ')) {
         $gate, $reply = $g -split '=', 2
-        # The gate key 12 writes the S lane's combined `## Gate 1+2` heading (ADR 0024).
+        # The gate key 12 writes the S lane's combined `## Gate 1+2` heading (ADR 0030).
         if ($gate -eq '12') { $gate = '1+2' }
         $text += "`n## Gate $gate - smoke (pass 1)`n`nApprove? (yes / abort)`n"
         if ($reply) { $text += "`nReply: $reply`n" }
