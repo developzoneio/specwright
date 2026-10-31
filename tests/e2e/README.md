@@ -98,6 +98,22 @@ block. The `19` transcript holds the same two lines plus one `assistant` text bl
 itself. Counting raw lines of the sentence does not discriminate, because the command text carries
 it; classify the line's `type` instead.
 
+**SW-94 runs, 2026-10-31** (Windows, `claude` 2.1.316, subscription token): both S-lane
+scenarios passed on their first run. `22` ran at `db119bd` with the scenario still uncommitted
+in the working tree, and `21` ran at `4c2d7da`. The harness installs the working tree, so both
+ran the same content.
+
+| Scenario | Assertions | Turns | Cost | Duration |
+|---|---|---|---|---|
+| `21-feature-s-lane` | 16/16 | 2 | $0.79 | 138 s |
+| `22-feature-s-fallback` | 10/10 | 1 | $0.46 | 64 s |
+
+In `22` the outline fell back on one limit alone: the retro line reads `s-lane: fallback to full
+path - layers 3 > 1 (Domain, Application, Infrastructure)`. In `21` the one `yes` at Face S wrote
+a single `## Gate 1+2` section, and `events.jsonl` recorded both `draft -> approved` and
+`approved -> in-progress` from it. `02-feature-happy` has not been re-run since it was pinned to
+`complexity: M`.
+
 ## Prerequisites
 
 The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the
