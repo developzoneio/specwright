@@ -1,0 +1,15 @@
+[
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/00-spec.md", "pattern": "(?m)^- \\[ \\] AC-3:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/00-spec.md", "pattern": "(?m)^- \\[[xX]\\] AC-1:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/00-spec.md", "pattern": "(?m)^- \\[[xX]\\] AC-2:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/00-spec.md", "pattern": "(?m)^status:\\s*in-progress\\s*$" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-closeout-unearned\\s*\\|\\s*feature\\s*\\|\\s*in-progress" },
+  { "type": "file-not-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-closeout-unearned\\s*\\|\\s*feature\\s*\\|\\s*done" },
+  { "type": "file-exists", "path": ".specs/FEAT-e2e-closeout-unearned/06-verify.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/06-verify.md", "pattern": "(?im)^result:\\s*fail\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/06-verify.md", "pattern": "VF030" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-closeout-unearned/05-retro.md", "pattern": "(?m)^[-*\\s]*AC-3:\\s*unchecked" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-unearned/05-retro.md", "pattern": "(?m)^[-*\\s]*AC-3:(?!\\s*unchecked)" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-closeout-unearned/05-retro.md", "pattern": "Follow-up question:" },
+  { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" }
+]

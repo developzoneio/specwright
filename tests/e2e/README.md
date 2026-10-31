@@ -79,6 +79,25 @@ passed 27/27 (324 s, $1.46; 338 s, $1.33). `06-verify.md` was `result: pass` in 
 records `Findings: none`, so the `VF` IDs appear in the artifact only when a finding or
 `VF023` exists (one run had them in a model-added "Checks run" line, the other had none).
 
+**SW-91 runs, 2026-10-30** (Windows, `claude` 2.1.314, subscription token, commit `6b4c7dc` plus
+the SW-91 diff): the three close-out scenarios passed on their first run - `18-closeout-quiet`
+14/14, `19-closeout-followup` 12/12, `20-closeout-unearned` 13/13. `02-feature-happy` passed 27/27
+after the Phase 6 rewrite, and `-SelfTest` detected all four mutated guards. A second run at commit
+`dc6fe39` passed all three again with the figures below (the first run's costs were not recorded):
+
+| Scenario | Assertions | Turns | Cost | Duration |
+|---|---|---|---|---|
+| `18-closeout-quiet` | 14/14 | 1 | $0.39 | 54 s |
+| `19-closeout-followup` | 12/12 | 2 | $0.46 | 65 s |
+| `20-closeout-unearned` | 13/13 | 1 | $0.46 | 67 s |
+
+The absence of a question in `18` is shown two ways: the run reaches `done` in one turn, since a
+question would have ended the turn first, and its kept transcript holds the question sentence only
+in the user message (the expanded command text) and the API request, never in an assistant text
+block. The `19` transcript holds the same two lines plus one `assistant` text block, the question
+itself. Counting raw lines of the sentence does not discriminate, because the command text carries
+it; classify the line's `type` instead.
+
 ## Prerequisites
 
 The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the
@@ -620,6 +639,10 @@ and exits 1.
 | 15 | `15-rca-gate-brief` | `/sd:rca` from the raw evidence in the prompt and a seeded incident log (`InMemoryStore.save` leaves `#nextId` at 1 after a snapshot restore), run fresh under `models.escalation.ceiling: "sonnet"` so the `severity: P0` rule fires but is capped. Gates 1, 2 and 3 each get a `yes` from `replies.txt`. `gate-briefs.md` has a section for each of them, a `Reply: yes`, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn. The spec has no unfilled tree or root cause field, the index row reaches `done`, and `store.js` is unchanged. The spec ID carries the run's date, so its paths use a wildcard (SW-111). The capped retro line stays with `11`. |
 | 16 | `16-perf-gate-brief` | `/sd:perf` on a seeded quadratic de-duplication in `InMemoryStore.list` (`bench/list-bench.js` measures `listTodos` over 3000 todos, about 15 ms at p95 against a goal of 2 ms), one hotspot and one hypothesis. Gates 1 to 8 each get a reply from `replies.txt` (`yes`, `yes`, `choose H1`, `choose H1a`, `yes`, `keep`, `yes`, `yes`). `gate-briefs.md` has a section for each of them, a `Reply:` for each kind, no `ESC-*`, lint or verify rule ID and no `path:line`, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn. The baseline, attempt and final measurements and the attempt and final test output are saved under `04-artifacts/`, the Results log has a `kept` row, `store.js` lost the de-duplication, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-110). Not reached by this run, and covered by the contract lint only: Gate 2 with the baseline already at the goal, the red face of Gate 5, Gate 6 within noise, the `Already reverted` line of Gate 4, a second hotspot, and the narration of the two model escalation rules. |
 | 17 | `17-port-gate-brief` | `/sd:port` with an in-repo donor (`src/legacy/title-format.js`, two functions and a `_WHITESPACE` constant) ported to `src/domain/title-format.js` at scope `module`, so the extraction escalates without GitNexus and that escalation is narrated in plain words. The run first makes the workspace a git repository, which the empty-diff proof needs. It runs under skip-permissions, as `01-setup` does: the freeze appends to `paths.protected` in `.claude/project-config.json`, which no grant opens (re-probed for SW-112). The host constitution forbids the `_` privacy prefix, which forces one deviation; everything else mirrors. Gates 1 to 6 each get a reply from `replies.txt` (`yes` four times, `continue` at the batch, `yes` at parity). `gate-briefs.md` has a section for each of them, a `Reply:` for each kind, no `ESC-*`, lint or verify rule ID, no `path:line`, no constitution section sign and no deviation ID without its `donor -> host` gloss, and every section's shown lines appear verbatim in the main thread's reply text, which itself carries none of those IDs in any turn. The snapshot manifest is frozen into `paths.protected`, the pinning output, empty-diff proof, batch output, parity index and parity report are saved under `04-artifacts/`, the donor is unchanged, the host file exists without the prefix, and the index row reaches `done`. The spec ID carries the run's date, so its paths use a wildcard (SW-112). Not reached by this run, and covered by the contract lint only: the incomplete face of Gate 2, a dirty production tree at Gate 3, the red face of Gate 5, Case B of Gate 6, a bridged donor and a plan over the split threshold. |
+
+| 18 | `18-closeout-quiet` | `/sd:feature` resumed at Phase 6 (the `review-passed` state) on a seeded spec with both tasks `done`, Gate 3 approved and no warnings. Close-out asks nothing: the run ends in one turn with the spec and index row at `done`, every `AC-` box ticked with a citation line naming its task, `06-verify.md` at `result: pass`, no `Follow-up question:` line, and `## Spawned specs` still header-only (SW-91). A question would end the turn before the spec reached `done`. |
+| 19 | `19-closeout-followup` | Same resume with one Gate 3 warning already logged as a deferred follow-up. Close-out asks exactly one question and `yes` from `replies.txt` answers it: the retro holds one `Follow-up question: 1 deferred. Reply: yes` line, `## Spawned specs` has exactly one data row, `.specs/index.md` gains no reserved-ID row, and the spec reaches `done` (SW-91). |
+| 20 | `20-closeout-unearned` | Same resume with an `AC-3` that no task covers. The box stays unchecked, the retro logs `AC-3: unchecked`, `06-verify.md` is `result: fail` and records the unchecked-criterion finding, the spec and index row stay `in-progress`, and no follow-up question is asked (SW-91). |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the

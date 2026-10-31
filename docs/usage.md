@@ -424,8 +424,9 @@ Now `/sd:spec show BUG-1310` reveals the parent RCA.
 
 Every spec type now carries a `## Spawned specs` table - `Reserved ID | Type | Title | Owner` -
 the same one the RCA has always had. Close-out in `/sd:feature`, `/sd:bug`, `/sd:refactor` and
-`/sd:perf` prompts for it whenever the retro names something deferred. It is a prompt, not a gate:
-an empty table is a legitimate answer.
+`/sd:perf` prompts for it whenever the retro names something deferred; `/sd:feature` asks once for
+all of them (`N follow-ups were deferred - reserve spec IDs? (yes / no)`) and asks nothing when
+none were deferred. It is a prompt, not a gate: an empty table is a legitimate answer.
 
 A reserved ID is a **placeholder, not a registry entry**. It does not go in `.specs/index.md` and
 it does not go in `linked_specs` until the child spec actually exists:

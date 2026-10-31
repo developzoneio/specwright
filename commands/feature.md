@@ -25,7 +25,8 @@ On re-invocation with the same `<arg>`, detect the current state of `.specs/FEAT
 | status=`approved`, `02-tasks.md` exists | `plan-drafted` | Present plan for Gate 2 |
 | status=`in-progress`, `01-plan.md` has `## Outline`, no `02-tasks.md` | `outline-approved` | Start Phase 3b |
 | `02-tasks.md` exists, unchecked tasks remain | `in-progress` | Resume Phase 4 at next unchecked task |
-| All tasks checked, no integration pass | `tasks-complete` | Start Phase 5 |
+| status=`in-progress`, all tasks checked, no approving `Reply:` in a `## Gate 3` section of `gate-briefs.md` | `tasks-complete` | Start Phase 5 |
+| status=`in-progress`, all tasks checked, the last `Reply:` in a `## Gate 3` section of `gate-briefs.md` approves | `review-passed` | Start Phase 6 |
 | status=`done` | `done` | Print summary, exit |
 | status=`archived`, spawned children (has `spawns` links) | `umbrella` | Print the child IDs + `/sd:feature <child-arg>` for each, in dependency order; exit |
 | status=`archived` | `archived` | Print archived notice, exit |
@@ -334,36 +335,60 @@ Treat findings:
 
 ## Phase 6 - Close-out
 
-1. Review each `AC-<n>` checkbox in `00-spec.md` against evidence (a passing test, a measured
-   value, a reviewer verdict) and check it only with a `file:line` or test citation logged to
-   `.specs/FEAT-<arg>/05-retro.md`. Never tick a box just to make verification pass - an unearned
-   checkbox is a fabricated result, not a shortcut.
+Close-out does its bookkeeping silently and asks at most one question (step 4).
+
+1. **Collect AC evidence (no question).** For each `AC-<n>` line in `00-spec.md`, the covering
+   tasks are the `02-tasks.md` blocks whose `Covers` lists it (parsing shapes as in `/sd:verify`).
+   The evidence exists only when all of these hold: at least one covering task exists and every
+   covering task is at the `done` check-off marker; each covering task has a witness test, as
+   defined by the "Witness test" section of **sd-atomic-task-format**, and the file it names
+   exists (Glob); and the Gate 3 brief's `Tests:` line records the Phase 5a suite as passing.
+   - Evidence exists: check the box, and log `AC-<n>: <task IDs> - <witness test path(s)>; full
+     suite green at Gate 3` under `## Close-out (Phase 6)` in `.specs/FEAT-<arg>/05-retro.md`.
+   - Evidence is missing: leave the box unchecked, log `AC-<n>: unchecked - <what is missing>`,
+     and report it in plain words.
+
+   Never tick a box just to make verification pass - an unearned checkbox is a fabricated result,
+   not a shortcut. This step collects evidence and never creates it: a task title, a plan line or
+   a reviewer remark is not evidence.
 2. Run `/sd:verify FEAT-<arg>`. It must report `result: pass`.
    - On FAIL: address the findings (uncovered criterion -> the plan is incomplete, so enter
      **Gate Re-plan** (Phase 4) with `Phase: verify`, scoped to the task that will cover it, then
      resume Phase 4 at that task; never edit the approved outline or append a block by hand;
      failing tests -> back to Phase 4; unchecked `AC-<n>` criterion with real evidence already
-     in hand -> gather the citation and check the box per step 1; unchecked criterion with no
+     in hand but not readable by step 1 (a measured value, a reviewer verdict) -> cite it in
+     `05-retro.md` and check the box, with no question; unchecked criterion with no
      evidence yet -> route back to the phase that produces it, e.g. Phase 4 for an untested
      behavior). Re-run until it passes. Do NOT proceed on fail - the spec-gate hook will block
      step 5 without a passing `06-verify.md`.
-3. Append to `.specs/FEAT-<arg>/05-retro.md`:
+3. Append to `.specs/FEAT-<arg>/05-retro.md`, asking nothing:
    - Tasks completed (count + IDs).
    - Surprises encountered.
-   - Deferred follow-ups (with reserved spec IDs, if any).
+   - Deferred follow-ups, one line each: every Gate 3 warning logged as a follow-up, plus any
+     work in the surprises that has no home (a defect left in place on purpose, a rule or doc
+     found stale, a "separate spec" hand-off, a hotspot not taken).
    - Constitution exceptions taken (should be none).
    - Cost rough estimate if available.
-4. **Spawned specs**: re-read the "Deferred follow-ups" and "Surprises encountered" entries just
-   written to 05-retro.md and look for follow-up work that has no home: a defect left in place on
-   purpose, a rule or doc found stale, a "separate spec" hand-off, a hotspot not taken. For each
-   one, ask the user to reserve an ID and add a row to `00-spec.md`'s `## Spawned specs` table
-   (`Reserved ID | Type | Title | Owner`). This is a prompt, not a gate: nothing deferred, or the
-   user declines - leave the table at header + separator and proceed. Do NOT create the child
-   specs here, and do NOT add a reserved ID to `.specs/index.md`; an index row exists only once
-   the real spec directory does (see `/sd:spec`, "Index <-> folder symmetry").
+4. **Reserve spec IDs (at most one question).** Let N be the number of deferred follow-ups
+   written in step 3 that have no reserved ID.
+   - N = 0: ask nothing and leave `00-spec.md`'s `## Spawned specs` table at header + separator.
+   - N >= 1: list each follow-up's plain title, one per line, then ask once:
+
+     > <N> follow-ups were deferred - reserve spec IDs? (yes / no)
+
+     `yes` adds one row per follow-up to the `## Spawned specs` table
+     (`Reserved ID | Type | Title | Owner`, Owner `unassigned`) with no further question. `no`
+     leaves the table at header + separator.
+   - Whenever N >= 1, append `- Follow-up question: <N> deferred. Reply: <reply verbatim>` to
+     `05-retro.md`.
+
+   This is a prompt, not a gate: it has no STOP block and adds nothing to the gate count. Do NOT
+   create the child specs here, and do NOT add a reserved ID to `.specs/index.md`; an index row
+   exists only once the real spec directory does (see `/sd:spec`, "Index <-> folder symmetry").
 5. Set frontmatter status=`done` in `00-spec.md`.
 6. Update `.specs/index.md`: state -> `done`, completion date.
-7. Print a 5-line summary to the user, worded per **sd-gate-brief**.
+7. Print a 5-line summary to the user, worded per **sd-gate-brief**. It states the follow-up count
+   or the reserved IDs, and any criterion left unchecked, inside those 5 lines.
 
 ---
 
