@@ -121,9 +121,10 @@ present only lines that have data behind them - omit an empty friction section r
 
 Skipped entirely for a plain `/sd:status` invocation - the default read contract (`events.jsonl` +
 `index.md`) is unchanged, and Phases 1-3 above already ran unmodified. When `--calibration` is
-passed, additionally glob `<spec.dir>/*/02-tasks.md` and `<spec.dir>/*/03-decisions.md` for every
-spec directory present, at any lifecycle status - a thin corpus needs every data point it has, not
-only `done` ones.
+passed, additionally glob `<spec.dir>/*/02-tasks.md`, `<spec.dir>/*/03-decisions.md` and
+`<spec.dir>/*/05-retro.md` for every spec directory present, at any lifecycle status - a thin corpus
+needs every data point it has, not only `done` ones. A spec with no `03-decisions.md` is normal, not
+an error: the S lane (ADR 0030) never writes one.
 
 For each spec directory found, from `02-tasks.md`:
 - **Tasks**: count `### T<NN>` headings, tolerant of the `✅`-prefixed variant (`### ✅ T01`) per
@@ -143,6 +144,15 @@ From the already-loaded `events.jsonl` (fixed key order, same exact-substring co
 - **Complexity-gate splits**: `grep -c '"gate":"complexity","decision":"split"'`. This is an
   inferred signal, not a direct observation - see `docs/architecture.md` "Event log" for what it
   can and cannot detect (it never sees a bare trip, only a completed split).
+
+From each `05-retro.md` (never from `events.jsonl`):
+- **S-lane fallbacks**: the number of spec directories whose `05-retro.md` has a line starting
+  `s-lane: fallback to full path` (a leading `-` or `*` bullet and backticks are tolerated), out of
+  the number of specs whose `00-spec.md` has `complexity: S`. This is the one signal that tunes the
+  S limits in the **sd-spec-templates** skill ("S-lane thresholds"): a high ratio means the
+  estimate or the limits are too tight. Render `0 of <n>` when none fell back; a count that could
+  not be produced is said so, not shown as `0`. An S spec on the S lane shows `draft -> approved` and
+  `approved -> in-progress` back to back in the lifecycle table: those two rows are one approval.
 
 **Sample-size framing.** Let *n* be the number of spec directories found. When *n* is below the
 CONTRIBUTING re-calibration trigger (20 closed specs), render every computed number - never hide a
@@ -201,6 +211,7 @@ Extensions seen on code-edit gates: .cs (12), .ts (4)
 
 Complexity-gate splits observed: <count> (inferred from index.md, not a direct trip observation -
 see docs/architecture.md "Event log")
+S-lane fallbacks observed: <k> of <n> S specs (from 05-retro.md)
 ```
 
 Degrade states render the same skeleton with the metrics sections replaced by exactly one labelled
@@ -226,6 +237,6 @@ Each names the reason and the path, so "quiet" is never confused with "clean".
   command, or anything from `commands.*` in project-config.
 - Do not guess at numbers. Every figure in the output comes from a counting command that was
   actually run; if a count could not be produced, say so in place of the number.
-- `--calibration` may additionally read `02-tasks.md` / `03-decisions.md` under every spec
-  directory (Phase 3b). It still never writes anything, still never reads `events.jsonl.1`, and a
+- `--calibration` may additionally read `02-tasks.md` / `03-decisions.md` / `05-retro.md` under
+  every spec directory (Phase 3b). It still never writes anything, still never reads `events.jsonl.1`, and a
   plain `/sd:status` invocation's read set is unaffected by the flag's existence.

@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **S lane for `/sd:feature` (SW-94)** - a spec estimated `complexity: S` no longer runs the
+  full M/L path. The architect does its own bounded discovery (no Phase 2 impact map), writes the
+  outline at `draft`, and spec and outline are approved in one reply at Face S of Gate 1, recorded
+  as one `## Gate 1+2` section in `gate-briefs.md`. When the measured outline breaches the S limits
+  in `sd-spec-templates` (tasks > 4, production layers > 1, surface > 4, any open question), the
+  workflow falls back to the full path on its own and logs `s-lane: fallback` to `05-retro.md`.
+  The gate count stays 3 (Face S is a face of Gate 1, ADR 0030). `stop-gate` counts a `## Gate 1+2`
+  section as evidence for Gates 1 and 2 (both twins); `session-context` names the combined gate;
+  `/sd:status` reports S-lane runs and fallbacks. M and L specs are unchanged. e2e scenarios
+  `21-feature-s-lane` and `22-feature-s-fallback`; `02-feature-happy` now pins `complexity: M`.
 - **stop-gate rules for `/sd:bug`, `/sd:refactor` and Gate Re-plan (SW-108)** - with
   `hooks.stopGate.enabled`, a bug or refactor spec past a gate whose `gate-briefs.md` section has
   no approving `Reply:` now blocks the stop, the way feature gates do (ADR 0029, extends ADR 0016

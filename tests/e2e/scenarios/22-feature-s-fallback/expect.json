@@ -1,0 +1,12 @@
+[
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-fallback/05-retro.md", "pattern": "(?m)^s-lane: fallback to full path - " },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-fallback/01-plan.md", "pattern": "(?m)^## Outline \\(S-lane draft\\)\\s*$" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-fallback/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-fallback/gate-briefs.md", "pattern": "(?m)^## Gate 1 - Spec approval" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-fallback/gate-briefs.md", "pattern": "(?m)^## Gate 1\\+2" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-fallback/gate-briefs.md", "pattern": "(?m)^Reply:" },
+  { "type": "transcript-contains-section", "path": ".specs/FEAT-e2e-s-fallback/gate-briefs.md", "section": "^## Gate " },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-fallback/00-spec.md", "pattern": "(?m)^status:\\s*draft\\s*$" },
+  { "type": "file-not-exists", "path": ".specs/FEAT-e2e-s-fallback/02-tasks.md" },
+  { "type": "file-not-matches", "path": "src/domain/todo.js", "pattern": "dueDate" }
+]

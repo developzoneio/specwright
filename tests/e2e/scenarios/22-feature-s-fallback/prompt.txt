@@ -1,0 +1,11 @@
+/sd:feature e2e-s-fallback
+
+FEAT-e2e-s-fallback is a synthetic fixture spec seeded by this e2e scenario. Phase 1 has already
+written it, and no gate has been presented yet. Detect where to resume from the workflow's state
+machine exactly as written. Its `complexity` frontmatter value was set by the fixture author on
+purpose; use it exactly as written and do not edit it.
+
+This is a headless, scripted test run with no human available to reply mid-workflow. Do not stop
+and wait for a real person. Run every phase the state machine sends you to, following each step as
+written. Stop as soon as Gate 1 has been presented, whichever face it shows. Do not answer Gate 1.
+Report which face of Gate 1 you presented, and why, in your last message.
