@@ -356,7 +356,7 @@ evidence missing*, and fires only when both hold:
 | perf Gate 2 | Phase 3+ evidence exists while the baseline artifact, Results log row 0 or the measured `Current observed` is missing |
 | rca Gate 2 (SW-51) | the root cause is written or the status moved on, while `## Hypothesis tree` still holds its `<<PHASE-2:` field |
 | port Gates 1, 2, 3, 6 | later-phase artifacts exist while `MANIFEST.md`/`Frozen: yes`, filled tables, `## Behavior pinning` or `parity/INDEX.md` is missing |
-| feature Gates 1, 2, 3 (SW-100) | the status moved on, a task is done, `02-tasks.md` was expanded from an outline (Gate 2, ADR 0022) or a passing `06-verify.md` exists, while `gate-briefs.md` has no section for the gate, or no `Reply:` line in it approves (a reply other than `details`, `refine`, `abort`, `address`, `approve split`, `no`). No brief, or a brief that starts after the gate (a resumed or pre-SW-89 spec), checks nothing (ADR 0021) |
+| feature Gates 1, 2, 3 (SW-100) | the status moved on, a task is done, `02-tasks.md` was expanded from an outline (Gate 2, ADR 0022) or a passing `06-verify.md` exists, while `gate-briefs.md` has no section for the gate, or no `Reply:` line in it approves (a reply other than `details`, `refine`, `abort`, `address`, `approve split`, `no`). No brief, or a brief that starts after the gate (a resumed or pre-SW-89 spec), checks nothing (ADR 0021). An S-lane `## Gate 1+2` section is evidence for Gates 1 and 2 at once (ADR 0030) |
 
 A hit prints `{"decision":"block","reason":"..."}` and exits 0 - Stop's own schema, which blocks
 exactly like exit 2 (ADR 0015). The reason names the spec, the gate, what is missing and the
