@@ -160,7 +160,7 @@ Commands do not do the work themselves - they orchestrate 6 subagents, each with
 | `sd-spec-architect` | sonnet | Creates and refines specs, plans, and atomic tasks. Constitution-aware. |
 | `sd-code-explorer` | haiku | Read-only navigation. Every finding cites `file:line`. |
 | `sd-debugger` | sonnet | Hypothesis-tree investigation. Distinguishes proximate from root cause. |
-| `sd-implementer` | haiku | Executes ONE atomic task. Scope-disciplined, no opportunism. |
+| `sd-implementer` | haiku | Executes ONE atomic task (or a group of same-file tasks in `/sd:feature`). Scope-disciplined, no opportunism. |
 | `sd-reviewer` | sonnet | Severity-tagged review: BLOCK / WARN / SUGGEST / PASS. **No write tools.** |
 | `sd-docs-writer` | sonnet | Authors one MADR-style ADR from a spec's decisions. Writes only the ADR file. |
 

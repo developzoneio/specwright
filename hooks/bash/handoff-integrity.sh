@@ -11,7 +11,9 @@
 #      folder has a 00-spec.md with status in-progress, and a 02-tasks.md. No
 #      fallback: a session driving no in-progress spec is never flagged.
 #   3. The active task is the READY SET of 02-tasks.md: every unchecked task
-#      whose Depends on tasks are all checked. The declared files are the
+#      whose Depends on tasks are all checked, widened by the grouped-run rule
+#      of ADR 0031 (a non-hard task whose unmet dependencies are non-hard ready
+#      tasks and whose Files overlap one of them). The declared files are the
 #      union of their Files values. No ready task means no active task.
 #   4. An edit outside the project root, or inside the spec directory (the
 #      main thread's own check-offs and retro lines), is never flagged.
@@ -277,7 +279,7 @@ tasks_text="$(doc_text "${spec_path}/${active}/02-tasks.md")" || exit 0
 # it, so a multi-line Files value keeps its nested bullets.
 #
 # Prints `I<TAB><id>` for each task in the READY SET (unchecked, every Depends
-# on task checked) and `F<TAB><entry>` for each of its Files entries, in
+# on task checked, plus the tasks a grouped run adds - ADR 0031) and `F<TAB><entry>` for each of its Files entries, in
 # document order. A dependency on an ID the file does not define counts as met
 # - the hook errs toward silence. Status decides when present; a `[x]` or
 # check-mark heading prefix counts only when Status is absent; the last block
@@ -289,7 +291,7 @@ function flush() {
     if (cur == "") return
     n++
     tid[n] = cur; tdrift[n] = drift; tstat[n] = stat; thas[n] = hasstat
-    tdeps[n] = deps; tfiles[n] = files
+    tdeps[n] = deps; tfiles[n] = files; thard[n] = hard
     cur = ""
 }
 function is_checked(i) { return thas[i] ? (tstat[i] == "done") : tdrift[i] }
@@ -308,7 +310,7 @@ BEGIN {
             prefix = substr(line, 1, idstart - 1)
             cur = substr(rest, 1, RLENGTH)
             drift = (index(tolower(prefix), "[x]") > 0 || index(prefix, "\342\234\205") > 0) ? 1 : 0
-            stat = ""; hasstat = 0; deps = ""; files = ""
+            stat = ""; hasstat = 0; deps = ""; files = ""; hard = 0
         }
         next
     }
@@ -326,6 +328,10 @@ BEGIN {
             stat = (match(v, /^[a-z-]+/) ? substr(v, 1, RLENGTH) : "")
             hasstat = 1
         }
+        else if (field == "reversibility") {
+            v = value; gsub(/`/, "", v); gsub(/\*/, "", v); v = tolower(trim(v))
+            hard = (v ~ /^hard([^a-z-]|$)/) ? 1 : 0
+        }
         next
     }
     if (field == "files") files = files "\n" line
@@ -333,16 +339,9 @@ BEGIN {
 }
 END {
     flush()
-    for (i = 1; i <= n; i++) chk[tid[i]] = is_checked(i)
+    for (i = 1; i <= n; i++) { chk[tid[i]] = is_checked(i); idx[tid[i]] = i }
     for (i = 1; i <= n; i++) {
-        if (is_checked(i)) continue
-        ok = 1; d = tdeps[i]
-        while (match(d, /T[0-9]+/)) {
-            dep = substr(d, RSTART, RLENGTH); d = substr(d, RSTART + RLENGTH)
-            if ((dep in chk) && !chk[dep]) { ok = 0; break }
-        }
-        if (!ok) continue
-        print "I\t" tid[i]
+        fn[i] = 0
         m = split(tfiles[i], parts, "[,\n]")
         for (j = 1; j <= m; j++) {
             p = trim(parts[j])
@@ -354,8 +353,49 @@ END {
             gsub(/\\/, "/", p)
             while (substr(p, 1, 2) == "./") p = substr(p, 3)
             if (p == "" || tolower(p) == "none") continue
-            print "F\t" p
+            fn[i]++; tf[i, fn[i]] = p; key[i, tolower(p)] = 1
         }
+    }
+    # Base ready set: unchecked, every Depends on task checked.
+    for (i = 1; i <= n; i++) {
+        rdy[i] = 0
+        if (is_checked(i)) continue
+        ok = 1; d = tdeps[i]
+        while (match(d, /T[0-9]+/)) {
+            dep = substr(d, RSTART, RLENGTH); d = substr(d, RSTART + RLENGTH)
+            if ((dep in chk) && !chk[dep]) { ok = 0; break }
+        }
+        if (ok) rdy[i] = 1
+    }
+    # Grouped run (ADR 0031, the Phase 4 grouping rule of /sd:feature): an
+    # unchecked task that is not hard joins when every unmet dependency is a
+    # non-hard task already in the set and one of its Files entries equals an
+    # entry of a non-hard task in the set. Repeated until nothing joins.
+    grew = 1
+    while (grew) {
+        grew = 0
+        for (i = 1; i <= n; i++) {
+            if (rdy[i] || thard[i] || is_checked(i)) continue
+            ok = 1; d = tdeps[i]
+            while (match(d, /T[0-9]+/)) {
+                dep = substr(d, RSTART, RLENGTH); d = substr(d, RSTART + RLENGTH)
+                if (!(dep in chk) || chk[dep]) continue
+                k = idx[dep]
+                if (!rdy[k] || thard[k]) { ok = 0; break }
+            }
+            if (!ok) continue
+            hit = 0
+            for (k = 1; k <= n && !hit; k++) {
+                if (!rdy[k] || thard[k]) continue
+                for (j = 1; j <= fn[i]; j++) if ((k, tolower(tf[i, j])) in key) { hit = 1; break }
+            }
+            if (hit) { rdy[i] = 1; grew = 1 }
+        }
+    }
+    for (i = 1; i <= n; i++) {
+        if (!rdy[i]) continue
+        print "I\t" tid[i]
+        for (j = 1; j <= fn[i]; j++) print "F\t" tf[i, j]
     }
 }' 2>/dev/null
 }

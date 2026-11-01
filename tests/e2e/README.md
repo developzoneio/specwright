@@ -115,6 +115,13 @@ a single `## Gate 1+2` section, and `events.jsonl` recorded both `draft -> appro
 27/27 at `172b6a8`, with separate Gate 1, Gate 2 and Gate 3 sections, so the M path is unchanged.
 That run kept no results file, so its cost and duration were not recorded.
 
+**SW-95 runs, 2026-11-01** (Windows, `claude` 2.1.316, subscription token): `23-feature-batched`
+passed 12/12 on its first run with the change still uncommitted in the working tree, which the
+harness installs. The main thread called `sd-implementer` exactly twice for three tasks: `T01` and
+`T02` as one group, `T03` alone. Every task reached `Status: done` with its own retro line.
+`08-resume-checkoff` passed 8/8 in the same tree, so a single-task resume is unchanged. Neither
+run kept a results file, so cost and duration were not recorded.
+
 ## Prerequisites
 
 The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the
@@ -662,6 +669,7 @@ and exits 1.
 | 20 | `20-closeout-unearned` | Same resume with an `AC-3` that no task covers. The box stays unchecked, the retro logs `AC-3: unchecked`, `06-verify.md` is `result: fail` and records the unchecked-criterion finding, the spec and index row stay `in-progress`, and no follow-up question is asked (SW-91). |
 | 21 | `21-feature-s-lane` | `/sd:feature` resumed on a seeded `complexity: S` spec at `draft` runs the S lane (SW-94, ADR 0030): bounded discovery writes the `01-plan.md` outline with no Phase 2, Face S of Gate 1 is the only approval (`yes` from `replies.txt`), and the run reaches Phase 4 and stops at Gate 3. `gate-briefs.md` has a `## Gate 1+2` section with exactly one `Reply:` line and no separate Gate 1 or Gate 2 section, a task is `done`, `countTodos` lands, `03-decisions.md` has no impact analysis, the retro has no fallback line, and `events.jsonl` records `draft` -> `approved` -> `in-progress` from that one reply. |
 | 22 | `22-feature-s-fallback` | Control for 21: a seeded `complexity: S` spec whose request spans three layers. The S-lane outline breaches the S limits, so the workflow falls back without asking: `05-retro.md` gains the `s-lane: fallback to full path - ...` line, the outline is kept as `## Outline (S-lane draft)` (never `## Outline`), and the run stops at the ordinary `## Gate 1 - Spec approval` with status still `draft`, no `02-tasks.md` and no code changed (SW-94). |
+| 23 | `23-feature-batched` | `/sd:feature` resumed on a seeded `in-progress` spec with three open tasks runs Phase 4 in groups (SW-95, ADR 0031). `T01` and `T02` share `src/domain/todo.js` and `T02` depends on `T01`, so they form one group; `T02` also declares a test file `T01` does not, which `handoff-integrity` (enabled in this scenario) must accept. `T03` shares no file and runs alone. The main thread calls `sd-implementer` exactly twice for three tasks, every task reaches `Status: done` with its own retro line, and `reopenTodo`, `renameTodo` and `countByStatus` land. Not reached by this run: a red test inside a group and a Gate Re-plan inside a group, which the prompt rules and the hook fixtures cover. |
 
 Each scenario directory may contain: `source.txt` (repo-relative base tree to copy),
 `workspace/` (overlay applied on top - added/overwritten files only, mirrors the
@@ -716,6 +724,7 @@ gate prints none of it (ADR 0020).
 | `permission-denied` | `tool` (regex), `path` (suffix) | `permission_denials` holds a matching call (SW-80) |
 | `transcript-contains-section` | `path`, `section` (heading regex, default `^## Gate `) | every matching section has shown lines, and they appear verbatim and in order in one main-thread text block. Shown lines are those after the heading, blank lines excluded, up to `### More decisions` or `Reply:`. Tool calls and subagent transcripts do not count (SW-99) |
 | `transcript-not-matches` | `pattern` (regex, case-insensitive like `-match`) | no main-thread assistant text block of any turn matches. Tool calls, tool results, thinking blocks and subagent transcripts are not read. No transcript, or zero text blocks, fails; a match fails naming its turn and a short excerpt (SW-113) |
+| `transcript-subagent-calls` | `agent` (exact name), `max`, `min` (default 1) | the main thread made between `min` and `max` Agent (or legacy Task) tool calls with that `subagent_type`. Sidechain entries and subagent transcripts are not read. No transcript fails, and the default `min` keeps a run that never called the agent from passing empty (SW-95) |
 
 A `path` may contain `*` for a name the run picks, such as the date in a `REF-<slug>-<YYYYMMDD>`
 spec ID. It must resolve to exactly one workspace file; none, or several, fails a `file-exists` or

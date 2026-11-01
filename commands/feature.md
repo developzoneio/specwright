@@ -291,42 +291,63 @@ Runs once Gate 2 has approved the outline - or, on the S lane, Face S of Gate 1 
 
 ## Phase 4 - Execute (no per-task reviewer)
 
-Process tasks from `02-tasks.md` in dependency order.
+Process tasks from `02-tasks.md` in dependency order (ties in file order), one **group** at a
+time (ADR 0031).
 
-For each unchecked task:
+**Grouping rule.** A group is a run of consecutive unchecked tasks that share one implementer
+call, so the context is loaded once:
 
-1. **Pre-flight**: re-read `00-spec.md`, the specific task block, and the constitution sections cited under the spec's "Constitution check".
-2. **Model escalation check, then the implementer.** Before this task's first implementer call,
-   apply rules `ESC-FEAT-04` and `ESC-FEAT-04b` of **sd-model-escalation** (read in Phase 0).
-   Trigger inputs: the task block's `Estimated complexity` and `Reversibility` fields (absent
-   reads as the default, per **sd-atomic-task-format**). The decision also covers this task's
-   re-invocations in step 5; its retro line precedes the task's step 7 line.
+- **Seed**: the next unchecked task whose `Depends on` tasks are all checked. A seed with
+  `Reversibility: hard` runs alone.
+- **Extend** with the next task in order while all three hold: it is not `Reversibility: hard`; one
+  of its `Files` entries equals an entry already in the group (compared case-insensitively, with
+  the trailing `(...)` note dropped); every task in its `Depends on` is checked or already in the
+  group. Stop at the first task that fails one of them. Groups never skip a task.
+- A group of one is the per-task run. The `handoff-integrity` hook mirrors this rule (ADR 0031), so
+  a change to it changes both hook twins too.
+
+For each group:
+
+1. **Pre-flight**: re-read `00-spec.md`, every task block in the group, and the constitution
+   sections cited under the spec's "Constitution check".
+2. **Model escalation check, then the implementer.** Before the group's first implementer call,
+   apply rules `ESC-FEAT-04` and `ESC-FEAT-04b` of **sd-model-escalation** (read in Phase 0) to
+   each task in the group. Trigger inputs: each task block's `Estimated complexity` and
+   `Reversibility` fields (absent reads as the default, per **sd-atomic-task-format**). If any task
+   fires, the whole group runs escalated. Each fired task writes its own retro line, and that line
+   precedes the task's step 7 line. The decisions also cover the group's re-invocations in step 5.
    **Invoke `sd-implementer`** (model: default, or as resolved above) with:
-   - `TASK_DETAILS = <full task block>`
+   - `TASK_DETAILS = <every task block of the group, in order, verbatim>`
    - `SPEC_REF = .specs/FEAT-<arg>/00-spec.md`
    - `IMPACT_REF = .specs/FEAT-<arg>/03-decisions.md` (omit it when that file does not exist, as on
      the S lane; the task's `Pattern refs` already carry what the implementer needs)
    - `WORKFLOW_TYPE = feature`
-3. Implementer edits only files in `Files`. Writes a test if the witness test named in
-   `Acceptance` (or a legacy `Test` field) does not yet exist.
-4. **Run the task's test** in isolation via `commands.test` from project-config (scoped to the new test if possible).
-5. **Self-check** (main thread, NO reviewer subagent):
-   - Did implementer stay within `Files` list? If not -> revert, re-invoke.
-   - Does the test pass? If not -> re-invoke implementer with failure output.
+3. The implementer edits only files in the group's `Files` (the union of its tasks' `Files`), and
+   writes a test if the witness test named in a task's `Acceptance` (or a legacy `Test` field) does
+   not yet exist. It returns one result line per task.
+4. **Run each task's witness test** after the group, via `commands.test` from project-config (scoped
+   to those tests if possible).
+5. **Self-check** (main thread, NO reviewer subagent), per task:
+   - Did the implementer stay within the group's `Files`? If not -> revert, re-invoke the group.
+   - Does each witness test pass? If not -> re-invoke the implementer for **this group only**, with
+     the failure output. Earlier groups are not re-run.
    - Any obvious constitution violation visible from the diff? If yes -> re-invoke with feedback.
    - **Plan-invalidating discovery?** If the implementer reports (or the diff reveals) that the task's
      premise is false - a `Pattern refs` precedent does not exist, an interface differs from what the
      task assumed, a `Depends on` edge is backwards, or a task is now known missing/redundant - do
      NOT hack-edit `02-tasks.md`. Enter **Gate Re-plan** below. This is distinct from an ordinary
      in-task adjustment, which the implementer handles within its own scope (see `sd-replan-loop` for
-     the boundary).
-6. **Check off** the task in `02-tasks.md`: set its `Status` line to `done`, per the "Check-off
-   marker" section of the **sd-atomic-task-format** skill. Change nothing else in the block.
-7. Log a one-line summary to `.specs/FEAT-<arg>/05-retro.md`: `T<NN>: <status> - <note>`.
+     the boundary). Inside a group the group stops at the affected task: the tasks before it that
+     passed steps 4-5 go through steps 6-7; the affected task and the rest of the group stay
+     unchecked.
+6. **Check off** each task in `02-tasks.md`, in order: set its `Status` line to `done`, per the
+   "Check-off marker" section of the **sd-atomic-task-format** skill. Change nothing else in the
+   block.
+7. Log a one-line summary per task to `.specs/FEAT-<arg>/05-retro.md`: `T<NN>: <status> - <note>`.
 
 > **Why no per-task reviewer?** Each reviewer invocation spawns a sonnet-class subagent that reloads the full context (CLAUDE.md + constitution + spec + changed files). For N tasks, that is N expensive calls. The main thread self-check catches scope violations and test failures. Constitution compliance and cross-task issues are caught more efficiently by the batch review in Phase 5.
 
-Move to next task. Repeat until all tasks checked.
+Move to the next group. Repeat until all tasks are checked.
 
 ### Gate Re-plan (HARD) - adaptive re-plan on a plan-invalidating discovery
 
@@ -502,7 +523,8 @@ Close-out does its bookkeeping silently and asks at most one question (step 4).
 - **A decomposed parent is an immutable umbrella.** Once split, the parent's spec/plan/tasks are a
   historical record and are never edited to match the children. Children are normal feature specs,
   linked via `/sd:spec link spawns` / `depends-on` - no bespoke decomposition mechanism.
-- Implementer touches only files declared in the task's `Files` list. Any scope creep -> stop, surface to main thread, log to retro.
+- Implementer touches only files declared in its group's `Files` (one task's list, or the union for
+  a group). Any scope creep -> stop, surface to main thread, log to retro.
 - Reviewer is invoked ONCE in Phase 5b for the entire changeset (not per-task). This is a deliberate cost optimization.
 - BLOCK findings from the batch review must be addressed before close-out.
 - No new constitution exception introduced silently. If one is needed, spawn an ADR spec.

@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Batched implementer for `/sd:feature` (SW-95, ADR 0031)** - Phase 4 now runs consecutive
+  tasks that share a `Files` entry as one `sd-implementer` call, when each task's dependencies are
+  done or in the same group and none is `Reversibility: hard`. Check-off, the `T<NN>:` retro line
+  and the scope check stay per task. A failing test re-runs only its group, and a Gate Re-plan
+  stops the group at the affected task. Escalation is still decided per task, and the group runs
+  at the highest tier any task resolved to. `handoff-integrity` widens its ready set by the same
+  rule in both twins, so a grouped call raises no false positive (5 new fixtures). New e2e
+  assertion `transcript-subagent-calls` and scenario `23-feature-batched` (2 implementer calls
+  for 3 tasks).
 - **S lane for `/sd:feature` (SW-94)** - a spec estimated `complexity: S` no longer runs the
   full M/L path. The architect does its own bounded discovery (no Phase 2 impact map), writes the
   outline at `draft`, and spec and outline are approved in one reply at Face S of Gate 1, recorded

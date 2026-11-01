@@ -1,0 +1,14 @@
+[
+  { "type": "file-matches", "path": "src/domain/todo.js", "pattern": "export function reopenTodo\\s*\\(" },
+  { "type": "file-matches", "path": "src/domain/todo.js", "pattern": "export function renameTodo\\s*\\(" },
+  { "type": "file-exists", "path": "tests/todo-rename.test.js" },
+  { "type": "file-matches", "path": "src/application/todo-service.js", "pattern": "countByStatus\\s*\\(" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-batched-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT01\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-batched-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT02\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-batched-demo/02-tasks.md", "pattern": "(?msi)^#{3,}[^\\n]*\\bT03\\b(?:(?!^#{2,}\\s).)*?^[-*\\s]*\\**Status\\**\\s*:\\**\\s*done\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-batched-demo/02-tasks.md", "pattern": "(?mi)^[-*\\s]*\\**Status\\**\\s*:\\**\\s*open\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-batched-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T01:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-batched-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T02:" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-batched-demo/05-retro.md", "pattern": "(?m)^[-*\\s]*T03:" },
+  { "type": "transcript-subagent-calls", "agent": "sd-implementer", "min": 2, "max": 2 }
+]

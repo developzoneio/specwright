@@ -14,8 +14,11 @@
          folder has a 00-spec.md with status in-progress, and a 02-tasks.md.
          No fallback: a session driving no in-progress spec is never flagged.
       3. The active task is the READY SET of 02-tasks.md: every unchecked task
-         whose Depends on tasks are all checked. The declared files are the
-         union of their Files values. No ready task means no active task.
+         whose Depends on tasks are all checked, widened by the grouped-run
+         rule of ADR 0031 (a non-hard task whose unmet dependencies are
+         non-hard ready tasks and whose Files overlap one of them). The
+         declared files are the union of their Files values. No ready task
+         means no active task.
       4. An edit outside the project root, or inside the spec directory (the
          main thread's own check-offs and retro lines), is never flagged.
       5. Otherwise, a file that matches no declared entry prints
@@ -277,9 +280,10 @@ function Get-FileEntries {
     return $out
 }
 
-# The ready set: every unchecked task whose Depends on tasks are all checked.
-# A dependency on an ID the file does not define counts as met - the hook
-# errs toward silence. Returns @{ Ids; Files } in document order.
+# The ready set: every unchecked task whose Depends on tasks are all checked,
+# plus the tasks a grouped run (ADR 0031) adds. A dependency on an ID the file
+# does not define counts as met - the hook errs toward silence. Returns
+# @{ Ids; Files } in document order.
 function Get-ReadySet {
     param([string]$Text)
     $tasks = New-Object System.Collections.Generic.List[object]
@@ -295,7 +299,8 @@ function Get-ReadySet {
                 if ($m.Success) {
                     $prefix = $line.Substring(0, $m.Groups[2].Index)
                     $drift = ($prefix.ToLowerInvariant().Contains('[x]')) -or ($prefix.Contains($script:CheckMark))
-                    $cur = @{ Id = $m.Groups[2].Value; Drift = $drift; Status = $null; Deps = ''; Files = '' }
+                    $cur = @{ Id = $m.Groups[2].Value; Drift = $drift; Status = $null; Deps = ''; Files = ''
+                        Hard = $false }
                 }
             }
             continue
@@ -312,6 +317,10 @@ function Get-ReadySet {
                     $sv = $value.Replace('`', '').Replace('*', '').Trim([char[]]" `t").ToLowerInvariant()
                     $cur.Status = ([regex]::Match($sv, '^[a-z-]*')).Value
                 }
+                'reversibility' {
+                    $rv = $value.Replace('`', '').Replace('*', '').Trim([char[]]" `t").ToLowerInvariant()
+                    $cur.Hard = ($rv -cmatch '^hard([^a-z-]|$)')
+                }
             }
             continue
         }
@@ -323,22 +332,58 @@ function Get-ReadySet {
     # sd-atomic-task-format "Reading": Status decides when present; a heading
     # prefix counts only when Status is absent. Last block wins on a repeat ID.
     $checked = @{}
+    $byId = @{}
     foreach ($t in $tasks) {
-        if ($null -ne $t.Status) { $checked[$t.Id] = ($t.Status -ceq 'done') }
-        else { $checked[$t.Id] = $t.Drift }
+        $t.Checked = if ($null -ne $t.Status) { $t.Status -ceq 'done' } else { $t.Drift }
+        $t.Entries = Get-FileEntries -Value $t.Files
+        $t.FileKeys = @{}
+        foreach ($f in $t.Entries) { $t.FileKeys[$f.ToLowerInvariant()] = $true }
+        $t.Ready = $false
+        $checked[$t.Id] = $t.Checked
+        $byId[$t.Id] = $t
     }
-    $ids = New-Object System.Collections.Generic.List[string]
-    $files = New-Object System.Collections.Generic.List[string]
+    # Base ready set: unchecked, every Depends on task checked.
     foreach ($t in $tasks) {
-        $isChecked = if ($null -ne $t.Status) { $t.Status -ceq 'done' } else { $t.Drift }
-        if ($isChecked) { continue }
+        if ($t.Checked) { continue }
         $ready = $true
         foreach ($d in [regex]::Matches($t.Deps, 'T[0-9]+')) {
             if ($checked.ContainsKey($d.Value) -and -not $checked[$d.Value]) { $ready = $false; break }
         }
-        if (-not $ready) { continue }
+        $t.Ready = $ready
+    }
+    # Grouped run (ADR 0031, the Phase 4 grouping rule of /sd:feature): an
+    # unchecked task that is not hard joins when every unmet dependency is a
+    # non-hard task already in the set and one of its Files entries equals an
+    # entry of a non-hard task in the set. Repeated until nothing joins.
+    $grew = $true
+    while ($grew) {
+        $grew = $false
+        foreach ($t in $tasks) {
+            if ($t.Ready -or $t.Hard -or $t.Checked) { continue }
+            $ok = $true
+            foreach ($d in [regex]::Matches($t.Deps, 'T[0-9]+')) {
+                if (-not $checked.ContainsKey($d.Value) -or $checked[$d.Value]) { continue }
+                $dt = $byId[$d.Value]
+                if (-not $dt.Ready -or $dt.Hard) { $ok = $false; break }
+            }
+            if (-not $ok) { continue }
+            $hit = $false
+            foreach ($o in $tasks) {
+                if (-not $o.Ready -or $o.Hard) { continue }
+                foreach ($k in $t.FileKeys.Keys) {
+                    if ($o.FileKeys.ContainsKey($k)) { $hit = $true; break }
+                }
+                if ($hit) { break }
+            }
+            if ($hit) { $t.Ready = $true; $grew = $true }
+        }
+    }
+    $ids = New-Object System.Collections.Generic.List[string]
+    $files = New-Object System.Collections.Generic.List[string]
+    foreach ($t in $tasks) {
+        if (-not $t.Ready) { continue }
         $ids.Add($t.Id)
-        foreach ($f in (Get-FileEntries -Value $t.Files)) { $files.Add($f) }
+        foreach ($f in $t.Entries) { $files.Add($f) }
     }
     return @{ Ids = $ids; Files = $files }
 }

@@ -1,0 +1,1 @@
+{"session_id": "conformance-fixture", "transcript_path": "{{ROOT}}/transcript.jsonl", "cwd": "{{CWD}}", "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_input": {"file_path": "{{ROOT}}/tests/todo-count.test.js", "old_string": "a", "new_string": "b"}, "tool_response": {"filePath": "{{ROOT}}/tests/todo-count.test.js", "success": true}}

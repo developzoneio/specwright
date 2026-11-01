@@ -8,6 +8,7 @@
   reused here); `skills/sd-atomic-task-format/SKILL.md` (task block, check-off marker, field label
   grammar)
 - Supersedes: none
+- Extended by: ADR 0031 (the ready set also holds the tasks of a grouped implementer call, SW-95)
 
 ## Context
 
