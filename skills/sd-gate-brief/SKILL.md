@@ -585,9 +585,18 @@ counts and names rows, it does not restate those rules.
 **A deviation in plain words.** A deviation row is shown as `D<NN> <donor form> -> <host form>`,
 and what forced it as words, never as its citation: `compiler conflict on <identifier>`, `host
 rule on <topic>`, `host precedent in <file path>`, `agreed fix of <donor defect>`. A `§N.M` or a
-`path:line` citation stays in the table, where `details` prints it. The form holds on every line
-that names a deviation, the closing summary included:
+`path:line` citation stays in the table, where `details` prints it.
+
+**Every deviation ID the user reads carries its form.** A `D<NN>` sits on the same line as its
+`<donor form> -> <host form>`, wherever that line is: a brief line, the `### More decisions (shown
+on details)` subsection (brief text the main thread writes, not an excerpt), a list of `details`
+targets or a re-ask, a progress line between tool calls, or the closing summary. The one
+exception is a verbatim `details` excerpt of an artifact (a Deviation table or Member manifest
+row), which keeps what it has on disk. Where the form does not fit the sentence, name the change
+without the ID (`the constant rename`). For example:
 `Deviations applied: 1 - D01 _WHITESPACE -> WHITESPACE, host rule on naming private constants.`
+`Targets offered: ..., details D01 (_WHITESPACE -> WHITESPACE), ...`
+`None beyond D01 _WHITESPACE -> WHITESPACE.`, never `None beyond D01.`
 
 Shown lines, replacing lines 1-5 of "Brief shape". Gates 1, 3 and 5 are checks and show no
 `Decisions` block.
@@ -654,8 +663,8 @@ Shown lines, replacing lines 1-5 of "Brief shape". Gates 1, 3 and 5 are checks a
 | `details <host path>`, e.g. `details src/domain/title-format.js` | the `.diff` file `INDEX.md` lists for that host path | Gate 6 |
 
 A deviation ID that is not in the table, or a host path `INDEX.md` does not list, prints one line
-naming the valid targets, then asks again. A deviation ID in that line carries its gloss, like
-every other line that shows one: `D01 (_WHITESPACE -> WHITESPACE)`, never a bare `D01`.
+naming the valid targets, then asks again. A deviation ID in it, as in any target list, follows
+"A deviation in plain words".
 `details` is never an override, so the HARD Gates 1, 2, 3 and 6 offer it like any other gate.
 
 ## User-facing text
@@ -677,6 +686,7 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
   `<donor form> -> <host form>`, a bug severity (`P0`-`P3`), gate names, file
   paths, and the option tokens of the question line. The deviation ID is the one `D<n>` the
   user may see: it names a row the user can ask for (`details D02`) and cite in `add-deviation`.
+  Where it may appear, option and target lines included, is set by "A deviation in plain words".
 - **Narrate a model escalation in plain words**: what runs on a stronger model and why, for
   example "planning with a stronger model because the spec was sized large". The rule ID stays in
   the retro line only.
@@ -698,6 +708,8 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
 - Copying a `path:line` citation from the retro or the verify report into the closing summary.
 - Glossing a deviation ID in prose (`D01 renames _WHITESPACE to WHITESPACE`) instead of its
   `donor -> host` form, or naming the constitution section that forced it.
+- Leaving a deviation ID bare because the line is not a brief line: a target list (`details
+  D01`), the collapsed subsection (`None beyond D01.`), a progress line (`the D01 rename`).
 - Editing an earlier section to fix a typo instead of appending the next pass.
 - Raising the cap to fit an eleventh line instead of collapsing a decision.
 - Collapsing a blocking finding, or dropping a decision that does not fit.
