@@ -408,17 +408,43 @@ $bPayload = "{`"session_id`":`"smoke-stop-brief`",`"cwd`":`"$bgEsc`",`"transcrip
 # pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
 function Set-BriefState {
     param([string]$Type, [string]$Status, [string]$Files, [string]$Briefs)
-    $id = if ($Type -eq 'bug') { 'BUG-SMOKE-3' } else { 'REF-SMOKE-4' }
+    $ids = @{ bug = 'BUG-SMOKE-3'; refactor = 'REF-SMOKE-4'; rca = 'RCA-SMOKE-5'; perf = 'PERF-SMOKE-6'; port = 'PORT-SMOKE-7' }
+    $id = $ids[$Type]
     $specs = Join-Path $bg '.specs'
     if (Test-Path -LiteralPath $specs) { Remove-Item -LiteralPath $specs -Recurse -Force }
     $bd = Join-Path $specs $id
     New-Item -ItemType Directory -Force -Path $bd | Out-Null
     Set-Content -LiteralPath (Join-Path $bg 'transcript.jsonl') -Encoding UTF8 -NoNewline `
         -Value "{`"type`":`"user`",`"message`":{`"content`":`"continue $id`"}}"
+    # perf carries a Results log row 0 and port a frozen donor set, so the
+    # ADR 0016 rows stay quiet and only the brief rows (ADR 0032) are exercised.
+    $body = switch ($Type) {
+        'perf' { "`n## Results log`n`n| 0 | baseline |`n" }
+        'port' { "`n## Donor provenance`n`n- **Frozen**: yes`n" }
+        default { '' }
+    }
     Set-Content -LiteralPath (Join-Path $bd '00-spec.md') -Encoding UTF8 -NoNewline `
-        -Value "---`nid: $id`ntype: $Type`nstatus: $Status`n---`n"
+        -Value "---`nid: $id`ntype: $Type`nstatus: $Status`n---`n$body"
     foreach ($f in ($Files -split ' ')) {
+        $art = Join-Path $bd '04-artifacts'
         switch ($f) {
+            'baseline' {
+                New-Item -ItemType Directory -Force -Path $art | Out-Null
+                Set-Content -LiteralPath (Join-Path $art 'baseline-20261101-0900.json') -Encoding UTF8 -Value '{}'
+            }
+            'final' {
+                New-Item -ItemType Directory -Force -Path $art | Out-Null
+                Set-Content -LiteralPath (Join-Path $art 'final-tests.txt') -Encoding UTF8 -Value 'PASS'
+            }
+            'manifest' {
+                New-Item -ItemType Directory -Force -Path (Join-Path $art 'source') | Out-Null
+                Set-Content -LiteralPath (Join-Path $art 'source\MANIFEST.md') -Encoding UTF8 -Value '# Manifest'
+            }
+            'parity' {
+                New-Item -ItemType Directory -Force -Path (Join-Path $art 'parity') | Out-Null
+                Set-Content -LiteralPath (Join-Path $art 'parity\INDEX.md') -Encoding UTF8 -Value '# Parity'
+            }
+            'verify' { Set-Content -LiteralPath (Join-Path $bd '06-verify.md') -Encoding UTF8 -Value 'result: pass' }
             'decisions' { Set-Content -LiteralPath (Join-Path $bd '03-decisions.md') -Encoding UTF8 -Value '# Decisions' }
             'failing' {
                 New-Item -ItemType Directory -Force -Path (Join-Path $bd '04-artifacts\repro') | Out-Null
@@ -480,6 +506,16 @@ Test-BriefCase 'refactor Re-plan revise only - blocks' 'Gate Re-plan R1' `
 Test-BriefCase 'refactor Re-plan approved - silent' 'silent' 'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes R1=approve'
 Test-BriefCase 'refactor revision with no Re-plan section - silent' 'silent' `
     'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes'
+
+# ---- stop-gate: /sd:rca, /sd:perf and /sd:port gate replies (SW-114) --------
+Test-BriefCase 'rca Gate 3 dig deeper only - blocks' '(last reply: dig)' 'rca' 'in-progress' '' '1=yes 2=yes 3=dig'
+Test-BriefCase 'rca at Gate 2 - silent' 'silent' 'rca' 'draft' '' '1=yes 2='
+Test-BriefCase 'perf Gate 7 investigate only - blocks' '(last reply: investigate)' `
+    'perf' 'in-progress' 'decisions baseline final' '1=yes 2=yes 3=choose 4=choose 5=yes 6=keep 7=investigate 8='
+Test-BriefCase 'perf Gate 2 Case A, no hotspot gates - silent' 'silent' 'perf' 'in-progress' 'baseline' '1=yes 2=yes'
+Test-BriefCase 'port Gate 6 re-run parity only - blocks' '(last reply: re-run)' `
+    'port' 'in-progress' 'manifest parity verify' '1=yes 2=yes 3=yes 4=yes 5=continue 6=re-run'
+Test-BriefCase 'port Gate 5 continue - silent' 'silent' 'port' 'in-progress' 'manifest parity' '1=yes 2=yes 3=yes 4=yes 5=continue 6='
 
 Write-Section 'stop-gate (PowerShell): bug/refactor re-fire with stop_hook_active - silent'
 Set-BriefState 'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes R1=revise'

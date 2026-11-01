@@ -10,7 +10,8 @@
 - Supersedes: none. Extends ADR 0016's table with three rows and reverses its "feature specs are
   never checked" consequence, which the fixture `allow-feature-type` asserted.
 - Extended by: ADR 0025 (settles the Gate Re-plan section shape; Re-plan still has no rule; SW-109);
-  ADR 0029 (bug, refactor and Gate Re-plan rows on the same reader; SW-108)
+  ADR 0029 (bug, refactor and Gate Re-plan rows on the same reader; SW-108); ADR 0032 (rca, perf
+  and port rows on the same reader; SW-114)
 - Amended by: ADR 0030 (the S lane's combined approval). A `## Gate 1+2` heading opens one section
   that counts for Gate 1 and Gate 2 at once, ranked as Gate 1, with Gate 1's non-approving tokens.
   The parse contract below otherwise stands.

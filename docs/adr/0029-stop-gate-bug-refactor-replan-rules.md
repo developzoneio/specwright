@@ -9,6 +9,8 @@
   `stop_hook_active` re-fire); ADR 0012 (hook latency budget)
 - Supersedes: none. Extends ADR 0016's BUG-G2 row, and reverses ADR 0021's "Gate Re-plan has no
   rule", which ADR 0025 reaffirmed.
+- Extended by: ADR 0032 (the `/sd:rca`, `/sd:perf` and `/sd:port` entries of the order table;
+  SW-114)
 
 ## Context
 

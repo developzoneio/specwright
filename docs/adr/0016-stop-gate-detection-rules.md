@@ -8,7 +8,9 @@
   markers are not parsed out of command markdown)
 - Supersedes: none
 - Extended by: ADR 0021 (`/sd:feature` rows FEAT-G1..G3, evidenced by `gate-briefs.md`; SW-100);
-  ADR 0029 (`/sd:bug`, `/sd:refactor` and Gate Re-plan rows from `gate-briefs.md`; SW-108)
+  ADR 0029 (`/sd:bug`, `/sd:refactor` and Gate Re-plan rows from `gate-briefs.md`; SW-108);
+  ADR 0032 (`/sd:rca`, `/sd:perf` and `/sd:port` reply rows, layered on RCA-G2, PERF-G2 and
+  PORT-G1/G2/G3/G6; SW-114)
 
 ## Context
 

@@ -14,7 +14,8 @@
 #      that never touched a spec is never blocked.
 #   4. By the frontmatter type:, evaluate the invariant table of ADR 0016
 #      (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan: ADR
-#      0029; all read from gate-briefs.md). A rule fires only when later-phase
+#      0029; rca, perf and port gate replies: ADR 0032; all read from
+#      gate-briefs.md). A rule fires only when later-phase
 #      evidence exists AND the HARD gate's own evidence is missing.
 #   5. On a hit, print {"decision":"block","reason":...} to stdout. That blocks
 #      Stop exactly like exit 2 (ADR 0015) while this hook still exits 0.
@@ -290,8 +291,8 @@ push() {
     fi
 }
 
-# --- gate briefs (ADR 0021, ADR 0029) -----------------------------------------
-# /sd:feature, /sd:bug and /sd:refactor gates are evidenced by gate-briefs.md
+# --- gate briefs (ADR 0021, ADR 0029, ADR 0032) -------------------------------
+# Every phased workflow's gates are evidenced by gate-briefs.md
 # (sd-gate-brief): one `## Gate <label> ...` section per gate pass, closed by a
 # `Reply: <reply verbatim>` line. Only those two kinds of line are read.
 # Mirrors Get-BriefState in the .ps1.
@@ -305,6 +306,9 @@ brief_order() {
         feature) printf '%s' '1 2 R 3' ;;
         bug) printf '%s' '1 2 3a 3 4 5' ;;
         refactor) printf '%s' '1 2 3 4 5 R 6' ;;
+        rca) printf '%s' '1 2 3' ;;
+        perf) printf '%s' '1 2 3 4 5 6 7 8' ;;
+        port) printf '%s' '1 2 3 4 5 6' ;;
     esac
 }
 
@@ -334,6 +338,15 @@ deny_token() {
         bug:5 | refactor:6) words="${base} address" ;;
         refactor:2 | refactor:3) words="${base} add" ;;
         refactor:5) words="${base} revert fix" ;;
+        rca:1) words="${base} gather" ;;
+        rca:2) words="${base} add" ;;
+        rca:3) words="${base} dig" ;;
+        perf:7) words="${base} investigate" ;;
+        perf:8) words="${base} address" ;;
+        port:1) words="${base} re-capture" ;;
+        port:3) words="${base} re-pin" ;;
+        port:5) words="${base} revert" ;;
+        port:6) words="${base} re-run revert-to-snapshot add-deviation" ;;
         *:R) words="${base} revise" ;;
         *) words="${base}" ;;
     esac
@@ -684,67 +697,200 @@ case "${spec_type}" in
         fi
         ;;
     perf)
-        # PERF-G2: Baseline measured.
-        adv=""; mis=""
         tree=""; has_tree=0
         tree="$(section_of "${spec_text}" "Hypothesis tree")" && has_tree=1
         log="$(section_of "${spec_text}" "Results log")" || log=""
         target=""; has_target=0
         target="$(section_of "${spec_text}" "Target")" && has_target=1
-        [[ "${status}" == "in-progress" ]] && push adv "status is in-progress"
-        [[ ${has_decisions} -eq 1 ]] && push adv "03-decisions.md exists"
-        [[ ${has_tree} -eq 1 && "${tree}" != *"<<PHASE-3:"* ]] && push adv "## Hypothesis tree is filled"
-        has_line "${log}" '^\|[[:blank:]]*[1-9][0-9]*[[:blank:]]*\|' && push adv "the Results log has rows after the baseline"
         baseline=0
         for f in "${dir}"/04-artifacts/baseline-*; do
             [[ -f "${f}" ]] && { baseline=1; break; }
         done
+
+        # PERF-G1: Target defined (ADR 0032).
+        if [[ -n "${brief}" ]]; then
+            adv=""; mis=""
+            [[ "${status}" == "approved" || "${status}" == "in-progress" ]] && push adv "status is ${status}"
+            [[ ${baseline} -eq 1 ]] && push adv "a 04-artifacts/baseline-* file exists"
+            brief_missing 1
+            add_finding "1 (Target defined)" "${mis}" "${adv}"
+        fi
+
+        # PERF-G2: Baseline measured. ADR 0016's checks, plus the Gate 2 reply
+        # when a brief exists (ADR 0032).
+        adv=""; mis=""
+        [[ "${status}" == "in-progress" ]] && push adv "status is in-progress"
+        [[ ${has_decisions} -eq 1 ]] && push adv "03-decisions.md exists"
+        [[ ${has_tree} -eq 1 && "${tree}" != *"<<PHASE-3:"* ]] && push adv "## Hypothesis tree is filled"
+        has_line "${log}" '^\|[[:blank:]]*[1-9][0-9]*[[:blank:]]*\|' && push adv "the Results log has rows after the baseline"
         [[ ${baseline} -eq 0 ]] && push mis "no 04-artifacts/baseline-* file"
         has_line "${log}" '^\|[[:blank:]]*0[[:blank:]]*\|' || push mis "no Results log row 0"
         [[ ${has_target} -eq 1 && "${target}" == *"<<PHASE-2:"* ]] && push mis "## Target still holds a <<PHASE-2: ...>> field"
+        brief_missing 2
         add_finding "2 (Baseline measured)" "${mis}" "${adv}"
+
+        if [[ -n "${brief}" ]]; then
+            has_attempt_tests=0
+            for f in "${dir}"/04-artifacts/attempt-*-tests.txt; do
+                [[ -f "${f}" ]] && { has_attempt_tests=1; break; }
+            done
+            has_attempt_json=0
+            for f in "${dir}"/04-artifacts/attempt-*.json; do
+                [[ -f "${f}" ]] && { has_attempt_json=1; break; }
+            done
+            has_final=0; [[ -f "${dir}/04-artifacts/final-tests.txt" ]] && has_final=1
+            # Close-out fills it; Gate 2 Case A reaches close-out with no Phase 5,
+            # so Gates 7 and 8 are checked only once final-tests.txt exists.
+            tradeoffs_filled=0
+            trade="$(section_of "${spec_text}" "Trade-offs accepted")" \
+                && [[ "${trade}" != *"<<PHASE-6:"* ]] && tradeoffs_filled=1
+
+            # PERF-G3: Hotspot identified. Status in-progress is not evidence:
+            # Gate 2 Case A sets it with no hotspot work.
+            adv=""; mis=""
+            [[ ${has_attempt_tests} -eq 1 ]] && push adv "a 04-artifacts/attempt-*-tests.txt file exists"
+            brief_missing 3
+            add_finding "3 (Hotspot identified)" "${mis}" "${adv}"
+
+            # PERF-G4: Select hypothesis.
+            adv=""; mis=""
+            [[ ${has_attempt_tests} -eq 1 ]] && push adv "a 04-artifacts/attempt-*-tests.txt file exists"
+            brief_missing 4
+            add_finding "4 (Select hypothesis)" "${mis}" "${adv}"
+
+            # PERF-G5: Correctness verified.
+            adv=""; mis=""
+            [[ ${has_attempt_json} -eq 1 ]] && push adv "a 04-artifacts/attempt-*.json file exists"
+            [[ ${has_final} -eq 1 ]] && push adv "04-artifacts/final-tests.txt exists"
+            brief_missing 5
+            add_finding "5 (Correctness verified)" "${mis}" "${adv}"
+
+            # PERF-G6: Keep or revert decision. A reverted row is not evidence:
+            # Gate 5 Face B writes one before Gate 6 is shown.
+            adv=""; mis=""
+            has_line "${log}" '^\|.*\|[[:blank:]]*kept([^A-Za-z0-9_-]|$)' && push adv "the Results log has a kept row"
+            [[ ${has_final} -eq 1 ]] && push adv "04-artifacts/final-tests.txt exists"
+            brief_missing 6
+            add_finding "6 (Keep or revert decision)" "${mis}" "${adv}"
+
+            # PERF-G7: Regression pass.
+            adv=""; mis=""
+            if [[ ${has_final} -eq 1 ]]; then
+                [[ ${brief_8_seen} -eq 1 ]] && push adv "gate-briefs.md has a ## Gate 8 section"
+                [[ ${tradeoffs_filled} -eq 1 ]] && push adv "## Trade-offs accepted is filled"
+            fi
+            brief_missing 7
+            add_finding "7 (Regression pass)" "${mis}" "${adv}"
+
+            # PERF-G8: Final review pass.
+            adv=""; mis=""
+            [[ ${has_final} -eq 1 && ${tradeoffs_filled} -eq 1 ]] && push adv "## Trade-offs accepted is filled"
+            brief_missing 8
+            add_finding "8 (Final review pass)" "${mis}" "${adv}"
+        fi
         ;;
     rca)
-        # RCA-G2: Hypotheses enumerated (SW-51).
-        adv=""; mis=""
         root=""; has_root=0
         root="$(section_of "${spec_text}" "Root cause")" && has_root=1
         tree=""; has_tree=0
         tree="$(section_of "${spec_text}" "Hypothesis tree")" && has_tree=1
-        [[ "${status}" == "approved" || "${status}" == "in-progress" ]] && push adv "status is ${status}"
-        [[ ${has_root} -eq 1 && "${root}" != *"<<PHASE-3:"* ]] && push adv "## Root cause is filled"
+        rca_status=0
+        [[ "${status}" == "approved" || "${status}" == "in-progress" ]] && rca_status=1
+        root_filled=0
+        [[ ${has_root} -eq 1 && "${root}" != *"<<PHASE-3:"* ]] && root_filled=1
+
+        # RCA-G1: Evidence gathered (ADR 0032).
+        if [[ -n "${brief}" ]]; then
+            adv=""; mis=""
+            [[ ${rca_status} -eq 1 ]] && push adv "status is ${status}"
+            [[ ${has_tree} -eq 1 && "${tree}" != *"<<PHASE-2:"* ]] && push adv "## Hypothesis tree is filled"
+            [[ ${root_filled} -eq 1 ]] && push adv "## Root cause is filled"
+            brief_missing 1
+            add_finding "1 (Evidence gathered)" "${mis}" "${adv}"
+        fi
+
+        # RCA-G2: Hypotheses enumerated (SW-51), plus the Gate 2 reply when a
+        # brief exists (ADR 0032).
+        adv=""; mis=""
+        [[ ${rca_status} -eq 1 ]] && push adv "status is ${status}"
+        [[ ${root_filled} -eq 1 ]] && push adv "## Root cause is filled"
         [[ ${has_tree} -eq 1 && "${tree}" == *"<<PHASE-2:"* ]] && push mis "## Hypothesis tree still holds a <<PHASE-2: ...>> field"
+        brief_missing 2
         add_finding "2 (Hypotheses enumerated)" "${mis}" "${adv}"
+
+        # RCA-G3: Root cause confirmed. Only its yes sets status approved.
+        if [[ -n "${brief}" ]]; then
+            adv=""; mis=""
+            [[ ${rca_status} -eq 1 ]] && push adv "status is ${status}"
+            brief_missing 3
+            add_finding "3 (Root cause confirmed)" "${mis}" "${adv}"
+        fi
         ;;
     port)
         status_adv=0
         [[ "${status}" == "approved" || "${status}" == "in-progress" ]] && status_adv=1
+        decisions="$(doc_text "${dir}/03-decisions.md")" || decisions=""
+        has_pinning=0
+        has_line "${decisions}" '^## Behavior pinning' && has_pinning=1
 
-        # PORT-G1: Donor set frozen.
+        # PORT-G1: Donor set frozen. The rows below add their gate's reply and
+        # later evidence only when a brief exists (ADR 0032).
         adv=""; mis=""
         [[ ${status_adv} -eq 1 ]] && push adv "status is ${status}"
         [[ ${has_tasks} -eq 1 ]] && push adv "02-tasks.md exists"
+        [[ -n "${brief}" && ${has_decisions} -eq 1 ]] && push adv "03-decisions.md exists"
         [[ -f "${dir}/04-artifacts/source/MANIFEST.md" ]] || push mis "no 04-artifacts/source/MANIFEST.md"
         has_line "${spec_text}" '^- \*\*Frozen\*\*:[[:blank:]]*yes([^A-Za-z0-9_]|$)' || push mis "the Frozen line does not say yes"
+        brief_missing 1
         add_finding "1 (Donor set frozen)" "${mis}" "${adv}"
 
         # PORT-G2: Fidelity tables complete.
         adv=""; mis=""
         [[ ${status_adv} -eq 1 ]] && push adv "status is ${status}"
+        [[ -n "${brief}" && ${has_pinning} -eq 1 ]] && push adv "03-decisions.md has a ## Behavior pinning section"
         has_author_fill "${spec_text}" && push mis "00-spec.md still has unfilled <<...>> fields"
+        brief_missing 2
         add_finding "2 (Fidelity tables complete)" "${mis}" "${adv}"
 
         # PORT-G3: Behavior pinned.
         adv=""; mis=""
         [[ ${has_tasks} -eq 1 ]] && push adv "02-tasks.md exists"
-        decisions="$(doc_text "${dir}/03-decisions.md")" || decisions=""
-        has_line "${decisions}" '^## Behavior pinning' || push mis "03-decisions.md has no ## Behavior pinning section"
+        [[ -n "${brief}" && -f "${dir}/01-plan.md" ]] && push adv "01-plan.md exists"
+        [[ ${has_pinning} -eq 1 ]] || push mis "03-decisions.md has no ## Behavior pinning section"
+        brief_missing 3
         add_finding "3 (Behavior pinned)" "${mis}" "${adv}"
+
+        if [[ -n "${brief}" ]]; then
+            # PORT-G4: Plan approval.
+            adv=""; mis=""
+            [[ "${status}" == "in-progress" ]] && push adv "status is in-progress"
+            tasks="$(doc_text "${dir}/02-tasks.md")" || tasks=""
+            has_line "${tasks}" '^- \*\*Status\*\*:[[:blank:]]*done([^A-Za-z0-9_]|$)' \
+                && push adv "a task in 02-tasks.md is done"
+            for f in "${dir}"/04-artifacts/batches/batch-*-tests.txt; do
+                [[ -f "${f}" ]] && { push adv "a 04-artifacts/batches/batch-*-tests.txt file exists"; break; }
+            done
+            brief_missing 4
+            add_finding "4 (Plan approval)" "${mis}" "${adv}"
+
+            # PORT-G5: Batch tests green.
+            adv=""; mis=""
+            [[ -f "${dir}/04-artifacts/parity/INDEX.md" ]] && push adv "04-artifacts/parity/INDEX.md exists"
+            brief_missing 5
+            add_finding "5 (Batch tests green)" "${mis}" "${adv}"
+        fi
 
         # PORT-G6: Justified-diff parity.
         adv=""; mis=""
         [[ -f "${dir}/06-verify.md" ]] && push adv "06-verify.md exists"
+        if [[ -n "${brief}" ]]; then
+            has_line "${retro}" '^## PR description block[[:blank:]]*$' \
+                && push adv "05-retro.md has a ## PR description block section"
+            has_line "${retro}" '^## Divergence record[[:blank:]]*$' \
+                && push adv "05-retro.md has a ## Divergence record section"
+        fi
         [[ -f "${dir}/04-artifacts/parity/INDEX.md" ]] || push mis "no 04-artifacts/parity/INDEX.md"
+        brief_missing 6
         add_finding "6 (Justified-diff parity)" "${mis}" "${adv}"
         ;;
 esac

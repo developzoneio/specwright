@@ -8,6 +8,7 @@
   pilot); ADR 0025 (the `/sd:refactor` gates); ADR 0027 (the `/sd:perf` gates);
   `skills/sd-gate-brief/SKILL.md` (the rules); `skills/sd-port-fidelity/SKILL.md` (the tables)
 - Supersedes: none. Extends ADR 0024 decisions 1, 2, 3 and 5 to `/sd:port`. Closes SW-96.
+- Extended by: ADR 0032 (stop-gate reads the `/sd:port` briefs; SW-114)
 
 ## Context
 
