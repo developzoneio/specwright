@@ -345,6 +345,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` target lists gloss deviation IDs (SW-122)** - a live run of e2e
+  `17-port-gate-brief` went red at 32/33: the `Targets offered:` line of the Gate 2, 4 and 6 briefs
+  showed a bare `details D01`, because the rule named only the valid-targets line and option tokens
+  are allowed handles. Reruns found the same slip in a progress line ("apart from the D01 rename")
+  and in a collapsed subsection ("None beyond D01."), so `sd-gate-brief` now states one rule
+  instead of a list of places: every `D<NN>` the user reads sits on the same line as its
+  `donor -> host` form, except in a verbatim `details` excerpt of an artifact; where the form
+  does not fit, the line names the change without the ID. The e2e assertion is unchanged.
+  ADR 0028 consequences updated. No hook change.
 - **Hook conformance is green again on `develop/v1` (SW-118)** - the `block-ref-g5-revert-only`
   fixture needs `04-artifacts/coverage/after-refactor.txt` as its later-phase evidence, but the
   `coverage/` rule in `.gitignore` kept that file out of the SW-108 commit, so CI saw a refactor

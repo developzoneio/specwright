@@ -100,6 +100,17 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   requires its gloss there too. The third run reached Case A and `done`, but its closing summary
   glossed `D01` in prose and cited a constitution section, so the rule now names the closing
   summary as well. The fourth run was green, 33/33, Gate 6 Case A ($3.06, 717 s, claude 2.1.314).
+- **Fixed after the fifth live run (SW-122).** That run, during SW-114, reached `done` with every
+  gate approved but went red at 32/33: the `Targets offered:` line of the Gate 2, 4 and 6 briefs
+  showed a bare `details D01`. The SW-117 rule named only the valid-targets line, and option tokens
+  are allowed handles, so the model treated the target as a token. Fixing target lists alone did
+  not hold: each rerun left the ID bare in a new place, a progress line between tool calls ("apart
+  from the D01 rename") and then the collapsed subsection ("None beyond D01."). `sd-gate-brief`
+  now states one rule by scope instead of by place: every `D<NN>` the user reads sits on the same
+  line as its `donor -> host` form, except in a verbatim `details` excerpt of an artifact. Every
+  rerun also stopped short of `done` on an unrelated plan split, filed as SW-123.
+  The run after the scope rule was green, 33/33, one batch, Gate 6 Case A ($2.92, 626 s,
+  claude 2.1.316).
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).
