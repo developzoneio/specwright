@@ -15,7 +15,8 @@ closing summary, phase narration), Jira SW-99, and ADR 0022 (task rows and `deta
 outline), Jira SW-92, and ADR 0024 (the `/sd:bug` gates), Jira SW-96, and ADR 0025 (the
 `/sd:refactor` gates, `details` at Gate Re-plan), Jira SW-109, and ADR 0026 (the `/sd:rca` gates),
 Jira SW-111, and ADR 0027 (the `/sd:perf` gates), Jira SW-110, and ADR 0028 (the `/sd:port`
-gates), Jira SW-112. Measured "before": `docs/spikes/SW-88-feature-baseline.md`.
+gates), Jira SW-112, and ADR 0030 (the combined S-lane brief), Jira SW-94. Measured "before":
+`docs/spikes/SW-88-feature-baseline.md`.
 
 ---
 
@@ -48,10 +49,13 @@ presented a gate without printing a line of it.
   reply text is the only channel the user reads. A gate whose body is not in reply text has not
   been presented, and no later message may say it was.
 - **One section per gate pass.** Section headings, by gate, for `/sd:feature` (other workflows:
-  "Per-workflow parts"):
+  "Per-workflow parts"). `## Gate 1+2` is the S lane's combined approval (ADR 0030): one section,
+  one `Reply:` line, and it is the evidence of **both** Gate 1 and Gate 2. The `1+2` is part of the
+  heading's contract because `stop-gate` matches on it:
 
 ```text
 ## Gate 1 - Spec approval (pass <n>)
+## Gate 1+2 - Spec and outline approval (pass <n>)
 ## Gate 2 - Plan approval (pass <n>)
 ## Gate 2 - Complexity (pass <n>)
 ## Gate 3 - Integration and review (pass <n>)
@@ -106,7 +110,8 @@ Lines, in order:
    face.
 3. When `N > 3`: `<N - 3> more defaults taken - reply details to list them.`
 4. `Risk: <one line>` - the most likely way this goes wrong, or `Risk: none found.`
-5. Gate 2 faces only: the task table, one row per task, in task order. When `01-plan.md` has a
+5. Gate 2 faces and the S-lane combined approval only: the task table, one row per task, in task
+   order. When `01-plan.md` has a
    `## Outline` (ADR 0022), the rows come from it: the outline row's ID and title, and as main
    file the first production path in its `Files`.
 
@@ -134,6 +139,13 @@ Per gate, for `/sd:feature`:
   main thread drops any such decision that still arrives before it writes the section. The
   Complexity face uses the same shape and the same rule,
   and its `What changes` line states the measured reason the plan is over threshold.
+- **Spec and outline approval (S lane)** - the Gate 2 shape, one gate for both artifacts. Decisions
+  come from the spec **and** the outline, ranked together: nothing is approved yet, so no decision
+  is "already settled". `What changes` is the user-visible effect of the whole change. With no
+  decision at all, the single line is `Decisions: none - the spec only restates the request.` The
+  task table comes from the outline. Every decision in the block, shown or collapsed, is stated in
+  `00-spec.md` or `01-plan.md`. A `yes` approves both artifacts and every default, shown and
+  collapsed; the brief says so by saying "defaults taken".
 - **Integration and review** - no task table. Lines: `Tests: <summary>. Lint: <summary>.`,
   `Review: <n> blocking, <n> warnings, <n> suggestions.`, then one line per blocking finding
   (`Blocking: <plain title> - <file> - <direction>`, or `Blocking: none`), then
@@ -166,7 +178,8 @@ A `yes` approves every recommended default, shown and collapsed. The brief says 
 ## The details option
 
 In `/sd:feature`, Gate 1, Gate 2 (both faces) and Gate 3 offer `details`, and Gate 2 and Gate 3
-offer it with an optional target: `details <target>`. Every `/sd:bug`, `/sd:refactor`,
+offer it with an optional target: `details <target>`. The S-lane combined approval, a face of
+Gate 1, offers every target a Gate 2 face does, plus `spec`. Every `/sd:bug`, `/sd:refactor`,
 `/sd:rca`, `/sd:perf` and `/sd:port` gate offers it, with the targets in "Per-workflow parts";
 the rules of this section apply to them. Gate Re-plan offers `details <target>` in every workflow that reaches it (ADR 0025): its delta exists
 only in the brief until `approve` writes the revision, so the user needs to see the tasks it
@@ -177,10 +190,11 @@ of an artifact that is on disk.
 
 | Reply | Prints | Offered at |
 |---|---|---|
-| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | Gate 1, Gate 2 faces, Gate 3, Gate Re-plan |
-| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line; before Phase 3b has written `02-tasks.md`, the `## Outline` table's header, separator and that task's row from `01-plan.md`, verbatim | Gate 2 faces, Gate 3, Gate Re-plan |
-| `details plan` | `01-plan.md`, verbatim, `## Revisions` included | Gate 2 faces, Gate 3, Gate Re-plan |
-| `details risks` | the risks section of `01-plan.md` and the `### Risk assessment` section of `03-decisions.md`, verbatim | Gate 2 faces, Gate 3 |
+| `details` | the section's `### More decisions (shown on details)` subsection, the paths of the artifacts the gate approves, then one line naming the targets this gate offers | Gate 1, S-lane approval, Gate 2 faces, Gate 3, Gate Re-plan |
+| `details <task ID>`, e.g. `details T02` | that task's full block from `02-tasks.md`, verbatim, from its heading to its `Status` line; before Phase 3b has written `02-tasks.md`, the `## Outline` table's header, separator and that task's row from `01-plan.md`, verbatim | S-lane approval, Gate 2 faces, Gate 3, Gate Re-plan |
+| `details plan` | `01-plan.md`, verbatim, `## Revisions` included | S-lane approval, Gate 2 faces, Gate 3, Gate Re-plan |
+| `details risks` | the risks section of `01-plan.md` and the `### Risk assessment` section of `03-decisions.md` (omitted when that file does not exist, as on the S lane), verbatim | S-lane approval, Gate 2 faces, Gate 3 |
+| `details spec` | `00-spec.md`, verbatim | S-lane approval |
 
 A target that names nothing at this gate (an unknown task ID, a target the gate does not offer)
 prints one line naming the valid targets, then asks again. A task ID is valid at a Gate 2 face when
@@ -188,7 +202,8 @@ it names an outline row or, for a plan with no outline, a task block; at Gate Re
 names a task block or an outline row (a new task the delta adds has neither yet: its target is the
 `Change:` line). `details` never points at a
 `02-tasks.md` that does not exist. Spec approval offers a bare `details`
-only: no plan, task list or impact analysis exists yet.
+only: no plan, task list or impact analysis exists yet. The S-lane approval has a plan and an
+outline but no impact analysis, so `details risks` prints the plan's risks alone.
 
 ## Agent return blocks
 
@@ -198,7 +213,7 @@ in that order.
 
 ```text
 GATE_BRIEF
-gate: spec | plan | complexity
+gate: spec | plan | complexity | s-lane
 what-changes: <one plain sentence>
 decision: <impact> <reversibility> | <decision> | <recommended default> | <why>
 risk: <one line>
@@ -207,7 +222,8 @@ END_GATE_BRIEF
 ```
 
 `decision:` repeats once per decision (none when there are none); `task:` repeats once per task
-and appears only for `plan` and `complexity`, one per outline row when the plan has an outline.
+and appears only for `plan`, `complexity` and `s-lane`, one per outline row when the plan has an
+outline. `s-lane` is the combined S-lane approval: its decisions cover the spec and the outline.
 
 For a bug spec (`TEMPLATE = bug.template.md`), `create` and `refine` end with a `gate: symptom`
 block instead, ranked and recorded in `00-spec.md` exactly as `gate: spec`:

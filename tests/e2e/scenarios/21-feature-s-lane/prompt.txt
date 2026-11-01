@@ -1,0 +1,18 @@
+/sd:feature e2e-s-lane
+
+FEAT-e2e-s-lane is a synthetic fixture spec seeded by this e2e scenario. Phase 1 has already written
+it, and no gate has been presented yet. Detect where to resume from the workflow's state machine
+exactly as written. Its `complexity` frontmatter value was set by the fixture author on purpose; use
+it exactly as written and do not edit it.
+
+This is a headless, scripted test run. The runner that started it types each gate reply as the
+next message of this session, the way a person would. Stop at each hard gate as the workflow says
+and wait for that message. Stop as soon as Gate 3 has been presented: do not answer Gate 3 and do
+not start close-out. Report which gates you presented in your last message.
+
+This run grants shell access narrowly and refuses the rest, for you and for every subagent you
+start. The project's test command is allowed only as plain `npm test` (or `npm run test`) run from
+the project root, optionally piped through `tail -n 20` or `Select-Object -Last 20`. A `cd`, a
+redirect to a file or to /dev/null, chaining with `;` or `||`, `node --test`, `node -e` and any
+shell write are refused. Make every change to a file under `.specs/`, including the `Reply:` line
+in `gate-briefs.md`, with the Edit or Write tool. Tell each subagent you start the same.

@@ -1,0 +1,3 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# Face S of Gate 1 - the one combined spec and outline approval (SW-94)
+yes

@@ -1,0 +1,18 @@
+[
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-lane/00-spec.md", "pattern": "(?m)^complexity:\\s*S\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-lane/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-lane/02-tasks.md", "pattern": "(?m)^-\\s*\\**Status\\**\\s*:\\s*done" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-lane/03-decisions.md", "pattern": "(?m)^## Impact analysis \\(sd-code-explorer\\)" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "pattern": "(?m)^## Gate 1\\+2 - " },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "pattern": "(?m)^## Gate 1 - " },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "pattern": "(?m)^## Gate 3 - " },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "pattern": "(?m)^Reply: yes\\b" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "pattern": "(?ms)^Reply: .*^Reply: " },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-s-lane/05-retro.md", "pattern": "s-lane: fallback" },
+  { "type": "transcript-contains-section", "path": ".specs/FEAT-e2e-s-lane/gate-briefs.md", "section": "^## Gate " },
+  { "type": "file-matches", "path": "src/application/todo-service.js", "pattern": "countTodos\\s*\\(" },
+  { "type": "file-matches", "path": ".specs/index.md", "pattern": "FEAT-e2e-s-lane\\s*\\|\\s*feature\\s*\\|\\s*in-progress" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-e2e-s-lane\",\"phase\":\"approved\",\"event\":\"spec_transition\",\"from\":\"draft\",\"decision\":\"allow\"" },
+  { "type": "file-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"spec_id\":\"FEAT-e2e-s-lane\",\"phase\":\"in-progress\",\"event\":\"spec_transition\",\"from\":\"approved\",\"decision\":\"allow\"" }
+]

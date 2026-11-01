@@ -2,6 +2,8 @@
 
 Feature request: add a countByStatus() method to TodoService that returns { done: <n>, pending: <n> }
 counts across all todos currently in the store. Keep it small - this should be a 2-3 task spec.
+Write `complexity: M` in the spec's frontmatter: this scenario covers the full M path (impact
+analysis, then a separate Gate 2), and the S lane has its own scenario.
 
 This is a headless, scripted test run. The runner that started it types each gate reply as the
 next message of this session, the way a person would. Stop at each hard gate as the workflow says

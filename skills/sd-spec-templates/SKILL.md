@@ -126,6 +126,34 @@ heading is an H3 (or deeper) whose text contains a `T<digits>` token.
 **sd-model-escalation** rules that read it. That is a main-thread action; the architect only writes
 the estimate.
 
+### S-lane thresholds (feature only)
+
+A spec estimated `S` takes the S lane of `/sd:feature` (ADR 0030): no Phase 2 impact map, one
+combined approval of spec and outline. The "estimate" rubric above does not measure anything, so
+the lane has its own thresholds, measured on the S outline the same way the decompose thresholds
+are measured on the M/L outline. The outline **falls back** to the full path when **any** hold:
+
+| Limit | Falls back when | Measured from |
+|---|---|---|
+| tasks | **> 4** | the outline rows, counted with the tolerant grammar |
+| production layers | **> 1**, excluding `Tests` and `Config` | the rows' `Files`, derived as in "Measure the outline" above |
+| surface | **> 4** production files, excluding `Tests` and `Config` | the distinct production paths in the rows' `Files`, plus the dependents the architect's own discovery found (see below) |
+| open questions | **any** unresolved | the spec, plus the cases below |
+
+**Surface replaces the impact-surface input.** The decompose threshold's "impact surface" reads the
+Phase 2 map in `03-decisions.md`, which the S lane never writes. The architect measures its own
+bounded discovery instead (`agents/spec-architect.md`, "S-lane outline"): the production files that
+reference a symbol the outline changes, found in at most 2 Glob/Grep rounds, are the dependents.
+
+**Two cases are open questions, not a measured number.** A production path that maps to none of
+the constitution's declared layers (as above), and a changed existing symbol whose callers 2 rounds
+could not enumerate. Both mean the blast radius is unknown, which is what Phase 2 is for.
+
+A fallen-back spec is measured again on the full path against the decompose thresholds at Gate 2,
+so a breach here never skips a later check. The values above are proposals with no corpus behind
+them; this section is their only home. `commands/feature.md` and `sd-spec-architect` name it and
+never restate a number.
+
 ---
 
 ## bug.template.md

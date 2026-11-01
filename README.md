@@ -134,7 +134,7 @@ stopping at Gate 1 for your sign-off. No project handy? The bundled
 
 | Command | Type | Hard gates | Purpose |
 |---|---|---|---|
-| `/sd:feature <ID-or-slug>` | Workflow | 3 | Spec-driven feature: spec -> impact -> outline (complexity triage) -> expand -> execute -> batch review -> close |
+| `/sd:feature <ID-or-slug>` | Workflow | 3 | Spec-driven feature: spec -> impact -> outline (complexity triage; S specs take a one-approval S lane) -> expand -> execute -> batch review -> close |
 | `/sd:bug <ID-or-slug>` | Workflow | 5 | Root-cause-first fix: capture -> reproduce -> investigate -> failing test -> minimal fix -> regression |
 | `/sd:rca <slug>` | Workflow | 3 | Incident analysis. **Output is the spec - no code change.** |
 | `/sd:refactor <slug>` | Workflow | 6 | Coverage-gated restructure: requires >=80% coverage before touching code |

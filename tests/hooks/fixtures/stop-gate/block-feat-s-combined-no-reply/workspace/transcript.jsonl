@@ -1,0 +1,2 @@
+{"type": "user", "message": {"content": "/sd:feature TEST-200 - see .specs/FEAT-TEST-200/00-spec.md"}}
+{"type": "assistant", "message": {"content": "Working on FEAT-TEST-200 now."}}
