@@ -1,5 +1,6 @@
 # One reply per turn (SW-103), each sent with --resume to the same session. One line each.
-# One donor file, one deviation the host constitution forces, one task in one batch.
+# One donor file, one deviation the host constitution forces, one host path so one batch: the
+# pinning-test re-point rides in that batch, never in its own (SW-123).
 # Gate 1 - donor set frozen (HARD)
 yes
 # Gate 2 - fidelity tables complete (HARD)

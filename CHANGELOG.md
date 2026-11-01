@@ -345,6 +345,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` plans the pinning-test re-point inside its batch (SW-123)** - live runs of e2e
+  `17-port-gate-brief` stopped short of `done`: the architect planned re-pointing the pinning test
+  from donor to host as a task of its own, in a second batch, so Gate 5 was shown twice and the
+  run ran out of replies. Nothing said who does the re-point, and a pinning file is not a `Host
+  path`, so the batching rule had no place for it. Phase 6 now puts it in the last task of the
+  batch whose host path the seam constructs, and calls a task that edits only pinning files a
+  planning defect; `sd-port-fidelity`, `sd-atomic-task-format` and the implementer's port section
+  say the same. Live e2e 17 now plans one batch and reaches `done`, 33/33. ADR 0028
+  consequences updated. No hook change.
 - **`/sd:port` target lists gloss deviation IDs (SW-122)** - a live run of e2e
   `17-port-gate-brief` went red at 32/33: the `Targets offered:` line of the Gate 2, 4 and 6 briefs
   showed a bare `details D01`, because the rule named only the valid-targets line and option tokens
