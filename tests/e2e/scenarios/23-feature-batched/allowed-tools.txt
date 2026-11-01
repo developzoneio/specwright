@@ -1,0 +1,6 @@
+# Permission rules granted under dontAsk (SW-80), one per line: file writes plus commands.test (npm test in the fixture).
+# A spec-gate deny still wins over these. Other shell writes stay refused, unlike under acceptEdits.
+Edit
+Write
+MultiEdit
+Bash(npm test:*)

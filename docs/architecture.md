@@ -91,7 +91,7 @@ Each subagent has a focused role, a minimal tool allowlist, and a model assignme
 | `sd-spec-architect` | sonnet | Read/Write/Edit + Grep/Glob + Atlassian + Context7 | Authors specs, plans, tasks. Constitution-aware. |
 | `sd-code-explorer` | haiku | Read/Grep/Glob + GitNexus | Read-only navigation. Every finding cites `file:line`. |
 | `sd-debugger` | sonnet | Read/Grep/Glob/Bash + sequential-thinking + GitNexus + Tavily + Context7 | Hypothesis-tree investigation. Distinguishes proximate vs root cause. |
-| `sd-implementer` | haiku | Read/Write/Edit/MultiEdit/Grep/Glob/Bash + Context7 | Executes ONE atomic task with scope discipline. |
+| `sd-implementer` | haiku | Read/Write/Edit/MultiEdit/Grep/Glob/Bash + Context7 | Executes ONE atomic task with scope discipline, or in `/sd:feature` one group of consecutive same-file tasks (ADR 0031). |
 | `sd-reviewer` | sonnet | Read/Grep/Glob + sequential-thinking + GitNexus | Severity-tagged review (🔴 BLOCK / 🟠 WARN / 🟡 SUGGEST / 🟢 PASS). Cannot write. |
 | `sd-docs-writer` | sonnet | Read/Write/Glob/Grep + sd-evidence-citation | Authors one MADR-style ADR from a spec's decisions. Writes only the ADR file. |
 

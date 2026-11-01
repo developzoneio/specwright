@@ -96,7 +96,10 @@ and waits for explicit user approval; silence is not approval, and there is no o
    scoped task. It has no outline row and needs none: `SL068` exempts a block with `Revised-by`.
 
 4. **Resume.** Re-enter the Execute phase at the first affected (now regenerated) task. Already-passed
-   tasks that the revision did not touch stay checked. From Phase 3b, the Execute phase starts at
+   tasks that the revision did not touch stay checked. A discovery inside a `/sd:feature` task
+   group (ADR 0031) stops the group at the affected task: the group's earlier tasks that passed are
+   checked off before this gate, and the affected task and the rest of the group wait for the
+   revision. From Phase 3b, the Execute phase starts at
    its first task, as it would after any expansion. From Phase 6, the Execute phase starts at the new
    task, and Phase 5, Gate 3 (a new pass) and Phase 6 then run again as after any Execute phase.
 

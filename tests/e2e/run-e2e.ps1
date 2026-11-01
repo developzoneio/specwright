@@ -781,15 +781,10 @@ function Test-ScenarioUsesTranscript {
         Where-Object { $_.type -like 'transcript-*' }).Count -gt 0
 }
 
-function Get-MainThreadTextBlocks {
-    # The text blocks of the main thread's assistant messages, in order, from
-    # <FakeHome>/.claude/projects/*/<SessionId>.jsonl for each of $SessionIds
-    # (one per turn, SW-103; resumed turns share one). Tool calls (a Write's
-    # content included) and subagent transcripts (subagents/, isSidechain)
-    # are not reply text. Returns $null when no main transcript is found.
-    # Each block is { Turn; Text }: Turn counts the user prompts seen so far
-    # (a tool_result or isMeta entry is not a prompt), continuing across the
-    # session files in the order of $SessionIds (SW-113).
+function Get-MainTranscriptFiles {
+    # The main session files under <FakeHome>/.claude/projects, in the order of
+    # $SessionIds (all of them when none is named). Subagent transcripts
+    # (subagents/) are excluded. Returns $null when there is none.
     param([string]$FakeHome, [string[]]$SessionIds)
     $projects = Join-Path $FakeHome '.claude' 'projects'
     if (-not (Test-Path -LiteralPath $projects)) { return $null }
@@ -801,6 +796,68 @@ function Get-MainThreadTextBlocks {
             Sort-Object { [array]::IndexOf($wanted, $_.BaseName) })
     }
     if ($files.Count -eq 0) { return $null }
+    return , $files
+}
+
+function Get-MainThreadSubagentCalls {
+    # SW-95: the subagent_type of every Agent (or legacy Task) tool call the
+    # main thread made, in order, across the run's session files. Subagents
+    # cannot start subagents, so the main thread is the only caller. Returns
+    # $null when there is no main transcript.
+    param([string]$FakeHome, [string[]]$SessionIds)
+    $files = Get-MainTranscriptFiles -FakeHome $FakeHome -SessionIds $SessionIds
+    if ($null -eq $files) { return $null }
+    $calls = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in $files) {
+        foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $entry = $null
+            try { $entry = $line | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            if ($entry.isSidechain -eq $true -or $entry.type -ne 'assistant') { continue }
+            if ($null -eq $entry.message -or $null -eq $entry.message.content) { continue }
+            foreach ($c in @($entry.message.content)) {
+                if ($c.type -ne 'tool_use' -or @('Agent', 'Task') -notcontains $c.name) { continue }
+                if ($null -eq $c.input -or -not $c.input.subagent_type) { continue }
+                $calls.Add([string]$c.input.subagent_type)
+            }
+        }
+    }
+    return , $calls.ToArray()
+}
+
+function Test-TranscriptSubagentCalls {
+    # transcript-subagent-calls (SW-95): the main thread called subagent
+    # `agent` (exact name) at least `min` (default 1) and at most `max` times.
+    # No transcript fails, and the default min keeps a run that never called
+    # the agent from passing empty.
+    param($Assertion, [string]$FakeHome, $Run)
+    $sessionIds = @()
+    if ($Run -and $Run.SessionIds) { $sessionIds = @($Run.SessionIds) }
+    elseif ($Run -and $Run.Result -and $Run.Result.session_id) { $sessionIds = @([string]$Run.Result.session_id) }
+    $calls = Get-MainThreadSubagentCalls -FakeHome $FakeHome -SessionIds $sessionIds
+    if ($null -eq $calls) { Write-Info "no main-thread transcript found under $FakeHome"; return $false }
+    $n = @($calls | Where-Object { $_ -ceq [string]$Assertion.agent }).Count
+    $min = if ($null -ne $Assertion.min) { [int]$Assertion.min } else { 1 }
+    $max = [int]$Assertion.max
+    if ($n -lt $min -or $n -gt $max) {
+        Write-Info "$($Assertion.agent) was called $n time(s); expected $min..$max"
+        return $false
+    }
+    return $true
+}
+
+function Get-MainThreadTextBlocks {
+    # The text blocks of the main thread's assistant messages, in order, from
+    # <FakeHome>/.claude/projects/*/<SessionId>.jsonl for each of $SessionIds
+    # (one per turn, SW-103; resumed turns share one). Tool calls (a Write's
+    # content included) and subagent transcripts (subagents/, isSidechain)
+    # are not reply text. Returns $null when no main transcript is found.
+    # Each block is { Turn; Text }: Turn counts the user prompts seen so far
+    # (a tool_result or isMeta entry is not a prompt), continuing across the
+    # session files in the order of $SessionIds (SW-113).
+    param([string]$FakeHome, [string[]]$SessionIds)
+    $files = Get-MainTranscriptFiles -FakeHome $FakeHome -SessionIds $SessionIds
+    if ($null -eq $files) { return $null }
     $blocks = [System.Collections.Generic.List[object]]::new()
     $turn = 0
     foreach ($f in $files) {
@@ -1229,6 +1286,78 @@ function Invoke-TranscriptNotMatchesSelfCheck {
     return $allOk
 }
 
+function Invoke-TranscriptSubagentCallsSelfCheck {
+    # -SelfTest, offline (SW-95): transcript-subagent-calls against transcripts
+    # built here. Counts only the main thread's Agent/Task calls naming the
+    # agent exactly; a sidechain entry, a subagent transcript, another agent or
+    # another tool does not count. No transcript and zero calls fail.
+    $sid = 'selftest-session'
+    function New-Entry {
+        param([object[]]$Content, [bool]$Sidechain = $false)
+        return ([ordered]@{
+            type = 'assistant'; isSidechain = $Sidechain; sessionId = $sid
+            message = [ordered]@{ role = 'assistant'; content = $Content }
+        } | ConvertTo-Json -Depth 10 -Compress)
+    }
+    function New-Call {
+        param([string]$Agent, [string]$Tool = 'Agent')
+        return [ordered]@{ type = 'tool_use'; id = 'toolu_1'; name = $Tool
+            input = [ordered]@{ subagent_type = $Agent; prompt = 'TASK_DETAILS = T01' } }
+    }
+    $impl = 'sd-implementer'
+    $cases = @(
+        @{ Name = 'two-of-three-tasks'; Expect = $true
+           Main = @((New-Entry @((New-Call $impl))), (New-Entry @((New-Call $impl)))) }
+        @{ Name = 'one-per-task'; Expect = $false
+           Main = @((New-Entry @((New-Call $impl))), (New-Entry @((New-Call $impl))),
+                    (New-Entry @((New-Call $impl)))) }
+        @{ Name = 'legacy-task-tool'; Expect = $true
+           Main = @((New-Entry @((New-Call $impl 'Task')))) }
+        @{ Name = 'other-agents-ignored'; Expect = $true
+           Main = @((New-Entry @((New-Call $impl))), (New-Entry @((New-Call 'sd-reviewer'))),
+                    (New-Entry @((New-Call 'sd-spec-architect'))), (New-Entry @((New-Call $impl)))) }
+        @{ Name = 'sidechain-ignored'; Expect = $true
+           Main = @((New-Entry @((New-Call $impl))), (New-Entry @((New-Call $impl)) $true),
+                    (New-Entry @((New-Call $impl)) $true)) }
+        @{ Name = 'subagent-transcript-ignored'; Expect = $true
+           Main = @((New-Entry @((New-Call $impl))))
+           Sub = @((New-Entry @((New-Call $impl)) $true), (New-Entry @((New-Call $impl)) $true)) }
+        @{ Name = 'zero-calls'; Expect = $false
+           Main = @((New-Entry @((New-Call 'sd-reviewer')))) }
+        @{ Name = 'no-transcript'; Expect = $false; Main = $null }
+    )
+    $allOk = $true
+    $root = New-EmptyTempDir -Prefix 'sd-e2e-subagent-calls-selftest'
+    try {
+        foreach ($c in $cases) {
+            $fh = Join-Path (Join-Path $root $c.Name) 'home'
+            if ($null -ne $c.Main) {
+                $proj = Join-Path $fh '.claude' 'projects' 'selftest-ws'
+                New-Item -ItemType Directory -Path $proj -Force | Out-Null
+                [System.IO.File]::WriteAllText((Join-Path $proj "$sid.jsonl"), (($c.Main -join "`n") + "`n"))
+                if ($c.Sub) {
+                    $subDir = Join-Path $proj $sid 'subagents'
+                    New-Item -ItemType Directory -Path $subDir -Force | Out-Null
+                    [System.IO.File]::WriteAllText((Join-Path $subDir 'agent-1.jsonl'), (($c.Sub -join "`n") + "`n"))
+                }
+            }
+            $run = [pscustomobject]@{ Result = [pscustomobject]@{ session_id = $sid } }
+            $assertion = [pscustomobject]@{ type = 'transcript-subagent-calls'; agent = $impl; max = 2 }
+            $got = Test-OneAssertion -Assertion $assertion -Workspace '' -Run $run -FakeHome $fh
+            $want = if ($c.Expect) { 'pass' } else { 'fail' }
+            if ($got -eq $c.Expect) {
+                Write-Ok "self-test: transcript-subagent-calls [$($c.Name)] : $want, as expected"
+            } else {
+                Write-Bad "self-test: transcript-subagent-calls [$($c.Name)] : expected $want, got the opposite"
+                $allOk = $false
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return $allOk
+}
+
 function Invoke-PathWildcardSelfCheck {
     # -SelfTest, offline (SW-109): a wildcard path resolves to its one match,
     # and an absent or ambiguous one never passes file-exists.
@@ -1374,6 +1503,9 @@ function Test-OneAssertion {
         'transcript-not-matches' {
             return (Test-TranscriptNotMatches -Assertion $Assertion -FakeHome $FakeHome -Run $Run)
         }
+        'transcript-subagent-calls' {
+            return (Test-TranscriptSubagentCalls -Assertion $Assertion -FakeHome $FakeHome -Run $Run)
+        }
         default {
             throw "unknown assertion type '$type'"
         }
@@ -1398,6 +1530,10 @@ function Get-AssertionLabel {
             return "transcript-contains-section: $($Assertion.path) [$section]"
         }
         'transcript-not-matches' { return "transcript-not-matches: reply text !~ $($Assertion.pattern)" }
+        'transcript-subagent-calls' {
+            $min = if ($null -ne $Assertion.min) { $Assertion.min } else { 1 }
+            return "transcript-subagent-calls: $($Assertion.agent) called $min..$($Assertion.max) times"
+        }
         default            { return "unknown: $($Assertion.type)" }
     }
 }
@@ -1655,6 +1791,7 @@ if ($SelfTest) {
     Write-Host ''
     Write-Host '=== e2e self-test: transcript-not-matches must see only main-thread reply text, offline ==='
     if ((Invoke-TranscriptNotMatchesSelfCheck) -eq $false) { $allDetected = $false }
+    if ((Invoke-TranscriptSubagentCallsSelfCheck) -eq $false) { $allDetected = $false }
     Write-Host ''
     Write-Host '=== e2e self-test: output-matches / output-not-matches must scope a rule to one spec, offline ==='
     if ((Invoke-OutputAssertionSelfCheck) -eq $false) { $allDetected = $false }
