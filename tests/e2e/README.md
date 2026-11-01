@@ -111,8 +111,9 @@ ran the same content.
 In `22` the outline fell back on one limit alone: the retro line reads `s-lane: fallback to full
 path - layers 3 > 1 (Domain, Application, Infrastructure)`. In `21` the one `yes` at Face S wrote
 a single `## Gate 1+2` section, and `events.jsonl` recorded both `draft -> approved` and
-`approved -> in-progress` from it. `02-feature-happy` has not been re-run since it was pinned to
-`complexity: M`.
+`approved -> in-progress` from it. `02-feature-happy`, now pinned to `complexity: M`, passed
+27/27 at `172b6a8`, with separate Gate 1, Gate 2 and Gate 3 sections, so the M path is unchanged.
+That run kept no results file, so its cost and duration were not recorded.
 
 ## Prerequisites
 
