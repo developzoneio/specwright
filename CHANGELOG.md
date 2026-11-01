@@ -10,6 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **stop-gate rules for `/sd:rca`, `/sd:perf` and `/sd:port` (SW-114)** - with
+  `hooks.stopGate.enabled`, an rca, perf or port spec past a gate whose `gate-briefs.md` section
+  has no approving `Reply:` now blocks the stop, as feature, bug and refactor gates already do
+  (ADR 0032, extends ADR 0016 and ADR 0029). No `gate-briefs.md`, or a gate before the brief's
+  first section, never blocks.
+  - **New rows.** rca Gates 1 and 3; perf Gates 1 and 3-8; port Gates 4 and 5. Each gate's
+    evidence is the first artifact written after its approving answer: the hypothesis tree, a
+    baseline, an attempt's test output or measurement, a `kept` row, `final-tests.txt`, a filled
+    `## Trade-offs accepted`, a done task, `parity/INDEX.md`.
+  - **Layered rows.** RCA-G2, PERF-G2 and PORT-G1/G2/G3/G6 keep their ADR 0016 checks and add
+    the reply to the same finding. Without a brief, their output is byte-identical.
+  - **Tokens.** An answer that only moves the run forward approves (perf `continue`, `revert`,
+    `keep-with-reason`, `proceed anyway`, `choose`; port `continue`). One that is always followed
+    by another pass of the gate does not (`gather more`, `add hypothesis`, `dig deeper`,
+    `investigate`, `address findings`, `re-capture`, `re-pin`, `revert batch`, `re-run parity`,
+    `revert-to-snapshot`, `add-deviation`).
+  - **Gate 2 Case A.** perf's already-at-goal branch skips Gates 3-8. Status `in-progress` and
+    the Gate 8 section are therefore not evidence for them, and perf Gates 7 and 8 are checked only
+    once `final-tests.txt` exists.
+  - **Tests.** 36 new conformance fixtures (both twins, identical decisions; no existing fixture
+    changed) and 6 `smoke-hooks` cases. Two of the new fixtures join the latency selection.
+    Latency (30 iterations, one Windows workstation): stop-gate p95 626 ms under pwsh and 548 ms
+    under PowerShell 5.1, against budgets of 1300 and 1000 ms. The bash twin is unchanged on specs
+    without a brief. It adds about 150 ms under Git Bash when it reads a perf brief.
 - **Batched implementer for `/sd:feature` (SW-95, ADR 0031)** - Phase 4 now runs consecutive
   tasks that share a `Files` entry as one `sd-implementer` call, when each task's dependencies are
   done or in the same group and none is `Reversibility: hard`. Check-off, the `T<NN>:` retro line

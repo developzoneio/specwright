@@ -7,6 +7,7 @@
   (printed means reply text); ADR 0024 (the `/sd:bug` pilot); ADR 0025 (the `/sd:refactor` gates);
   ADR 0026 (the `/sd:rca` gates); `skills/sd-gate-brief/SKILL.md` (the rules)
 - Supersedes: none. Extends ADR 0024 decisions 1, 2, 3 and 5 and ADR 0025 decision 4 to `/sd:perf`.
+- Extended by: ADR 0032 (stop-gate reads the `/sd:perf` briefs; SW-114)
 
 ## Context
 

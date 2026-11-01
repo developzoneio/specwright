@@ -18,7 +18,8 @@
          turn that never touched a spec is never blocked.
       4. By the frontmatter type:, evaluate the invariant table of ADR 0016
          (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan:
-         ADR 0029; all read from gate-briefs.md). A rule fires only when
+         ADR 0029; rca, perf and port gate replies: ADR 0032; all read from
+         gate-briefs.md). A rule fires only when
          later-phase evidence exists AND the HARD gate's own evidence is
          missing.
       5. On a hit, print {"decision":"block","reason":...} to stdout. That
@@ -288,8 +289,8 @@ function Test-StatusIn {
     return ($Allowed -ccontains $Status)
 }
 
-# --- gate briefs (ADR 0021, ADR 0029) -----------------------------------------
-# /sd:feature, /sd:bug and /sd:refactor gates are evidenced by gate-briefs.md
+# --- gate briefs (ADR 0021, ADR 0029, ADR 0032) -------------------------------
+# Every phased workflow's gates are evidenced by gate-briefs.md
 # (sd-gate-brief): one `## Gate <label> ...` section per gate pass, closed by a
 # `Reply: <reply verbatim>` line. Only those two kinds of line are read.
 # Mirrors read_brief in the .sh.
@@ -302,6 +303,9 @@ $script:BriefOrder = @{
     feature  = @('1', '2', 'R', '3')
     bug      = @('1', '2', '3a', '3', '4', '5')
     refactor = @('1', '2', '3', '4', '5', 'R', '6')
+    rca      = @('1', '2', '3')
+    perf     = @('1', '2', '3', '4', '5', '6', '7', '8')
+    port     = @('1', '2', '3', '4', '5', '6')
 }
 
 # The option tokens that keep gate <type>:<label> open or leave it, plus a bare
@@ -319,6 +323,15 @@ function Get-DenyTokens {
         '^(bug:5|refactor:6)$' { return ($base + 'address') }
         '^refactor:[23]$' { return ($base + 'add') }
         '^refactor:5$' { return ($base + @('revert', 'fix')) }
+        '^rca:1$' { return ($base + 'gather') }
+        '^rca:2$' { return ($base + 'add') }
+        '^rca:3$' { return ($base + 'dig') }
+        '^perf:7$' { return ($base + 'investigate') }
+        '^perf:8$' { return ($base + 'address') }
+        '^port:1$' { return ($base + 're-capture') }
+        '^port:3$' { return ($base + 're-pin') }
+        '^port:5$' { return ($base + 'revert') }
+        '^port:6$' { return ($base + @('re-run', 'revert-to-snapshot', 'add-deviation')) }
         ':R$' { return ($base + 'revise') }
     }
     return $base
@@ -691,70 +704,226 @@ function Get-Findings {
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '6 (Holistic review)' $mis $adv)) }
         }
         'perf' {
-            # PERF-G2: Baseline measured.
-            $adv = New-Object System.Collections.Generic.List[string]
-            $mis = New-Object System.Collections.Generic.List[string]
             $tree = Get-Section $spec 'Hypothesis tree'
             $log = Get-Section $spec 'Results log'
             $target = Get-Section $spec 'Target'
+            $artifacts = Join-Path $Dir '04-artifacts'
+            $baseline = @(Get-ChildItem -LiteralPath $artifacts -File -Filter 'baseline-*' -ErrorAction SilentlyContinue)
+
+            # PERF-G1: Target defined (ADR 0032).
+            if ($script:BriefRead) {
+                $adv = New-Object System.Collections.Generic.List[string]
+                $mis = New-Object System.Collections.Generic.List[string]
+                if (Test-StatusIn $Status @('approved', 'in-progress')) { $adv.Add("status is $Status") }
+                if ($baseline.Count -gt 0) { $adv.Add('a 04-artifacts/baseline-* file exists') }
+                $m = Get-BriefMissing $b 1
+                if ($m) { $mis.Add($m) }
+                if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '1 (Target defined)' $mis $adv)) }
+            }
+
+            # PERF-G2: Baseline measured. ADR 0016's checks, plus the Gate 2
+            # reply when a brief exists (ADR 0032).
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
             if ($Status -ceq 'in-progress') { $adv.Add('status is in-progress') }
             if ($hasDecisions) { $adv.Add('03-decisions.md exists') }
             if ($null -ne $tree -and -not $tree.Contains('<<PHASE-3:')) { $adv.Add('## Hypothesis tree is filled') }
             if (Test-LineMatch $log '^\|[ \t]*[1-9][0-9]*[ \t]*\|') { $adv.Add('the Results log has rows after the baseline') }
-            $artifacts = Join-Path $Dir '04-artifacts'
-            $baseline = @(Get-ChildItem -LiteralPath $artifacts -File -Filter 'baseline-*' -ErrorAction SilentlyContinue)
             if ($baseline.Count -eq 0) { $mis.Add('no 04-artifacts/baseline-* file') }
             if (-not (Test-LineMatch $log '^\|[ \t]*0[ \t]*\|')) { $mis.Add('no Results log row 0') }
             if ($null -ne $target -and $target.Contains('<<PHASE-2:')) { $mis.Add('## Target still holds a <<PHASE-2: ...>> field') }
+            $m = Get-BriefMissing $b 2
+            if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Baseline measured)' $mis $adv)) }
-        }
-        'rca' {
-            # RCA-G2: Hypotheses enumerated (SW-51).
+
+            if (-not $script:BriefRead) { break }
+            $attemptTests = @(Get-ChildItem -LiteralPath $artifacts -File -Filter 'attempt-*-tests.txt' -ErrorAction SilentlyContinue)
+            $attemptJson = @(Get-ChildItem -LiteralPath $artifacts -File -Filter 'attempt-*.json' -ErrorAction SilentlyContinue)
+            $hasFinal = Test-Path -LiteralPath (Join-Path $artifacts 'final-tests.txt') -PathType Leaf
+            # Close-out fills it; Gate 2 Case A reaches close-out with no Phase 5,
+            # so Gates 7 and 8 are checked only once final-tests.txt exists.
+            $trade = Get-Section $spec 'Trade-offs accepted'
+            $tradeFilled = ($null -ne $trade -and -not $trade.Contains('<<PHASE-6:'))
+
+            # PERF-G3: Hotspot identified. Status in-progress is not evidence:
+            # Gate 2 Case A sets it with no hotspot work.
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
+            if ($attemptTests.Count -gt 0) { $adv.Add('a 04-artifacts/attempt-*-tests.txt file exists') }
+            $m = Get-BriefMissing $b 3
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '3 (Hotspot identified)' $mis $adv)) }
+
+            # PERF-G4: Select hypothesis.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($attemptTests.Count -gt 0) { $adv.Add('a 04-artifacts/attempt-*-tests.txt file exists') }
+            $m = Get-BriefMissing $b 4
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '4 (Select hypothesis)' $mis $adv)) }
+
+            # PERF-G5: Correctness verified.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($attemptJson.Count -gt 0) { $adv.Add('a 04-artifacts/attempt-*.json file exists') }
+            if ($hasFinal) { $adv.Add('04-artifacts/final-tests.txt exists') }
+            $m = Get-BriefMissing $b 5
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Correctness verified)' $mis $adv)) }
+
+            # PERF-G6: Keep or revert decision. A reverted row is not evidence:
+            # Gate 5 Face B writes one before Gate 6 is shown.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if (Test-LineMatch $log '^\|.*\|[ \t]*kept([^A-Za-z0-9_-]|$)') { $adv.Add('the Results log has a kept row') }
+            if ($hasFinal) { $adv.Add('04-artifacts/final-tests.txt exists') }
+            $m = Get-BriefMissing $b 6
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '6 (Keep or revert decision)' $mis $adv)) }
+
+            # PERF-G7: Regression pass.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($hasFinal) {
+                if ($b.Gates['8'].Seen) { $adv.Add('gate-briefs.md has a ## Gate 8 section') }
+                if ($tradeFilled) { $adv.Add('## Trade-offs accepted is filled') }
+            }
+            $m = Get-BriefMissing $b 7
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '7 (Regression pass)' $mis $adv)) }
+
+            # PERF-G8: Final review pass.
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($hasFinal -and $tradeFilled) { $adv.Add('## Trade-offs accepted is filled') }
+            $m = Get-BriefMissing $b 8
+            if ($m) { $mis.Add($m) }
+            if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '8 (Final review pass)' $mis $adv)) }
+        }
+        'rca' {
             $root = Get-Section $spec 'Root cause'
             $tree = Get-Section $spec 'Hypothesis tree'
-            if (Test-StatusIn $Status @('approved', 'in-progress')) { $adv.Add("status is $Status") }
-            if ($null -ne $root -and -not $root.Contains('<<PHASE-3:')) { $adv.Add('## Root cause is filled') }
+            $rcaStatus = Test-StatusIn $Status @('approved', 'in-progress')
+            $rootFilled = ($null -ne $root -and -not $root.Contains('<<PHASE-3:'))
+
+            # RCA-G1: Evidence gathered (ADR 0032).
+            if ($script:BriefRead) {
+                $adv = New-Object System.Collections.Generic.List[string]
+                $mis = New-Object System.Collections.Generic.List[string]
+                if ($rcaStatus) { $adv.Add("status is $Status") }
+                if ($null -ne $tree -and -not $tree.Contains('<<PHASE-2:')) { $adv.Add('## Hypothesis tree is filled') }
+                if ($rootFilled) { $adv.Add('## Root cause is filled') }
+                $m = Get-BriefMissing $b 1
+                if ($m) { $mis.Add($m) }
+                if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '1 (Evidence gathered)' $mis $adv)) }
+            }
+
+            # RCA-G2: Hypotheses enumerated (SW-51), plus the Gate 2 reply when
+            # a brief exists (ADR 0032).
+            $adv = New-Object System.Collections.Generic.List[string]
+            $mis = New-Object System.Collections.Generic.List[string]
+            if ($rcaStatus) { $adv.Add("status is $Status") }
+            if ($rootFilled) { $adv.Add('## Root cause is filled') }
             if ($null -ne $tree -and $tree.Contains('<<PHASE-2:')) { $mis.Add('## Hypothesis tree still holds a <<PHASE-2: ...>> field') }
+            $m = Get-BriefMissing $b 2
+            if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Hypotheses enumerated)' $mis $adv)) }
+
+            # RCA-G3: Root cause confirmed. Only its yes sets status approved.
+            if ($script:BriefRead) {
+                $adv = New-Object System.Collections.Generic.List[string]
+                $mis = New-Object System.Collections.Generic.List[string]
+                if ($rcaStatus) { $adv.Add("status is $Status") }
+                $m = Get-BriefMissing $b 3
+                if ($m) { $mis.Add($m) }
+                if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '3 (Root cause confirmed)' $mis $adv)) }
+            }
         }
         'port' {
             $statusAdv = Test-StatusIn $Status @('approved', 'in-progress')
+            $decisions = Get-DocText -Path (Join-Path $Dir '03-decisions.md')
+            $hasPinning = Test-LineMatch $decisions '^## Behavior pinning'
 
-            # PORT-G1: Donor set frozen.
+            # PORT-G1: Donor set frozen. The rows below add their gate's reply
+            # and later evidence only when a brief exists (ADR 0032).
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
             if ($statusAdv) { $adv.Add("status is $Status") }
             if ($hasTasks) { $adv.Add('02-tasks.md exists') }
+            if ($script:BriefRead -and $hasDecisions) { $adv.Add('03-decisions.md exists') }
             if (-not (Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/source/MANIFEST.md') -PathType Leaf)) {
                 $mis.Add('no 04-artifacts/source/MANIFEST.md')
             }
             if (-not (Test-LineMatch $spec '^- \*\*Frozen\*\*:[ \t]*yes([^A-Za-z0-9_]|$)')) { $mis.Add('the Frozen line does not say yes') }
+            $m = Get-BriefMissing $b 1
+            if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '1 (Donor set frozen)' $mis $adv)) }
 
             # PORT-G2: Fidelity tables complete.
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
             if ($statusAdv) { $adv.Add("status is $Status") }
+            if ($script:BriefRead -and $hasPinning) { $adv.Add('03-decisions.md has a ## Behavior pinning section') }
             if (Test-AuthorFill $spec) { $mis.Add('00-spec.md still has unfilled <<...>> fields') }
+            $m = Get-BriefMissing $b 2
+            if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '2 (Fidelity tables complete)' $mis $adv)) }
 
             # PORT-G3: Behavior pinned.
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
             if ($hasTasks) { $adv.Add('02-tasks.md exists') }
-            $decisions = Get-DocText -Path (Join-Path $Dir '03-decisions.md')
-            if (-not (Test-LineMatch $decisions '^## Behavior pinning')) { $mis.Add('03-decisions.md has no ## Behavior pinning section') }
+            if ($script:BriefRead -and (Test-Path -LiteralPath (Join-Path $Dir '01-plan.md') -PathType Leaf)) {
+                $adv.Add('01-plan.md exists')
+            }
+            if (-not $hasPinning) { $mis.Add('03-decisions.md has no ## Behavior pinning section') }
+            $m = Get-BriefMissing $b 3
+            if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '3 (Behavior pinned)' $mis $adv)) }
+
+            if ($script:BriefRead) {
+                # PORT-G4: Plan approval.
+                $adv = New-Object System.Collections.Generic.List[string]
+                $mis = New-Object System.Collections.Generic.List[string]
+                if ($Status -ceq 'in-progress') { $adv.Add('status is in-progress') }
+                $tasks = Get-DocText -Path (Join-Path $Dir '02-tasks.md')
+                if (Test-LineMatch $tasks '^- \*\*Status\*\*:[ \t]*done([^A-Za-z0-9_]|$)') {
+                    $adv.Add('a task in 02-tasks.md is done')
+                }
+                $batches = @(Get-ChildItem -LiteralPath (Join-Path $Dir '04-artifacts/batches') -File -Filter 'batch-*-tests.txt' -ErrorAction SilentlyContinue)
+                if ($batches.Count -gt 0) { $adv.Add('a 04-artifacts/batches/batch-*-tests.txt file exists') }
+                $m = Get-BriefMissing $b 4
+                if ($m) { $mis.Add($m) }
+                if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '4 (Plan approval)' $mis $adv)) }
+
+                # PORT-G5: Batch tests green.
+                $adv = New-Object System.Collections.Generic.List[string]
+                $mis = New-Object System.Collections.Generic.List[string]
+                if (Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/parity/INDEX.md') -PathType Leaf) {
+                    $adv.Add('04-artifacts/parity/INDEX.md exists')
+                }
+                $m = Get-BriefMissing $b 5
+                if ($m) { $mis.Add($m) }
+                if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Batch tests green)' $mis $adv)) }
+            }
 
             # PORT-G6: Justified-diff parity.
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
             if (Test-Path -LiteralPath (Join-Path $Dir '06-verify.md') -PathType Leaf) { $adv.Add('06-verify.md exists') }
+            if ($script:BriefRead) {
+                if (Test-LineMatch $retro '^## PR description block[ \t]*$') {
+                    $adv.Add('05-retro.md has a ## PR description block section')
+                }
+                if (Test-LineMatch $retro '^## Divergence record[ \t]*$') {
+                    $adv.Add('05-retro.md has a ## Divergence record section')
+                }
+            }
             if (-not (Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/parity/INDEX.md') -PathType Leaf)) {
                 $mis.Add('no 04-artifacts/parity/INDEX.md')
             }
+            $m = Get-BriefMissing $b 6
+            if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '6 (Justified-diff parity)' $mis $adv)) }
         }
     }
