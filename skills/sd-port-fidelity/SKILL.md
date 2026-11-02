@@ -236,6 +236,10 @@ behavior; they port nothing, so the path mapping table has no row for them and n
   host is such an edit). Counting it there would block every port that pins, and neither
   resolution would fit: there is no snapshot form to revert to, and a deviation row for it would
   be derived from the diff.
+- **Never a task or batch of its own.** The re-point is planned into the last task of the batch
+  whose host path the seam constructs, never as a separate task: a pinning file is not a `Host
+  path`, so it cannot form a batch, and it has no snapshot member range to cite. `/sd:port`
+  Phase 6 states the planning rule.
 - **Still adjudicated.** Its pinning diff (`Mapping row` `pinning` in `INDEX.md`) is read like any
   other. The pinned assertions must be the ones Gate 3 approved, so the diff may touch only what
   the recorded mechanism allows to change: the one construction-seam factory method for

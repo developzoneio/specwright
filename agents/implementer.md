@@ -146,6 +146,8 @@ Inputs (optional): IMPACT_REF
   planning defect, never something to invent.
 - A task whose `Files` are all test paths writes only test files; the production tree stays
   untouched.
+- When `Files` names a pinning file (its `Acceptance` says so), change only its construction-seam
+  factory method, from donor to host. Assertion bodies stay byte-identical.
 
 ---
 
