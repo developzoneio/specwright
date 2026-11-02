@@ -309,15 +309,16 @@ $script:BriefOrder = @{
 }
 
 # The option tokens that keep gate <type>:<label> open or leave it, plus a bare
-# "no". Any other reply approves, so a reply in the conversation language
-# still counts.
+# "no" and the "unrecognized" marker sd-gate-brief records for an off-option
+# reply (ADR 0033). Any other reply approves, so a reply in the conversation
+# language still counts.
 function Get-DenyTokens {
     param([string]$Key)
-    $base = @('details', 'refine', 'abort', 'no')
+    $base = @('details', 'refine', 'abort', 'no', 'unrecognized')
     switch -CaseSensitive -Regex ($Key) {
-        '^feature:1$' { return @('details', 'refine', 'abort', 'no') }
-        '^feature:2$' { return @('details', 'refine', 'abort', 'approve', 'no') }
-        '^feature:3$' { return @('details', 'address', 'abort', 'no') }
+        '^feature:1$' { return @('details', 'refine', 'abort', 'no', 'unrecognized') }
+        '^feature:2$' { return @('details', 'refine', 'abort', 'approve', 'no', 'unrecognized') }
+        '^feature:3$' { return @('details', 'address', 'abort', 'no', 'unrecognized') }
         '^bug:2$' { return ($base + 'partial') }
         '^bug:3$' { return ($base + 'dig') }
         '^(bug:5|refactor:6)$' { return ($base + 'address') }

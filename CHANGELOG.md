@@ -345,6 +345,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **A gate reply outside the offered options is refused, not mapped (SW-124)** - in a live run of
+  e2e `17-port-gate-brief` the model took a stray `yes` at port Gate 5 for `continue` and moved
+  on, and nothing in `sd-gate-brief` said what to do with a reply that is not an offered token.
+  The skill now says it once for every workflow: such a reply is never taken for the nearest
+  option, is recorded as `Reply: unrecognized - <reply verbatim>`, and the gate asks again. Both
+  `stop-gate` twins treat `unrecognized` as non-approving at every gate, with three new
+  conformance fixtures. See ADR 0033, which also records why the hook keeps its deny list.
 - **`/sd:port` target lists gloss deviation IDs (SW-122)** - a live run of e2e
   `17-port-gate-brief` went red at 32/33: the `Targets offered:` line of the Gate 2, 4 and 6 briefs
   showed a bare `details D01`, because the rule named only the valid-targets line and option tokens
