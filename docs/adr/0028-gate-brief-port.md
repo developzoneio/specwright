@@ -111,6 +111,16 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   rerun also stopped short of `done` on an unrelated plan split, filed as SW-123.
   The run after the scope rule was green, 33/33, one batch, Gate 6 Case A ($2.92, 626 s,
   claude 2.1.316).
+- **Fixed after the SW-122 reruns (SW-123).** The plan split was not chance. Nothing said who
+  re-points the characterization test from donor to host, and the batching unit (tasks naming one
+  `Host path`) had no place for a pinning file, so the architect sometimes planned the re-point
+  as its own task in a second batch. Gate 5 then ran twice, and the scripted run ran out of
+  replies before Gate 6. `/sd:port` Phase 6 now puts the pinning-file edit in the last task of the
+  batch whose host path the seam constructs, and calls a task that edits only pinning files a
+  planning defect. That task could not cite a snapshot member range anyway. The scenario keeps
+  one reply per gate. Both live runs after the fix planned one task in one batch and reached
+  `done` (claude 2.1.316). The first went 32/33 because its closing summary showed a bare `D01`
+  (the SW-122 rule, model variance). The second was green, 33/33.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).

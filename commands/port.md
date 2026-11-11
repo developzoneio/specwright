@@ -354,11 +354,20 @@ the same question; the empty-diff proof is never skipped.
      - Anything not on that list is reproduced as-is from the cited member range.
      ```
    - **`Covers`** cites `AC-1` plus any `AC-<n>` the task proves.
-   - A task block missing the snapshot-range `Pattern refs` or the licensed-deviation list is a
-     **planning defect**. Do not execute it - return to step 2 naming the defective task IDs.
+   - **A pinning-file edit is never a task of its own.** When the Phase 5 mechanism needs one
+     (re-pointing a characterization test's construction-seam factory from donor to host), the
+     pinning file goes in the `Files` of the last task of the batch whose `Host path` the seam
+     constructs, and that task's `Acceptance` gains a nested bullet:
+     `- Pinning file <path>: only the construction-seam factory method changes.` A contract
+     suite takes its target as a parameter and needs no edit, so it adds nothing to any task.
+   - A task block missing the snapshot-range `Pattern refs` or the licensed-deviation list, or a
+     task whose `Files` name only pinning files, is a **planning defect**. Do not execute it -
+     return to step 2 naming the defective task IDs.
 4. **Batching unit** (no new task field): a batch is the set of tasks whose `Files` name the same
    `Host path` from the path-mapping table, executed in `Ordinal` order; batches run in
-   path-mapping row order.
+   path-mapping row order. A pinning file is not a `Host path` and never forms a batch: its edit
+   rides in the batch of the host path it pins, so that batch's full-suite run checks the pinned
+   suite against the host.
 
 ### ⛔ Gate 4 - Plan approval
 
@@ -393,7 +402,8 @@ current batch:
 3. Run the task's test via `commands.test`.
 4. **Self-check** (main thread, no per-task reviewer - same cost argument as `/sd:feature` Phase
    4): only files in `Files` were touched; the diff touches only what the cited member range
-   accounts for, or a licensed deviation row; the test passes.
+   accounts for, or a licensed deviation row; a pinning file in `Files` differs from its pinned
+   copy only in the construction-seam factory method; the test passes.
 5. Check off the task in `02-tasks.md` (set its `Status` line to `done`, per the "Check-off
    marker" section of the **sd-atomic-task-format** skill). Log one line to `05-retro.md`:
    `T<NN>: <status> - <note>`.

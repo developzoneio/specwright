@@ -88,6 +88,9 @@ than adding a new one:
   that apply to this task, or `Licensed deviations: none` when no deviation applies - explicit
   `none` is compliant, an absent line is not, same convention `Pattern refs: none` already uses.
 
+`Files` may also name a Phase 5 pinning file, only on the last task of the batch whose host path
+that file's seam constructs, and never as the task's only file - see `/sd:port` Phase 6.
+
 ```markdown
 - **Pattern refs**: 04-artifacts/source/orders/order-intake:12-58 - mirror validation order
 - **Acceptance**: CheckTotals runs before the ledger write. Licensed deviations: D02
