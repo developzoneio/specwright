@@ -75,6 +75,15 @@ presented a gate without printing a line of it.
   verbatim>` to the section with the Edit tool, never a shell redirect or `printf`/`echo`: a shell
   write is the route a restricted permission mode refuses, and the stop-gate reads this line. A `details` reply is recorded the same way, and the section stays
   open for the next reply.
+- **A reply outside the offered options is refused, never mapped (ADR 0033).** A reply is valid
+  when it is one of the offered tokens of the gate being asked (trimmed, case-insensitive,
+  trailing punctuation ignored, with its argument where the token takes one) or, in a conversation
+  that is not in English, the plain translation of one. Nothing else is: not `y`, `ok` or `sure,
+  go ahead`, and not a token that belongs to another gate (`yes` at a gate that offers
+  `continue`). Never take it for the nearest option. Append `Reply: unrecognized - <reply
+  verbatim>` to the open section, the same way as above, print one line naming this gate's
+  options, and ask the same question again. The section stays open, and the stop-gate counts the
+  marker as no approval.
 - Subagents never write this file. `sd-spec-architect` and `sd-reviewer` return blocks (below);
   the main thread renders and writes.
 

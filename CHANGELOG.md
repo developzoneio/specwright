@@ -345,6 +345,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **A gate reply outside the offered options is refused, not mapped (SW-124)** - in a live run of
+  e2e `17-port-gate-brief` the model took a stray `yes` at port Gate 5 for `continue` and moved
+  on, and nothing in `sd-gate-brief` said what to do with a reply that is not an offered token.
+  The skill now says it once for every workflow: such a reply is never taken for the nearest
+  option, is recorded as `Reply: unrecognized - <reply verbatim>`, and the gate asks again. Both
+  `stop-gate` twins treat `unrecognized` as non-approving at every gate, with three new
+  conformance fixtures. See ADR 0033, which also records why the hook keeps its deny list.
 - **`/sd:port` plans the pinning-test re-point inside its batch (SW-123)** - live runs of e2e
   `17-port-gate-brief` stopped short of `done`: the architect planned re-pointing the pinning test
   from donor to host as a task of its own, in a second batch, so Gate 5 was shown twice and the

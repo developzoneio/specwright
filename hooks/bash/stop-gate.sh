@@ -325,14 +325,16 @@ reply_token() {
 }
 
 # The option tokens that keep gate <type>:<label> ($1) open or leave it, plus a
-# bare "no". Any other reply approves, so a reply in the conversation language
-# still counts. Sets deny_tok to the matched token, lowercase, or ''.
+# bare "no" and the "unrecognized" marker sd-gate-brief records for an
+# off-option reply (ADR 0033). Any other reply approves, so a reply in the
+# conversation language still counts. Sets deny_tok to the matched token,
+# lowercase, or ''.
 deny_token() {
-    local w words base="details refine abort no"
+    local w words base="details refine abort no unrecognized"
     case "$1" in
-        feature:1) words="details refine abort no" ;;
-        feature:2) words="details refine abort approve no" ;;
-        feature:3) words="details address abort no" ;;
+        feature:1) words="details refine abort no unrecognized" ;;
+        feature:2) words="details refine abort approve no unrecognized" ;;
+        feature:3) words="details address abort no unrecognized" ;;
         bug:2) words="${base} partial" ;;
         bug:3) words="${base} dig" ;;
         bug:5 | refactor:6) words="${base} address" ;;
