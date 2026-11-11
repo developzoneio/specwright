@@ -508,8 +508,7 @@ a resolution - it makes the diff justify itself.
    ID with its group, citation, and the hunks it covered; every donor defect reproduced as-is with
    its reserved follow-up ID; the snapshot commit.
 6. Set status=`done` in `00-spec.md` and `.specs/index.md`.
-7. Print a 5-line summary, worded per **sd-gate-brief**: donor, scope, members ported, deviations
-   applied, spawned follow-ups.
+7. Print the closing summary in the shape **sd-gate-brief** gives it (its `/sd:port` part).
 
 ---
 
