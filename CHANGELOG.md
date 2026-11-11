@@ -345,6 +345,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` narration names a deviation in words, not by ID (SW-129)** - e2e
+  `17-port-gate-brief` went red on a bare `D01` in a progress line, twice in three runs ("D01 is in
+  the deviation table" while the tables were checked, "except for the D01 rename" in Phase 7),
+  although the SW-122 rule named progress lines: it let an ID into any line carrying its form, so
+  free prose had to remember the gloss. `sd-gate-brief` now prints a `D<NN>` only in brief text,
+  the valid-targets line or a re-ask, and the closing summary; phase and progress lines name the
+  change in words. `details D<NN>` and `add-deviation` are unchanged. ADR 0028 consequences
+  updated. No hook or lint change.
 - **`/sd:port` closing summary has a fixed shape (SW-126)** - e2e `17-port-gate-brief` went red at
   32/33 again: the close-out line glossed `D01` in prose ("... became WHITESPACE (D01)") without
   its `donor -> host` form, the third such slip in the summary. `sd-gate-brief` now gives the

@@ -596,16 +596,20 @@ and what forced it as words, never as its citation: `compiler conflict on <ident
 rule on <topic>`, `host precedent in <file path>`, `agreed fix of <donor defect>`. A `§N.M` or a
 `path:line` citation stays in the table, where `details` prints it.
 
-**Every deviation ID the user reads carries its form.** A `D<NN>` sits on the same line as its
-`<donor form> -> <host form>`, wherever that line is: a brief line, the `### More decisions (shown
-on details)` subsection (brief text the main thread writes, not an excerpt), a list of `details`
-targets or a re-ask, a progress line between tool calls, or the closing summary (its lines are
-fixed under "Closing summary"). The one exception is a verbatim `details` excerpt of an artifact
-(a Deviation table or Member manifest row), which keeps what it has on disk. Where the form does
-not fit the sentence, name the change without the ID (`the constant rename`). For example:
+**A deviation ID only in brief text, with its form.** A `D<NN>` is printed only in brief text: a
+`Decisions` or `Blocking` line, the `### More decisions (shown on details)` subsection (text the
+main thread writes, not an excerpt), `Targets offered:`, a list of `details` targets or a re-ask,
+and the closing summary's `Deviations applied:` line (fixed under "Closing summary"). There it
+sits on the same line as its `<donor form> -> <host form>`. Everything else is narration: a phase
+line, a progress line between tool calls, a count or status sentence. Narration prints no `D<NN>`
+at all and names the change in words (`the constant rename`). Where the form does not fit a brief
+sentence, do the same. The one exception is a verbatim `details` excerpt of an artifact (a
+Deviation table or Member manifest row), which keeps what it has on disk. For example:
 `Deviations applied: 1 - D01 _WHITESPACE -> WHITESPACE, host rule on naming private constants.`
 `Targets offered: ..., details D01 (_WHITESPACE -> WHITESPACE), ...`
 `None beyond D01 _WHITESPACE -> WHITESPACE.`, never `None beyond D01.`
+`The tables are complete: nothing unmapped, and the constant rename has its deviation row.`,
+never `... and D01 is in the deviation table.`
 
 Shown lines, replacing lines 1-5 of "Brief shape". Gates 1, 3 and 5 are checks and show no
 `Decisions` block.
@@ -703,11 +707,11 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
   instead.
 - **Allowed handles.** The spec ID, a task ID on the same line as its plain title, a hypothesis ID
   (`H<n>`, or `H<n><x>` for a `/sd:perf` hypothesis of hotspot `H<n>`) on the same line as its
-  plain statement, a `/sd:port` deviation ID (`D<NN>`) on the same line as its
+  plain statement, a `/sd:port` deviation ID (`D<NN>`) beside its
   `<donor form> -> <host form>`, a bug severity (`P0`-`P3`), gate names, file
   paths, and the option tokens of the question line. The deviation ID is the one `D<n>` the
   user may see: it names a row the user can ask for (`details D02`) and cite in `add-deviation`.
-  Where it may appear, option and target lines included, is set by "A deviation in plain words".
+  It appears only in the lines "A deviation ID only in brief text, with its form" lists.
 - **Narrate a model escalation in plain words**: what runs on a stronger model and why, for
   example "planning with a stronger model because the spec was sized large". The rule ID stays in
   the retro line only.
@@ -730,8 +734,10 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
 - Glossing a deviation ID in prose (`D01 renames _WHITESPACE to WHITESPACE`, or `The private
   constant _WHITESPACE became WHITESPACE (D01).`) instead of its `donor -> host` form, or naming
   the constitution section that forced it.
-- Leaving a deviation ID bare because the line is not a brief line: a target list (`details
-  D01`), the collapsed subsection (`None beyond D01.`), a progress line (`the D01 rename`).
+- Leaving a deviation ID bare in brief text: a target list (`details D01`) or the collapsed
+  subsection (`None beyond D01.`).
+- Naming a deviation by its ID in narration, a phase line, a progress line or a status sentence,
+  instead of in words (`the constant rename`).
 - Editing an earlier section to fix a typo instead of appending the next pass.
 - Raising the cap to fit an eleventh line instead of collapsing a decision.
 - Collapsing a blocking finding, or dropping a decision that does not fit.

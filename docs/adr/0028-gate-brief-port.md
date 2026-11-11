@@ -136,6 +136,16 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   no-break space (SW-128), and also showed a bare `D01` in a Gate 2 progress line. The third went
   32/33 on a bare `D01` in a progress line (SW-129). Neither is in the closing summary, and the
   assertion was not loosened.
+- **Fixed after the SW-126 runs (SW-129).** The two bare IDs were in narration, not in a brief:
+  "D01 is in the deviation table" while the tables were checked (Phases 3-4), and "except for the
+  D01 rename" in the Phase 7 self-check. The SW-122 rule let an ID into any line that carried its
+  form, so free prose had to remember the gloss, and plain words were only a fallback. A progress
+  line cannot have a fixed shape, so the rule is now a list of the places an ID is printed: brief
+  text, the valid-targets line or a re-ask, and the closing summary's `Deviations applied:` line.
+  Narration prints no `D<NN>` and says `the constant rename`. Decision 4 still holds for those
+  lines, and `details D<NN>` and `add-deviation` are unchanged, since both are offered from them.
+  The anti-pattern example that showed the bare ID in a progress line is gone, so the skill shows
+  the replacement only. The e2e assertion is unchanged. No new ADR.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).
