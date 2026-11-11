@@ -146,6 +146,9 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   lines, and `details D<NN>` and `add-deviation` are unchanged, since both are offered from them.
   The anti-pattern example that showed the bare ID in a progress line is gone, so the skill shows
   the replacement only. The e2e assertion is unchanged. No new ADR.
+  Two live runs after the change (claude 2.1.322, about $2.90 and 16 minutes each) were both green,
+  33/33, with no bare `D<NN>` in reply text and Gate 6 Case A. Before it, two of the three SW-126
+  runs showed one. Two runs cannot prove a rate, so the next red run to show one reopens this.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).
