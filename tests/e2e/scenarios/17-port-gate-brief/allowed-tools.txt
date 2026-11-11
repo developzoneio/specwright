@@ -1,9 +1,11 @@
 # Permission rules granted under dontAsk (SW-80), one per line: file writes plus commands.test
 # (npm test), the one-time git baseline the empty-diff proof needs, read-only git diff/status for
 # that proof and the parity diffs, and the hash and size readers of the snapshot manifest, through
-# either shell tool (SW-105), and the two read-only pipe stages a PowerShell run uses. No rule
-# grants a writer verb, so only a visible redirect can reach a path, and spec-gate's shell-write
-# rule denies that for a protected path.
+# either shell tool (SW-105), and the two read-only pipe stages a PowerShell run uses. The one
+# addition is a directory create and a plain file copy (SW-128), so the snapshot and the pinned
+# copies keep the original's bytes. Neither is a spec-gate writer verb (tee, Set-Content,
+# Add-Content, Out-File, sed -i, perl -i), so only a visible redirect can reach a path, and
+# spec-gate's shell-write rule denies that for a protected path.
 Edit
 Write
 MultiEdit
@@ -16,6 +18,8 @@ Bash(git diff:*)
 Bash(git status:*)
 Bash(sha256sum:*)
 Bash(wc -c:*)
+Bash(mkdir -p:*)
+Bash(cp:*)
 PowerShell(npm test)
 PowerShell(npm test *)
 PowerShell(npm run test)
@@ -26,5 +30,7 @@ PowerShell(git -c user.name=e2e -c user.email=e2e@example.invalid commit -q -m b
 PowerShell(git diff *)
 PowerShell(git status *)
 PowerShell(Get-FileHash *)
+PowerShell(New-Item -ItemType Directory *)
+PowerShell(Copy-Item *)
 PowerShell(Select-Object *)
 PowerShell(Select-String *)

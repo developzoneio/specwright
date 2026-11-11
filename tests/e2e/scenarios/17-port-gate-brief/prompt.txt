@@ -21,7 +21,10 @@ start. Allowed, run from the project root: the three commands above; the project
 plain `npm test` (or `npm run test`); `git diff` and `git status` (read-only, including
 `git diff --no-index` to produce a parity diff); `sha256sum` and `wc -c` (or `Get-FileHash`) to
 hash and size a snapshot file; optionally piped through `tail -n 40` or `Select-Object -Last 40`.
-A `cd`, a redirect to a file or to /dev/null, chaining with `;` or `||`, `node --test`, `node -e`
-and any shell write are refused. Make every change to a file under `.specs/` or `.claude/`,
-including the snapshot copy, the `Reply:` line in `gate-briefs.md`, every saved test output and
-every parity diff, with the Edit or Write tool. Tell each subagent you start the same.
+Also allowed: `mkdir -p <dir>` (or `New-Item -ItemType Directory <dir>`) and a plain file copy,
+`cp <from> <to>` (or `Copy-Item <from> <to>`), to make the snapshot copy and the pinned copies of
+the test files under `.specs/`, so their bytes are not retyped. A `cd`, a redirect to a file or
+to /dev/null, chaining with `;` or `||`, `node --test`, `node -e` and any other shell write are
+refused. Make every other change to a file under `.specs/` or `.claude/`, including the `Reply:`
+line in `gate-briefs.md`, every saved test output and every parity diff, with the Edit or Write
+tool. Tell each subagent you start the same.

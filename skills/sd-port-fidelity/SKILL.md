@@ -122,7 +122,7 @@ Under a port spec's `04-artifacts/source/`: the bridged contract always, and und
 - **Commit**: <full sha>
 - **Captured**: <YYYY-MM-DD>
 - **Mode**: contract | contract+source
-- **Hash algorithm**: sha256, lowercase hex, over the bytes as captured
+- **Hash algorithm**: sha256, lowercase hex, over the original's bytes; the copy hashes the same
 
 | Snapshot path | Donor path | Commit | Bytes | SHA-256 | Member ranges |
 |---|---|---|---|---|---|
@@ -153,6 +153,21 @@ it does not stop a shell delete.
 
 Per-file hashes are recorded now so a later drift check (re-hashing the donor at a newer commit)
 remains possible; consuming them is out of scope for this story.
+
+### Byte-exact copies (main thread)
+
+The snapshot files and the pinned copies duplicate files that already exist, so the file system
+makes them; they are never retyped. Create the destination directory, then use the shell tool's
+own file-copy command, which moves bytes without reading them as text. Never use the `Write` or
+`Edit` tool, a read followed by a write of text, or a redirect for these: retyping loses what
+cannot be seen or typed (a no-break space, a carriage return, a byte-order mark), and a text
+read-and-rewrite re-encodes under some shells.
+
+Then hash the original and the copy (sha256, lowercase hex). They are equal, or the copy is
+defective: copy it again, never edit the copy to match. A manifest or a gate records the
+original's hash and byte count, and a copy keeps the original's encoding and line endings. The
+files the workflow composes itself (briefs, `MANIFEST.md`, saved command output, an in-repo
+contract written from the extraction) are still written with `Write`.
 
 ---
 
