@@ -129,6 +129,13 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   `sd-gate-brief` now gives it five fixed lines, `Deviations applied:` among them, and the command
   names the skill instead of listing fields. The e2e assertion that caught it is unchanged. No new
   ADR: this applies the ownership of shapes that ADR 0020 and this one already decided.
+  Three live runs after the change (claude 2.1.322, about $3 and 15 minutes each): the two that
+  reached close-out printed the five lines with `D01 _WHITESPACE -> WHITESPACE`, and before the
+  change the summary slipped in about 2 of 5 runs. Only one of the three was fully green (33/33).
+  The first stopped at a Gate 6 parity block, because the pinned copy was retyped and lost a
+  no-break space (SW-128), and also showed a bare `D01` in a Gate 2 progress line. The third went
+  32/33 on a bare `D01` in a progress line (SW-129). Neither is in the closing summary, and the
+  assertion was not loosened.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).
