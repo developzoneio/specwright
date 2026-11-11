@@ -599,10 +599,10 @@ rule on <topic>`, `host precedent in <file path>`, `agreed fix of <donor defect>
 **Every deviation ID the user reads carries its form.** A `D<NN>` sits on the same line as its
 `<donor form> -> <host form>`, wherever that line is: a brief line, the `### More decisions (shown
 on details)` subsection (brief text the main thread writes, not an excerpt), a list of `details`
-targets or a re-ask, a progress line between tool calls, or the closing summary. The one
-exception is a verbatim `details` excerpt of an artifact (a Deviation table or Member manifest
-row), which keeps what it has on disk. Where the form does not fit the sentence, name the change
-without the ID (`the constant rename`). For example:
+targets or a re-ask, a progress line between tool calls, or the closing summary (its lines are
+fixed under "Closing summary"). The one exception is a verbatim `details` excerpt of an artifact
+(a Deviation table or Member manifest row), which keeps what it has on disk. Where the form does
+not fit the sentence, name the change without the ID (`the constant rename`). For example:
 `Deviations applied: 1 - D01 _WHITESPACE -> WHITESPACE, host rule on naming private constants.`
 `Targets offered: ..., details D01 (_WHITESPACE -> WHITESPACE), ...`
 `None beyond D01 _WHITESPACE -> WHITESPACE.`, never `None beyond D01.`
@@ -676,6 +676,18 @@ naming the valid targets, then asks again. A deviation ID in it, as in any targe
 "A deviation in plain words".
 `details` is never an override, so the HARD Gates 1, 2, 3 and 6 offer it like any other gate.
 
+**Closing summary.** Close-out prints these five lines as plain lines, no bullets and no bold. The
+`Deviations applied:` line never glosses a deviation in prose: each entry is its `D<NN>` and its
+`<donor form> -> <host form>`.
+
+- `Donor: <donor> at <commit, first 12 characters>`
+- `Scope: <scope>`
+- `Members ported: <n>/<total>`
+- `Deviations applied: <D> - D<NN> <donor form> -> <host form>, <what forced it>` with up to 3
+  entries separated by `;`, then `<D - 3> more in 05-retro.md`. With none: `Deviations applied:
+  none - the host mirrors the donor.`
+- `Follow-ups: <the reserved spec IDs> | none`
+
 ## User-facing text
 
 Applies to every line the user reads: `gate-briefs.md` and all reply text of the session, from
@@ -715,8 +727,9 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
 - Writing the brief and not printing it: treating the Write call, or a sentence such as "Gate 1
   presented", as the print. Saying a gate was shown when its body is not in reply text.
 - Copying a `path:line` citation from the retro or the verify report into the closing summary.
-- Glossing a deviation ID in prose (`D01 renames _WHITESPACE to WHITESPACE`) instead of its
-  `donor -> host` form, or naming the constitution section that forced it.
+- Glossing a deviation ID in prose (`D01 renames _WHITESPACE to WHITESPACE`, or `The private
+  constant _WHITESPACE became WHITESPACE (D01).`) instead of its `donor -> host` form, or naming
+  the constitution section that forced it.
 - Leaving a deviation ID bare because the line is not a brief line: a target list (`details
   D01`), the collapsed subsection (`None beyond D01.`), a progress line (`the D01 rename`).
 - Editing an earlier section to fix a typo instead of appending the next pass.

@@ -345,6 +345,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` closing summary has a fixed shape (SW-126)** - e2e `17-port-gate-brief` went red at
+  32/33 again: the close-out line glossed `D01` in prose ("... became WHITESPACE (D01)") without
+  its `donor -> host` form, the third such slip in the summary. `sd-gate-brief` now gives the
+  `/sd:port` closing summary five fixed lines, with `Deviations applied:` carrying
+  `D<NN> <donor> -> <host>`. `commands/port.md` names the skill instead of listing fields. ADR
+  0028 consequences updated. No hook or lint change.
 - **A gate reply outside the offered options is refused, not mapped (SW-124)** - in a live run of
   e2e `17-port-gate-brief` the model took a stray `yes` at port Gate 5 for `continue` and moved
   on, and nothing in `sd-gate-brief` said what to do with a reply that is not an offered token.

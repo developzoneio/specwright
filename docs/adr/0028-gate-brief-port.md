@@ -121,6 +121,14 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   one reply per gate. Both live runs after the fix planned one task in one batch and reached
   `done` (claude 2.1.316). The first went 32/33 because its closing summary showed a bare `D01`
   (the SW-122 rule, model variance). The second was green, 33/33.
+- **Fixed after the SW-124 run (SW-126).** The closing summary slipped a third time: the line
+  `Deviations applied: 1. The private constant _WHITESPACE became WHITESPACE (D01).` carried the ID
+  with a prose gloss and no `donor -> host` form, so the run went red at 32/33. The SW-122 rule
+  already named the closing summary, but the summary was the one user-facing text about deviations
+  with no fixed line shape: `commands/port.md` listed fields, and the rule had a single example.
+  `sd-gate-brief` now gives it five fixed lines, `Deviations applied:` among them, and the command
+  names the skill instead of listing fields. The e2e assertion that caught it is unchanged. No new
+  ADR: this applies the ownership of shapes that ADR 0020 and this one already decided.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).
