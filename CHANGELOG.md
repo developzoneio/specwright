@@ -345,6 +345,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` copies the snapshot and the pinned tests byte for byte (SW-128)** - e2e
+  `17-port-gate-brief` landed on Gate 6 Case B because the Phase 5 pinned copy was retyped through
+  the `Write` tool and lost a no-break space, and another run's snapshot of a CRLF donor lost its
+  carriage returns (390 bytes became 375). The manifest hashed the retyped copy, so the loss was
+  invisible. `sd-port-fidelity` now has one "Byte-exact copies" rule: copy with the shell's file
+  copy, hash both sides, record the original's hash and size. Gate 1 and Gate 3 refuse approval on
+  a mismatch (`Pinned copies: <n> of <n>`). The e2e 17 prompt now allows `mkdir -p` and a plain
+  file copy into `.specs/`; its assertions are unchanged. ADR 0028 consequences updated. No hook
+  or lint change.
 - **`/sd:port` narration names a deviation in words, not by ID (SW-129)** - e2e
   `17-port-gate-brief` went red on a bare `D01` in a progress line, twice in three runs ("D01 is in
   the deviation table" while the tables were checked, "except for the D01 rename" in Phase 7),

@@ -157,10 +157,12 @@ No gate here - Gate 1 covers the freeze that follows in Phase 2, not the raw ext
 
 Main-thread file operations only - this command's `Write` tool is not escalated to any subagent.
 
-1. Create `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/source/`. Copy the bridged bundle verbatim:
-   `contract.md` always; the `source/` tree too under `snapshot: contract+source`. For an `in-repo`
-   topology, copy each distinct `Donor path` named in Member closure and Complement set once.
-2. Per copied file: sha256 (lowercase hex) and byte count, over the bytes as captured.
+1. Create `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/source/`. Copy the bridged bundle verbatim,
+   per `sd-port-fidelity`'s "Byte-exact copies": `contract.md` always; the `source/` tree too
+   under `snapshot: contract+source`. For an `in-repo` topology, copy each distinct `Donor path`
+   named in Member closure and Complement set once.
+2. Per copied file: sha256 (lowercase hex) and byte count, of the original; the copy must hash the
+   same.
 3. Write `04-artifacts/source/MANIFEST.md` in the exact format `sd-port-fidelity`'s "Snapshot
    manifest format" defines - header fields plus the six-column table, `Member ranges` as
    `<ordinal>: <member> <firstLine>-<lastLine>`, semicolon-separated, contiguous from 1.
@@ -181,7 +183,8 @@ verbatim. Ask:
 
 > Donor set frozen for PORT-<slug>: <N> file(s), <M> member range(s). Proceed on this frozen set? (yes / re-capture <reason> / details <target> / abort)
 
-- `yes` -> proceed to Phase 3.
+- `yes` -> permitted only when every copied file hashes the same as its original; then proceed to
+  Phase 3.
 - `re-capture <reason>` -> delete `04-artifacts/source/`, remove exactly the `paths.protected`
   entries this phase appended, return to Phase 1. The next pass is a new brief section.
 - `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
@@ -291,9 +294,11 @@ section in `03-decisions.md`:
    `paths.src` and every `paths.layers[].path`, then `git status --porcelain --` over the same set
    to catch untracked additions. Both must return empty. Save each command and its output (or
    `(empty)`) with the Write tool to `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/pinning/tree-check.txt`.
-5. Once the tests are green, save a copy of each pinning file with the Write tool to
+5. Once the tests are green, copy each pinning file, per `sd-port-fidelity`'s "Byte-exact
+   copies", to
    `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/pinning/as-pinned/<path, / replaced by __>`. A
-   `re-pin` pass overwrites the copies.
+   `re-pin` pass overwrites the copies. Record `Pinned copies: <n> of <n> byte-identical` in the
+   `## Behavior pinning` section, `<n>` being the files whose copy hashes the same as the original.
 
 ### ⛔ Gate 3 - Behavior pinned and green (HARD)
 
@@ -303,7 +308,9 @@ then shows it verbatim. Ask:
 
 > PORT-<slug> pinned via <mechanism>: tests green, host production tree unmodified. Proceed to planning? (yes / re-pin <feedback> / details <target> / abort)
 
-- `yes` -> permitted only when the pinned tests are green AND both tree checks returned empty.
+- `yes` -> permitted only when the pinned tests are green, both tree checks returned empty, AND
+  `Pinned copies:` reads `<n> of <n>`. A lossy copy is named in the brief's `Recommended: re-pin`
+  reason.
 - If either tree check returns output, this gate refuses and lists the dirty paths - a dirty
   production tree makes the Phase 8 parity diff unattributable. Commit or revert those changes
   under their own spec first, then re-run the check.
@@ -549,4 +556,5 @@ a resolution - it makes the diff justify itself.
 - Implementer touches only files declared in the task's `Files` list. Any scope creep -> stop,
   surface to main thread, log to retro.
 - Out of scope: `--sync` / re-port drift detection, multi-donor ports.
-- All files under `.specs/PORT-<slug>-<YYYYMMDD>/` are written in UTF-8 with no BOM.
+- All files under `.specs/PORT-<slug>-<YYYYMMDD>/` are written in UTF-8 with no BOM, except
+  byte-exact copies, which keep the original's bytes.

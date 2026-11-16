@@ -149,6 +149,20 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   Two live runs after the change (claude 2.1.322, about $2.90 and 16 minutes each) were both green,
   33/33, with no bare `D<NN>` in reply text and Gate 6 Case A. Before it, two of the three SW-126
   runs showed one. Two runs cannot prove a rate, so the next red run to show one reopens this.
+- **Fixed after the SW-126 runs (SW-128).** Gate 6 landed on the blocked face in one live run
+  because the Phase 5 pinned copy of a test file was retyped through the `Write` tool and lost a
+  no-break space, and another run's snapshot of a CRLF donor file lost its carriage returns (390
+  bytes became 375). The command told the main thread to "save a copy ... with the Write tool", the
+  freeze said "verbatim" with no mechanism, and the manifest hashed "the bytes as captured", which
+  is the copy, so a lossy copy hashed consistently. `sd-port-fidelity` now has one "Byte-exact
+  copies" rule: the shell's own file-copy command, never `Write`, `Edit` or a text read-and-write;
+  the original and the copy are hashed and must match; the manifest records the original's hash
+  and size. Gate 1 approves only when every snapshot copy matches, and Gate 3 only when `Pinned
+  copies:` reads `n of n`. e2e 17 had ordered every `.specs/` file, the snapshot copy included, to
+  be written with Edit or Write, so its prompt now also allows `mkdir -p` and a plain file copy;
+  no assertion changed. Bytes stay as the platform checked them out, so the same commit hashes
+  differently on Windows (CRLF) and Linux (LF). No hook change: a copy command is not a spec-gate
+  writer verb. No new ADR.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).
