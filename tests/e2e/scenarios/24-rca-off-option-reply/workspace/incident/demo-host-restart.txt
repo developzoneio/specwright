@@ -1,0 +1,7 @@
+2026-09-26T09:58:12Z demo-host: restore 3 todos from snapshot (ids 1, 2, 3)
+2026-09-26T09:58:12Z demo-host: TodoService ready
+2026-09-26T10:02:40Z demo-host: addTodo("Buy milk") -> id 1
+2026-09-26T10:02:41Z demo-host: listTodos() -> 3 items (expected 4)
+2026-09-26T10:05:03Z demo-host: addTodo("Call Sam") -> id 2
+2026-09-26T10:05:04Z demo-host: listTodos() -> 3 items (expected 5)
+2026-09-26T10:07:30Z pager: todo count regression on demo deployment

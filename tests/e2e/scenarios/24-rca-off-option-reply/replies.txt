@@ -1,0 +1,13 @@
+# One reply per turn (SW-103), each sent with --resume to the same session. One line each.
+# SW-125: two replies are off-option on purpose (ADR 0033 decision 2). Each must be recorded as
+# `Reply: unrecognized - <verbatim>` and the same gate asked again; the next line answers that re-ask.
+# Gate 1 - evidence gathered. A synonym, not an offered token
+sure, go ahead
+# Gate 1 re-asked
+yes
+# Gate 2 - hypotheses enumerated. Gate 3's token, which Gate 2 does not offer
+dig deeper
+# Gate 2 re-asked
+yes
+# Gate 3 - root cause confirmed
+yes

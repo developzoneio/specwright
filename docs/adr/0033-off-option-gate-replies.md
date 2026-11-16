@@ -75,6 +75,10 @@ any section of a gate label is enough, and a later non-approving token does not 
   now does. Scenarios `16` (`choose H1`, `keep`) and `91` (`approve split`) are not checked here
   and are verified when this lands.
 - No gate count changes, so `contractLint.gates` is unchanged.
+- The model side is proven by e2e `24-rca-off-option-reply` (SW-125). It sends a synonym at
+  `/sd:rca` Gate 1 and Gate 3's token at Gate 2, and asserts the marker followed by the real reply
+  in each section. With this rule removed from `sd-gate-brief`, the same run took the synonym for
+  an approval and went red.
 
 ## Revisit when
 

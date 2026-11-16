@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **e2e scenario for an off-option gate reply (SW-125)** - `24-rca-off-option-reply` proves the
+  model side of ADR 0033. Until now only the stop-gate side had tests, in the hook fixtures. The
+  scenario runs the `15` incident through `/sd:rca`, and its `replies.txt` sends `sure, go ahead`
+  at Gate 1 (a synonym) and `dig deeper` at Gate 2 (Gate 3's token), each followed by `yes`.
+  - **Asserted on disk:** each of those two `gate-briefs.md` sections holds
+    `Reply: unrecognized - <the reply>` and then `Reply: yes`, so the gate was asked again in the
+    same section. No off-option reply is recorded bare, Gate 3 has no marker, and the run still
+    reaches `done`.
+  - **Live:** green on the first run, 12/12, $1.10, 271 s, 6 turns (`claude` 2.1.325, Windows).
+  - **Mutation:** with the rule bullet deleted from `sd-gate-brief`, the run went red at 9/12
+    ($1.03, 282 s). The model recorded `Reply: sure, go ahead` and took it as the Gate 1
+    approval, so every later reply answered the next gate: `yes` approved Gate 2 and
+    `dig deeper` opened a second Gate 3 pass. Both marker assertions and the bare-reply assertion
+    failed.
 - **stop-gate rules for `/sd:rca`, `/sd:perf` and `/sd:port` (SW-114)** - with
   `hooks.stopGate.enabled`, an rca, perf or port spec past a gate whose `gate-briefs.md` section
   has no approving `Reply:` now blocks the stop, as feature, bug and refactor gates already do
