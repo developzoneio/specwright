@@ -345,6 +345,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **spec-gate denies a copy or move onto a protected path (SW-132)** - the shell-write rule knew
+  only `sed -i`, `perl -i`, `>`, `tee`, `Set-Content`, `Add-Content` and `Out-File`, so
+  `cp x .specs/index.md` or `Copy-Item x -Destination .specs/constitution.md` passed. Both twins
+  now treat `cp`, `mv`, `copy`, `move`, `cpi`, `Copy-Item` and `Move-Item` as copy segments and
+  check only the destination: `-t` / `--target-directory`, `-Destination` (or a 3+ letter prefix,
+  or its `:value` form), else the last positional, plus `<dir>/<source basename>` for a copy into
+  a directory. A copy from a protected path, and the SW-128 copies into `.specs/`, stay allowed.
+  Nine new conformance fixtures. Not covered: a move from a protected path (a delete, like `rm`),
+  the `mi` alias and a POSIX cluster such as `-rt`.
 - **e2e runner reads the claude 2.1.325 json output and keeps transcripts in the fake home
   (SW-131)** - `--output-format json` now prints an array of every message (`system/init` ...
   `result`) instead of one result object. `run-e2e.ps1` read `session_id` off the array, which
