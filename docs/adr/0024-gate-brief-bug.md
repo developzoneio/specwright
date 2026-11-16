@@ -7,7 +7,8 @@
   (printed means reply text); ADR 0016 and ADR 0021 (stop-gate invariants);
   `skills/sd-gate-brief/SKILL.md` (the rules)
 - Supersedes: none. Extends ADR 0018 decisions 4 and 5 and ADR 0019 decision 1 to `/sd:bug`.
-- Extended by: ADR 0029 (stop-gate reads the `/sd:bug` briefs; SW-108)
+- Extended by: ADR 0029 (stop-gate reads the `/sd:bug` briefs; SW-108); ADR 0034 (Gate 2 says
+  when a reproduction was traced, not run; SW-127)
 
 ## Context
 

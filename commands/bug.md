@@ -92,7 +92,13 @@ This is the most-skipped phase and the most important. Without reproduction the 
    - Which environment? (local, staging, prod-only)
    - Is it 100% reproducible or intermittent?
 2. Document deterministic steps in `00-spec.md` Reproduction section.
-3. Attempt to reproduce in the local dev environment if applicable.
+3. Attempt to reproduce in the local dev environment if applicable. Run the trigger when this
+   session can, through a command in `project-config.json` (`commands.test`, `commands.run`) or a
+   step from the Reproduction section, and save what it printed to
+   `.specs/BUG-<arg>/04-artifacts/repro-evidence/` with the Write tool. Reading the code path is
+   not a run. When nothing can be run here (production only, no runnable path, or the permission
+   mode refuses the command), do not write one into the source tree to get a run: the first test
+   is Phase 4's. The Gate 2 brief then says nothing was run (ADR 0034).
 4. If non-deterministic, capture the conditions that make it more likely AND save log evidence to `.specs/BUG-<arg>/04-artifacts/repro-evidence/`.
 5. If reproduction requires production data, document the data shape in artifacts (NOT the data itself if sensitive).
 
