@@ -589,6 +589,11 @@ function Invoke-ClaudeHeadless {
     $psi.UseShellExecute        = $false
     $psi.EnvironmentVariables['HOME']        = $FakeHome
     $psi.EnvironmentVariables['USERPROFILE'] = $FakeHome
+    # SW-131: pin the config dir too. A parent that sets CLAUDE_CONFIG_DIR (a
+    # Claude Code session hosted by another app) outranks HOME, so the child
+    # wrote its transcript through that dir into the real ~/.claude while it
+    # still read the engine from the fake home.
+    $psi.EnvironmentVariables['CLAUDE_CONFIG_DIR'] = Join-Path $FakeHome '.claude'
     # Drop auth variables that are set but empty (an absent CI secret), so
     # claude never sees a blank credential alongside the real one.
     foreach ($authVar in @('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN')) {
