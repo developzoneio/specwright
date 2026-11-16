@@ -212,6 +212,19 @@ project under test (a throwaway copy of `examples/fixture-project` or
 `--setting-sources project` is passed as a second, independent guarantee that no real user-scope
 settings can merge in. Both directories are deleted after every run.
 
+**`CLAUDE_CONFIG_DIR` is pinned as well (SW-131).** An inherited `CLAUDE_CONFIG_DIR` outranks
+`HOME`. A Claude Code session hosted by another app sets it for its own children, so a run started
+from such a session wrote its transcript and `session-env` through that directory. On the machine
+that found it (Windows, `claude` 2.1.325, 2026-11-16), the directory's `projects`, `commands` and
+`skills` were junctions into the real `~/.claude`. That run still loaded the engine from the fake
+home, but every transcript assertion failed with `no main-thread transcript found`, and each run
+left its session in the real profile. The runner and the three probes now set `CLAUDE_CONFIG_DIR`
+to `<fakehome>/.claude` for every child, so one directory holds config, engine and transcripts.
+
+**The json output is a list on `claude` 2.1.325 (SW-131).** `--output-format json` prints every
+message (`system/init` ... `result`), not one result object. The runner keeps the last `result`
+element, and a single object still parses, so older CLIs work too.
+
 ### The ancestor-walk rule (SW-73)
 
 Neither of those guarantees covers the directories *above* the workspace. When no git root stops

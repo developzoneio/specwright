@@ -276,6 +276,8 @@ function Invoke-ClaudeRun {
     $psi.UseShellExecute = $false
     $psi.EnvironmentVariables['HOME'] = $FakeHome
     $psi.EnvironmentVariables['USERPROFILE'] = $FakeHome
+    # SW-131: an inherited CLAUDE_CONFIG_DIR outranks HOME; pin it to the fake home.
+    $psi.EnvironmentVariables['CLAUDE_CONFIG_DIR'] = Join-Path $FakeHome '.claude'
     foreach ($authVar in @('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN')) {
         if ($psi.EnvironmentVariables.ContainsKey($authVar) -and ((Test-EnvSet $authVar) -eq $false)) {
             $psi.EnvironmentVariables.Remove($authVar)
