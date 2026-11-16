@@ -1,0 +1,1 @@
+{"tool_name":"PowerShell","cwd":"{{CWD}}","tool_input":{"command":"Copy-Item -Path notes.md -Destination .specs/constitution.md -Force"}}

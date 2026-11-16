@@ -1,0 +1,1 @@
+{"tool_name":"Bash","cwd":"{{CWD}}","tool_input":{"command":"mkdir -p .specs/PORT-x/04-artifacts/pinning/as-pinned && cp tests/title-format.test.js .specs/PORT-x/04-artifacts/pinning/as-pinned/tests__title-format.test.js"}}

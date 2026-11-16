@@ -13,8 +13,9 @@
 #       mode=off   -> always allow.
 # A Bash / PowerShell tool call is checked by the shell-write rule instead
 # (SW-79): a command that visibly writes a protected path or the spec index
-# (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File) is
-# blocked in every mode. Heuristic - see shell_write_target below.
+# (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File, or the
+# destination of cp, mv, Copy-Item, Move-Item) is blocked in every mode.
+# Heuristic - see shell_write_target below.
 # Exits 0 silently on any missing tool or parse error.
 #
 # Output schema (dual-format for forward + backward compatibility):
@@ -59,7 +60,7 @@ if [[ ${is_shell} -eq 1 ]]; then
     fi
     shell_cmd_lower="$(printf '%s' "${shell_cmd}" | tr '[:upper:]' '[:lower:]')"
     case "${shell_cmd_lower}" in
-        *'>'*|*sed*|*perl*|*tee*|*set-content*|*add-content*|*out-file*) ;;
+        *'>'*|*sed*|*perl*|*tee*|*set-content*|*add-content*|*out-file*|*cp*|*mv*|*copy*|*move*) ;;
         *) exit 0 ;;
     esac
 else
@@ -473,6 +474,11 @@ is_protected_rel() {
 #   4. Candidate paths: every token after the command word of a writer
 #      segment, and the token after any '>' (a redirect target, '>>'
 #      included) in any segment.
+#   4b. A COPY segment (SW-132), whose command word is cp / mv / copy /
+#      move / cpi / copy-item / move-item, writes only its DESTINATION, so a
+#      copy FROM a protected path stays allowed. See sw_copy_hit for how the
+#      destination is found. Candidates: each destination, then
+#      <destination>/<basename of each source>, for a copy into a directory.
 #   5. A candidate starting with '$' or '~' drops its first segment
 #      ($ROOT/.specs/index.md -> .specs/index.md); any other relative one is
 #      anchored on cwd as file_path is; then normalize_rel. A result that is
@@ -488,10 +494,124 @@ sw_flush_token() {
     tok=""
 }
 
+# Step 5 for one candidate token $1. Uses the caller's cwd_c, root_c and
+# index_l. Prints the hit and returns 0, or returns 1.
+sw_candidate_hit() {
+    local t="$1" cand rel
+    rel=""
+    if [[ "${t}" == '$'* || "${t}" == '~'* ]]; then
+        if [[ "${t}" == */* ]]; then
+            rel="$(collapse_dot_segments "${t#*/}")"
+        fi
+    else
+        cand="${t}"
+        if [[ "${cand}" != /* && "${cand}" != ?:* && "${cwd_c}" != "${root_c}" ]]; then
+            cand="${cwd%/}/${cand}"
+        fi
+        rel="$(normalize_rel "${cand}" "${project_root}")"
+    fi
+    if [[ -n "${rel}" ]]; then
+        if [[ "$(to_lower "${rel}")" == "${index_l}" ]] || is_protected_rel "${rel}"; then
+            printf '%s' "${rel}"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Step 4b (SW-132) for the copy segment held in SW_TOKS. The destination is,
+# in order: the value of -t / --target-directory, or of -destination or any
+# prefix of it of 3+ letters (-des, -dest ...), given as the next token or
+# after ':' / '='; failing that, the last positional token, when there are 2+
+# positionals, or 1+ once a source was named. The value of -path /
+# -literalpath / -lp / -pspath is a named source; the value of -filter /
+# -include / -exclude / -credential / -fromsession / -tosession is skipped;
+# any other dash token is a flag. The token after '>' is left to the redirect
+# rule. Mirrors Get-ShellCopyHit in spec-gate.ps1. Known gaps: a move FROM a
+# protected path (it deletes the source, like rm, which is not checked), the
+# Move-Item alias mi, and a POSIX cluster such as -rt.
+sw_copy_hit() {
+    local k t name val has_val role want="" named_src=0 last d s base
+    local -a dests=() srcs=() pos=()
+    for (( k = 1; k < ${#SW_TOKS[@]}; k++ )); do
+        t="${SW_TOKS[$k]}"
+        if [[ -n "${want}" ]]; then
+            if [[ "${want}" == "dest" ]]; then
+                dests+=("${t}")
+            elif [[ "${want}" == "src" ]]; then
+                srcs+=("${t}")
+                named_src=1
+            fi
+            want=""
+            continue
+        fi
+        if [[ "${t}" == ">" ]]; then
+            want="skip"
+            continue
+        fi
+        if [[ "${t}" == -* && "${t}" != "-" ]]; then
+            name="${t#-}"
+            name="${name#-}"
+            val=""
+            has_val=0
+            if [[ "${name}" == *[:=]* ]]; then
+                val="${name#*[:=]}"
+                name="${name%%[:=]*}"
+                has_val=1
+            fi
+            role=""
+            if [[ "${name}" == "t" || "${name}" == "target-directory" ]]; then
+                role="dest"
+            elif [[ ${#name} -ge 3 && "destination" == "${name}"* ]]; then
+                role="dest"
+            else
+                case "${name}" in
+                    path|literalpath|lp|pspath) role="src" ;;
+                    filter|include|exclude|credential|fromsession|tosession) role="skip" ;;
+                esac
+            fi
+            if [[ -n "${role}" ]]; then
+                if [[ ${has_val} -eq 1 ]]; then
+                    if [[ "${role}" == "dest" && -n "${val}" ]]; then
+                        dests+=("${val}")
+                    elif [[ "${role}" == "src" && -n "${val}" ]]; then
+                        srcs+=("${val}")
+                        named_src=1
+                    fi
+                else
+                    want="${role}"
+                fi
+            fi
+            continue
+        fi
+        pos+=("${t}")
+    done
+    if [[ ${#dests[@]} -eq 0 ]]; then
+        if [[ ${#pos[@]} -ge 2 ]] || [[ ${named_src} -eq 1 && ${#pos[@]} -ge 1 ]]; then
+            last=$(( ${#pos[@]} - 1 ))
+            dests+=("${pos[$last]}")
+            unset "pos[$last]"
+        fi
+    fi
+    for s in "${pos[@]}"; do
+        srcs+=("${s}")
+    done
+    for d in "${dests[@]}"; do
+        sw_candidate_hit "${d}" && return 0
+        for s in "${srcs[@]}"; do
+            base="${s##*/}"
+            if [[ -n "${base}" ]]; then
+                sw_candidate_hit "${d%/}/${base}" && return 0
+            fi
+        done
+    done
+    return 1
+}
+
 # Steps 3-5 for the segment held in SW_TOKS. Uses the caller's cwd_c,
 # root_c and index_l. Prints the hit and returns 0, or returns 1.
 sw_segment_hit() {
-    local verb writer k t prev cand rel
+    local verb writer k t prev
     [[ ${#SW_TOKS[@]} -eq 0 ]] && return 1
     verb="${SW_TOKS[0]##*/}"
     writer=0
@@ -506,6 +626,9 @@ sw_segment_hit() {
                 fi
             done
             ;;
+        cp|mv|copy|move|cpi|copy-item|move-item)
+            sw_copy_hit && return 0
+            ;;
     esac
     prev=""
     for (( k = 0; k < ${#SW_TOKS[@]}; k++ )); do
@@ -515,24 +638,7 @@ sw_segment_hit() {
             continue
         fi
         if [[ "${prev}" == ">" ]] || [[ ${writer} -eq 1 && ${k} -ge 1 ]]; then
-            rel=""
-            if [[ "${t}" == '$'* || "${t}" == '~'* ]]; then
-                if [[ "${t}" == */* ]]; then
-                    rel="$(collapse_dot_segments "${t#*/}")"
-                fi
-            else
-                cand="${t}"
-                if [[ "${cand}" != /* && "${cand}" != ?:* && "${cwd_c}" != "${root_c}" ]]; then
-                    cand="${cwd%/}/${cand}"
-                fi
-                rel="$(normalize_rel "${cand}" "${project_root}")"
-            fi
-            if [[ -n "${rel}" ]]; then
-                if [[ "$(to_lower "${rel}")" == "${index_l}" ]] || is_protected_rel "${rel}"; then
-                    printf '%s' "${rel}"
-                    return 0
-                fi
-            fi
+            sw_candidate_hit "${t}" && return 0
         fi
         prev=""
     done

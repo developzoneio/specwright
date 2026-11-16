@@ -254,7 +254,10 @@ Runs before any code-editing tool. Decides:
 - A `Bash` / `PowerShell` command that visibly writes a protected path or the spec index
   (`sed -i`, `perl -i`, `>` / `>>`, `tee`, `Set-Content`, `Add-Content`, `Out-File`)? -> block in
   every mode (SW-79). Without this, a shell write would sidestep Rules 0, 0b and 1 and leave no
-  `spec_transition` event. It reads the command text only, so it is a **heuristic, not a
+  `spec_transition` event. A copy or move (`cp`, `mv`, `Copy-Item`, `Move-Item` and their
+  aliases) is checked on its **destination** only, including `<dir>/<source basename>` for a copy
+  into a directory, so copying a protected file elsewhere, or into `.specs/`, stays allowed
+  (SW-132). It reads the command text only, so it is a **heuristic, not a
   guarantee**: `cd .specs && sed -i ... index.md`, an interpreter one-liner or a path held in a
   variable gets through. The primary control is each workflow's own "Edit tool only" rule, kept
   in place by contract-lint `CL206`.

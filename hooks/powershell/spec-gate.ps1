@@ -20,8 +20,9 @@
           mode=off   -> always allow.
     A Bash / PowerShell tool call is checked by the shell-write rule instead
     (SW-79): a command that visibly writes a protected path or the spec index
-    (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File) is
-    blocked in every mode. Heuristic - see Get-ShellWriteTarget below.
+    (sed -i, perl -i, >, >>, tee, Set-Content, Add-Content, Out-File, or the
+    destination of cp, mv, Copy-Item, Move-Item) is blocked in every mode.
+    Heuristic - see Get-ShellWriteTarget below.
 
     Output schema (dual-format for forward + backward compatibility):
       New:    hookSpecificOutput.permissionDecision = "deny", with
@@ -871,11 +872,150 @@ function Test-VerifyArtifactPass {
 #   4. Candidate paths: every token after the command word of a writer
 #      segment, and the token after any '>' (a redirect target, '>>'
 #      included) in any segment.
+#   4b. A COPY segment (SW-132), whose command word is cp / mv / copy /
+#      move / cpi / copy-item / move-item, writes only its DESTINATION, so a
+#      copy FROM a protected path stays allowed. See Get-ShellCopyHit for how
+#      the destination is found. Candidates: each destination, then
+#      <destination>/<basename of each source>, for a copy into a directory.
 #   5. A candidate starting with '$' or '~' drops its first segment
 #      ($ROOT/.specs/index.md -> .specs/index.md); any other relative one is
 #      anchored on cwd as file_path is; then ConvertTo-RelativePath. A result
 #      that is the spec index or matches paths.protected is a hit.
 # Returns the first hit's root-relative path, or $null on no hit.
+
+# Step 5 for one candidate token. Returns the hit, or $null.
+function Get-ShellCandidateHit {
+    param(
+        [string]$Token,
+        [string]$Cwd,
+        [string]$Root,
+        [string]$CwdCollapsed,
+        [string]$RootCollapsed,
+        [string]$IndexCollapsed,
+        [string[]]$Protected
+    )
+    $rel = ''
+    if ($Token.StartsWith('$', [System.StringComparison]::Ordinal) -or $Token.StartsWith('~', [System.StringComparison]::Ordinal)) {
+        $cut = $Token.IndexOf('/')
+        if ($cut -ge 0) { $rel = ConvertTo-CollapsedPath -Path $Token.Substring($cut + 1) }
+    } else {
+        $cand = $Token
+        if ((-not (Test-IsRootedPath $cand)) -and ($CwdCollapsed -cne $RootCollapsed)) {
+            $cand = $Cwd.TrimEnd('/', '\') + '/' + $cand
+        }
+        $rel = ConvertTo-RelativePath -Root $Root -FilePath $cand
+    }
+    if (-not [string]::IsNullOrEmpty($rel)) {
+        if ([string]::Equals($rel, $IndexCollapsed, [System.StringComparison]::OrdinalIgnoreCase) -or
+            (Test-IsProtected -RelPath $rel -Protected $Protected)) {
+            return $rel
+        }
+    }
+    return $null
+}
+
+# Step 4b (SW-132) for a copy segment. The destination is, in order: the value
+# of -t / --target-directory, or of -destination or any prefix of it of 3+
+# letters (-des, -dest ...), given as the next token or after ':' / '=';
+# failing that, the last positional token, when there are 2+ positionals, or
+# 1+ once a source was named. The value of -path / -literalpath / -lp /
+# -pspath is a named source; the value of -filter / -include / -exclude /
+# -credential / -fromsession / -tosession is skipped; any other dash token is
+# a flag. The token after '>' is left to the redirect rule. Mirrors
+# sw_copy_hit in spec-gate.sh. Known gaps: a move FROM a protected path (it
+# deletes the source, like rm, which is not checked), the Move-Item alias mi,
+# and a POSIX cluster such as -rt.
+function Get-ShellCopyHit {
+    param(
+        [System.Collections.Generic.List[string]]$Tokens,
+        [string]$Cwd,
+        [string]$Root,
+        [string]$CwdCollapsed,
+        [string]$RootCollapsed,
+        [string]$IndexCollapsed,
+        [string[]]$Protected
+    )
+    $dests = New-Object System.Collections.Generic.List[string]
+    $srcs = New-Object System.Collections.Generic.List[string]
+    $pos = New-Object System.Collections.Generic.List[string]
+    $namedSrc = $false
+    $want = ''
+    for ($k = 1; $k -lt $Tokens.Count; $k++) {
+        $t = $Tokens[$k]
+        if ($want -cne '') {
+            if ($want -ceq 'dest') {
+                [void]$dests.Add($t)
+            } elseif ($want -ceq 'src') {
+                [void]$srcs.Add($t)
+                $namedSrc = $true
+            }
+            $want = ''
+            continue
+        }
+        if ($t -ceq '>') {
+            $want = 'skip'
+            continue
+        }
+        if ($t.StartsWith('-', [System.StringComparison]::Ordinal) -and $t.Length -gt 1) {
+            $name = $t.Substring(1)
+            if ($name.StartsWith('-', [System.StringComparison]::Ordinal)) { $name = $name.Substring(1) }
+            $val = ''
+            $hasVal = $false
+            $cut = $name.IndexOfAny([char[]]@(':', '='))
+            if ($cut -ge 0) {
+                $val = $name.Substring($cut + 1)
+                $name = $name.Substring(0, $cut)
+                $hasVal = $true
+            }
+            $role = ''
+            if (($name -ceq 't') -or ($name -ceq 'target-directory')) {
+                $role = 'dest'
+            } elseif ($name.Length -ge 3 -and 'destination'.StartsWith($name, [System.StringComparison]::Ordinal)) {
+                $role = 'dest'
+            } elseif (@('path', 'literalpath', 'lp', 'pspath') -ccontains $name) {
+                $role = 'src'
+            } elseif (@('filter', 'include', 'exclude', 'credential', 'fromsession', 'tosession') -ccontains $name) {
+                $role = 'skip'
+            }
+            if ($role -cne '') {
+                if ($hasVal) {
+                    if (($role -ceq 'dest') -and $val.Length -gt 0) {
+                        [void]$dests.Add($val)
+                    } elseif (($role -ceq 'src') -and $val.Length -gt 0) {
+                        [void]$srcs.Add($val)
+                        $namedSrc = $true
+                    }
+                } else {
+                    $want = $role
+                }
+            }
+            continue
+        }
+        [void]$pos.Add($t)
+    }
+    if ($dests.Count -eq 0) {
+        if (($pos.Count -ge 2) -or ($namedSrc -and $pos.Count -ge 1)) {
+            [void]$dests.Add($pos[$pos.Count - 1])
+            $pos.RemoveAt($pos.Count - 1)
+        }
+    }
+    foreach ($s in $pos) { [void]$srcs.Add($s) }
+    foreach ($d in $dests) {
+        $hit = Get-ShellCandidateHit -Token $d -Cwd $Cwd -Root $Root -CwdCollapsed $CwdCollapsed -RootCollapsed $RootCollapsed -IndexCollapsed $IndexCollapsed -Protected $Protected
+        if ($hit) { return $hit }
+        $dir = $d
+        if ($dir.EndsWith('/', [System.StringComparison]::Ordinal)) { $dir = $dir.Substring(0, $dir.Length - 1) }
+        foreach ($s in $srcs) {
+            $base = $s.Substring($s.LastIndexOf('/') + 1)
+            if ($base.Length -gt 0) {
+                $hit = Get-ShellCandidateHit -Token ($dir + '/' + $base) -Cwd $Cwd -Root $Root -CwdCollapsed $CwdCollapsed -RootCollapsed $RootCollapsed -IndexCollapsed $IndexCollapsed -Protected $Protected
+                if ($hit) { return $hit }
+            }
+        }
+    }
+    return $null
+}
+
 function Get-ShellSegmentHit {
     param(
         [System.Collections.Generic.List[string]]$Tokens,
@@ -900,6 +1040,9 @@ function Get-ShellSegmentHit {
                 break
             }
         }
+    } elseif (@('cp', 'mv', 'copy', 'move', 'cpi', 'copy-item', 'move-item') -ccontains $verb) {
+        $hit = Get-ShellCopyHit -Tokens $Tokens -Cwd $Cwd -Root $Root -CwdCollapsed $CwdCollapsed -RootCollapsed $RootCollapsed -IndexCollapsed $IndexCollapsed -Protected $Protected
+        if ($hit) { return $hit }
     }
     $prev = ''
     for ($k = 0; $k -lt $Tokens.Count; $k++) {
@@ -909,23 +1052,8 @@ function Get-ShellSegmentHit {
             continue
         }
         if (($prev -ceq '>') -or ($writer -and $k -ge 1)) {
-            $rel = ''
-            if ($tok.StartsWith('$', [System.StringComparison]::Ordinal) -or $tok.StartsWith('~', [System.StringComparison]::Ordinal)) {
-                $cut = $tok.IndexOf('/')
-                if ($cut -ge 0) { $rel = ConvertTo-CollapsedPath -Path $tok.Substring($cut + 1) }
-            } else {
-                $cand = $tok
-                if ((-not (Test-IsRootedPath $cand)) -and ($CwdCollapsed -cne $RootCollapsed)) {
-                    $cand = $Cwd.TrimEnd('/', '\') + '/' + $cand
-                }
-                $rel = ConvertTo-RelativePath -Root $Root -FilePath $cand
-            }
-            if (-not [string]::IsNullOrEmpty($rel)) {
-                if ([string]::Equals($rel, $IndexCollapsed, [System.StringComparison]::OrdinalIgnoreCase) -or
-                    (Test-IsProtected -RelPath $rel -Protected $Protected)) {
-                    return $rel
-                }
-            }
+            $hit = Get-ShellCandidateHit -Token $tok -Cwd $Cwd -Root $Root -CwdCollapsed $CwdCollapsed -RootCollapsed $RootCollapsed -IndexCollapsed $IndexCollapsed -Protected $Protected
+            if ($hit) { return $hit }
         }
         $prev = ''
     }
@@ -1030,7 +1158,7 @@ if ($isShell) {
     if ([string]::IsNullOrWhiteSpace($shellCmd)) { exit 0 }
     $shellCmdLower = $shellCmd.ToLowerInvariant()
     $hasMarker = $false
-    foreach ($marker in @('>', 'sed', 'perl', 'tee', 'set-content', 'add-content', 'out-file')) {
+    foreach ($marker in @('>', 'sed', 'perl', 'tee', 'set-content', 'add-content', 'out-file', 'cp', 'mv', 'copy', 'move')) {
         if ($shellCmdLower.Contains($marker)) { $hasMarker = $true; break }
     }
     if (-not $hasMarker) { exit 0 }

@@ -4,8 +4,9 @@
 # either shell tool (SW-105), and the two read-only pipe stages a PowerShell run uses. The one
 # addition is a directory create and a plain file copy (SW-128), so the snapshot and the pinned
 # copies keep the original's bytes. Neither is a spec-gate writer verb (tee, Set-Content,
-# Add-Content, Out-File, sed -i, perl -i), so only a visible redirect can reach a path, and
-# spec-gate's shell-write rule denies that for a protected path.
+# Add-Content, Out-File, sed -i, perl -i). spec-gate's shell-write rule denies a visible redirect
+# to a protected path and, since SW-132, a copy whose destination is one; the copies this
+# scenario makes go to unprotected paths under .specs/.
 Edit
 Write
 MultiEdit

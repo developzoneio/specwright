@@ -162,7 +162,9 @@ forbids. And the user must name a deviation row in a reply (`details`, `add-devi
   be written with Edit or Write, so its prompt now also allows `mkdir -p` and a plain file copy;
   no assertion changed. Bytes stay as the platform checked them out, so the same commit hashes
   differently on Windows (CRLF) and Linux (LF). No hook change: a copy command is not a spec-gate
-  writer verb. No new ADR.
+  writer verb. No new ADR. Later, SW-132 made spec-gate check a copy's destination, so a copy
+  onto a protected path is denied; the copies this rule makes go into `.specs/` paths that are
+  not protected, so they are still allowed.
 - **No hook change.** stop-gate's PORT rules (ADR 0016) read `00-spec.md`, `MANIFEST.md`,
   `03-decisions.md` and `parity/INDEX.md`, which are unchanged. Follow-up: PORT rules evidenced by
   the brief (SW-114).

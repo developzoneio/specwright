@@ -1,0 +1,1 @@
+{"tool_name":"PowerShell","cwd":"{{CWD}}","tool_input":{"command":"Move-Item notes.md .specs\\index.md"}}

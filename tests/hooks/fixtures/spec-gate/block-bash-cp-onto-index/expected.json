@@ -1,0 +1,1 @@
+{"exitCode":0,"decision":"block","permissionDecision":"deny","reason":"spec-gate: this shell command writes '.specs/index.md', which is protected (paths.protected or the spec index). Make the change with the Edit tool so spec-gate can check it (Rules 0, 0b, 1).","stderr":"","events":[{"ts":"<TS>","spec_id":"-","phase":"-","event":"gate","gate":"shell-write","decision":"block"}]}
