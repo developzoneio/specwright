@@ -345,6 +345,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **e2e runner reads the claude 2.1.325 json output (SW-131, part 1)** - `--output-format json`
+  now prints an array of every message (`system/init` ... `result`) instead of one result object.
+  `run-e2e.ps1` read `session_id` off the array, which joined every element's ID, so turn 2's
+  `--resume` refused it and every multi-turn scenario stopped after turn 1. The runner now keeps
+  the last `result` element; a single object passes unchanged. Part 2, the transcript landing in
+  the real `~/.claude` instead of the fake home, is still open.
 - **`/sd:port` copies the snapshot and the pinned tests byte for byte (SW-128)** - e2e
   `17-port-gate-brief` landed on Gate 6 Case B because the Phase 5 pinned copy was retyped through
   the `Write` tool and lost a no-break space, and another run's snapshot of a CRLF donor lost its

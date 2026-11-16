@@ -612,6 +612,13 @@ function Invoke-ClaudeHeadless {
 
     $resultObj = $null
     try { $resultObj = $stdout | ConvertFrom-Json -ErrorAction Stop } catch { }
+    # claude 2.1.325 prints --output-format json as an array of every message
+    # (system/init ... result) instead of the one result object. Reading
+    # .session_id off the array joins every element's ID, and --resume then
+    # refuses the value. Keep the last result element; a single object passes.
+    if ($resultObj -is [array]) {
+        $resultObj = @($resultObj | Where-Object { $_.type -eq 'result' }) | Select-Object -Last 1
+    }
 
     return [pscustomobject]@{
         TimedOut = $false
