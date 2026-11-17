@@ -384,7 +384,8 @@ bpayload="$(printf '{"session_id":"smoke-stop-brief","cwd":"%s","transcript_path
 
 # brief_state <type> <status> <files> <briefs>
 # <files> is a space-separated subset of: decisions failing closeout plan
-# plan-r1 tasks-done. <briefs> is '-' for no gate-briefs.md, else gate=reply
+# plan-r1 tasks-done tasks-2batches (two done tasks in batches 1 and 2).
+# <briefs> is '-' for no gate-briefs.md, else gate=reply
 # pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
 brief_state() {
     local id g lab f
@@ -402,6 +403,9 @@ brief_state() {
             plan) printf '# Plan\n' > "$bd/01-plan.md" ;;
             plan-r1) printf '# Plan\n\n## Revisions\n\n### R1 - 2026-10-29T10:00:00Z\n' > "$bd/01-plan.md" ;;
             tasks-done) printf -- '### T01 - Extract\n\n- **Status**: done\n' > "$bd/02-tasks.md" ;;
+            tasks-2batches)
+                printf -- '### T01 - Extract\n\n- **Parallel batch**: 1\n- **Status**: done\n\n### T02 - Move\n\n- **Parallel batch**: 2\n- **Status**: done\n' \
+                    > "$bd/02-tasks.md" ;;
         esac
     done
     [[ "$4" == "-" ]] && return 0
@@ -449,6 +453,13 @@ brief_case "refactor Re-plan revise only - blocks" "Gate Re-plan R1" \
 brief_case "refactor Re-plan approved - silent" silent refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes R1=approve"
 brief_case "refactor revision with no Re-plan section - silent" silent \
     refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes"
+# SW-115 (ADR 0035): refactor Gate 5 is approved once per batch.
+brief_case "refactor two batches done, one Gate 5 approval - blocks" "(1 approved, 2 finished)" \
+    refactor in-progress "decisions plan tasks-2batches" "1=yes 2=yes 4=yes 5=yes"
+brief_case "refactor two batches done, two Gate 5 approvals - silent" silent \
+    refactor in-progress "decisions plan tasks-2batches" "1=yes 2=yes 4=yes 5=yes 5=yes"
+brief_case "refactor two batches done, brief starts at Gate 5 - silent" silent \
+    refactor in-progress "decisions plan tasks-2batches" "5=yes"
 
 section "stop-gate (bash): bug/refactor re-fire with stop_hook_active - silent"
 brief_state refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes R1=revise"

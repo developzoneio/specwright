@@ -31,6 +31,7 @@
     "block-feat-g3-no-reply",
     "block-bug-g3-dig-only",
     "block-ref-replan-revise-details",
+    "block-ref-g5-tests-ahead-no-checkoff",
     "block-perf-g8-address",
     "block-port-g6-rerun-only"
   ],

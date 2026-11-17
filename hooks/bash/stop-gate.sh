@@ -14,8 +14,8 @@
 #      that never touched a spec is never blocked.
 #   4. By the frontmatter type:, evaluate the invariant table of ADR 0016
 #      (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan: ADR
-#      0029; rca, perf and port gate replies: ADR 0032; all read from
-#      gate-briefs.md). A rule fires only when later-phase
+#      0029; rca, perf and port gate replies: ADR 0032; refactor Gate 5 per
+#      batch: ADR 0035; all read from gate-briefs.md). A rule fires only when later-phase
 #      evidence exists AND the HARD gate's own evidence is missing.
 #   5. On a hit, print {"decision":"block","reason":...} to stdout. That blocks
 #      Stop exactly like exit 2 (ADR 0015) while this hook still exits 0.
@@ -378,16 +378,17 @@ count_reply() {
 
 # One pass over the brief ($1) of workflow $2. Per gate label g of
 # brief_order: brief_rank_g, brief_g_seen (a section exists), brief_g_replies
-# (Reply: lines with a token), brief_g_ok (one of them approves), brief_g_deny
-# (the last non-approving token). Per Re-plan revision n, the same four as
-# brief_rp_n_*; brief_rp_min is the lowest n with a section. brief_start is
+# (Reply: lines with a token), brief_g_ok (one of them approves), brief_g_okn
+# (sections holding an approving reply, each counted once; ADR 0035),
+# brief_g_deny (the last non-approving token). Per Re-plan revision n, the
+# same as brief_rp_n_*; brief_rp_min is the lowest n with a section. brief_start is
 # the rank of the first gate heading. A `### ` subheading does not end a
 # section; any other `## ` heading does. In a feature brief, a `## Gate 1+2`
 # heading (the S lane's combined approval, ADR 0030) opens one section that
 # counts for Gate 1 and Gate 2 at once, ranked as Gate 1, with Gate 1's
 # non-approving tokens.
 read_brief() {
-    local l h g i=0 rank cur='' cur2='' rx_gate rx_lab rx_rp rx_gate12
+    local l h g i=0 rank cur='' cur2='' sec_ok=0 n rx_gate rx_lab rx_rp rx_gate12
     rx_gate='^## Gate ([0-9]+[[:lower:]]?)([^0-9[:lower:]]|$)'
     rx_gate12='^## Gate 1\+2([^0-9]|$)'
     rx_rp='^## Gate Re-plan - R([0-9]{1,6})([^0-9]|$)'
@@ -397,6 +398,7 @@ read_brief() {
         printf -v "brief_${g}_seen" 0
         printf -v "brief_${g}_replies" 0
         printf -v "brief_${g}_ok" 0
+        printf -v "brief_${g}_okn" 0
         printf -v "brief_${g}_deny" ''
     done
     while IFS= read -r l || [[ -n "${l}" ]]; do
@@ -404,6 +406,7 @@ read_brief() {
             h="${l%"${l##*[![:space:]]}"}"
             cur=''
             cur2=''
+            sec_ok=0
             rank=0
             if [[ "$2" == feature && "${h}" =~ ${rx_gate12} ]]; then
                 rank="${brief_rank_1}"
@@ -445,7 +448,67 @@ read_brief() {
                 count_reply "${cur2}" "$2:${cur#brief_}"
             fi
         fi
+        # The section's first approving reply counts it as one approved pass.
+        if [[ -z "${deny_tok}" && ${sec_ok} -eq 0 ]]; then
+            sec_ok=1
+            for g in "${cur}" "${cur2}"; do
+                [[ -z "${g}" ]] && continue
+                n="${g}_okn"
+                printf -v "${n}" '%s' "$(( ${!n:-0} + 1 ))"
+            done
+        fi
     done <<< "$1"
+}
+
+# Batches past refactor Gate 5 (ADR 0035). From the tasks text $1, sets
+# ref_done_units: the distinct numeric `Parallel batch` values among done
+# tasks, plus one per done `solo` task (a solo task runs as a batch of one).
+# From the spec folder $2, sets ref_tested_units: the distinct numeric <b>
+# among 04-artifacts/batches/batch-<b>-tests.txt. A task is the lines from one
+# `## ` or `### ` heading to the next; a task with no readable batch counts
+# for nothing. Mirrors Get-RefBatchCounts in the .ps1.
+ref_batch_counts() {
+    local l b='' st=0 seen=' ' f n rx_b rx_s
+    rx_b='^- \*\*Parallel batch\*\*:[[:blank:]]*([0-9]{1,6}|solo)([^A-Za-z0-9_]|$)'
+    rx_s='^- \*\*Status\*\*:[[:blank:]]*done([^A-Za-z0-9_]|$)'
+    ref_done_units=0
+    ref_tested_units=0
+    while IFS= read -r l || [[ -n "${l}" ]]; do
+        if [[ "${l}" == "## "* || "${l}" == "### "* ]]; then
+            ref_count_task
+            b=''
+            st=0
+            continue
+        fi
+        [[ "${l}" =~ ${rx_b} ]] && b="${BASH_REMATCH[1]}"
+        [[ "${l}" =~ ${rx_s} ]] && st=1
+    done <<< "$1"
+    ref_count_task
+    seen=' '
+    for f in "$2"/04-artifacts/batches/batch-*-tests.txt; do
+        [[ -f "${f}" ]] || continue
+        n="${f##*/batch-}"
+        n="${n%-tests.txt}"
+        [[ "${n}" =~ ^[0-9]{1,6}$ ]] || continue
+        n=$((10#${n}))
+        [[ "${seen}" == *" ${n} "* ]] && continue
+        seen+="${n} "
+        ref_tested_units=$((ref_tested_units + 1))
+    done
+}
+
+# Counts the task ref_batch_counts just finished reading; uses its b, st and
+# seen (bash locals are visible to the functions a function calls).
+ref_count_task() {
+    [[ ${st} -eq 1 && -n "${b}" ]] || return 0
+    if [[ "${b}" == solo ]]; then
+        ref_done_units=$((ref_done_units + 1))
+        return 0
+    fi
+    b=$((10#${b}))
+    [[ "${seen}" == *" ${b} "* ]] && return 0
+    seen+="${b} "
+    ref_done_units=$((ref_done_units + 1))
 }
 
 # Pushes onto `mis` what the gates "$@" lack together: one label, or a pool
@@ -679,12 +742,29 @@ case "${spec_type}" in
             brief_missing 4
             add_finding "4 (Plan approval)" "${mis}" "${adv}"
 
-            # REF-G5: Tests green per batch.
+            # REF-G5: Tests green per batch. Every batch is a new pass, so once
+            # the brief records Gate 4 (the run that planned the batches wrote
+            # it), each finished batch needs its own approving section. The
+            # newest batch's test output may be waiting at its gate, so it does
+            # not count as finished (ADR 0035).
             adv=""; mis=""
             [[ ${task_done} -eq 1 ]] && push adv "a task in 02-tasks.md is done"
             [[ -f "${dir}/04-artifacts/coverage/after-refactor.txt" ]] \
                 && push adv "04-artifacts/coverage/after-refactor.txt exists"
             brief_missing 5
+            if [[ ${brief_4_seen} -eq 1 && ${brief_5_ok} -eq 1 ]]; then
+                ref_batch_counts "${tasks}" "${dir}"
+                fin=${ref_done_units}
+                [[ $((ref_tested_units - 1)) -gt ${fin} ]] && fin=$((ref_tested_units - 1))
+                if [[ ${fin} -gt ${brief_5_okn} ]]; then
+                    adv=""
+                    [[ ${ref_done_units} -gt ${brief_5_okn} ]] \
+                        && push adv "done tasks in 02-tasks.md span ${ref_done_units} batches"
+                    [[ $((ref_tested_units - 1)) -gt ${brief_5_okn} ]] \
+                        && push adv "04-artifacts/batches/ holds test output for ${ref_tested_units} batches"
+                    push mis "an approving Reply: line in a ## Gate 5 section of gate-briefs.md for every finished batch (${brief_5_okn} approved, ${fin} finished)"
+                fi
+            fi
             add_finding "5 (Tests green per batch)" "${mis}" "${adv}"
 
             # Gate Re-plan (ADR 0029).
