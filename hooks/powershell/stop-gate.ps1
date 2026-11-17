@@ -18,8 +18,8 @@
          turn that never touched a spec is never blocked.
       4. By the frontmatter type:, evaluate the invariant table of ADR 0016
          (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan:
-         ADR 0029; rca, perf and port gate replies: ADR 0032; all read from
-         gate-briefs.md). A rule fires only when
+         ADR 0029; rca, perf and port gate replies: ADR 0032; refactor Gate 5
+         per batch: ADR 0035; all read from gate-briefs.md). A rule fires only when
          later-phase evidence exists AND the HARD gate's own evidence is
          missing.
       5. On a hit, print {"decision":"block","reason":...} to stdout. That
@@ -351,12 +351,13 @@ function Get-ReplyToken {
 
 # A fresh counter set for one gate label or one Re-plan revision.
 function New-GateCounter {
-    return @{ Seen = $false; Replies = 0; Ok = $false; Deny = '' }
+    return @{ Seen = $false; Replies = 0; Ok = $false; OkSections = 0; Deny = '' }
 }
 
 # One pass over the brief of workflow $Type. Gates maps each label of
 # BriefOrder to its counters: Seen (a section exists), Replies (Reply: lines
-# with a token), Ok (one of them approves), Deny (the last non-approving
+# with a token), Ok (one of them approves), OkSections (sections holding an
+# approving reply, each counted once; ADR 0035), Deny (the last non-approving
 # token). Rp holds the same per Re-plan revision number; RpMin is the lowest
 # number with a section. Start is the rank of the first gate heading. A `### `
 # subheading does not end a section; any other `## ` heading does. In a
@@ -375,11 +376,13 @@ function Get-BriefState {
     $cur = $null
     $cur2 = $null
     $curKey = ''
+    $secOk = $false
     foreach ($l in ($Text -split "`n")) {
         if ($l.StartsWith('## ')) {
             $h = $l.TrimEnd()
             $cur = $null
             $cur2 = $null
+            $secOk = $false
             $rank = 0
             if ($Type -ceq 'feature' -and $h -cmatch '^## Gate 1\+2([^0-9]|$)') {
                 $rank = $state.Rank['1']
@@ -417,6 +420,9 @@ function Get-BriefState {
         $tok = Get-ReplyToken $l
         if (-not $tok) { continue }
         $isDeny = ((Get-DenyTokens $curKey) -ccontains $tok)
+        # The section's first approving reply counts it as one approved pass.
+        $firstOk = (-not $isDeny) -and (-not $secOk)
+        if ($firstOk) { $secOk = $true }
         foreach ($c in @($cur, $cur2)) {
             if ($null -eq $c) { continue }
             $c.Replies = $c.Replies + 1
@@ -425,9 +431,56 @@ function Get-BriefState {
             } else {
                 $c.Ok = $true
             }
+            if ($firstOk) { $c.OkSections = $c.OkSections + 1 }
         }
     }
     return $state
+}
+
+# Batches past refactor Gate 5 (ADR 0035). Done: the distinct numeric
+# `Parallel batch` values among done tasks in $Tasks, plus one per done `solo`
+# task (a solo task runs as a batch of one). Tested: the distinct numeric <b>
+# among 04-artifacts/batches/batch-<b>-tests.txt under $Dir. A task is the
+# lines from one `## ` or `### ` heading to the next; a task with no readable
+# batch counts for nothing. Mirrors ref_batch_counts in the .sh.
+function Get-RefBatchCounts {
+    param([string]$Tasks, [string]$Dir)
+    $done = 0
+    $seen = @{}
+    $b = ''
+    $st = $false
+    # The sentinel heading closes the last task.
+    $lines = @($Tasks -split "`n") + @('### end')
+    foreach ($l in $lines) {
+        if ($l.StartsWith('## ') -or $l.StartsWith('### ')) {
+            if ($st -and $b) {
+                if ($b -ceq 'solo') {
+                    $done++
+                } elseif (-not $seen.ContainsKey([int]$b)) {
+                    $seen[[int]$b] = $true
+                    $done++
+                }
+            }
+            $b = ''
+            $st = $false
+            continue
+        }
+        if ($l -cmatch '^- \*\*Parallel batch\*\*:[ \t]*([0-9]{1,6}|solo)([^A-Za-z0-9_]|$)') { $b = $Matches[1] }
+        if ($l -cmatch '^- \*\*Status\*\*:[ \t]*done([^A-Za-z0-9_]|$)') { $st = $true }
+    }
+    $tested = 0
+    $seenT = @{}
+    $files = @(Get-ChildItem -LiteralPath (Join-Path $Dir '04-artifacts/batches') -File -ErrorAction SilentlyContinue)
+    foreach ($f in $files) {
+        if ($f.Name -cmatch '^batch-([0-9]{1,6})-tests\.txt$') {
+            $n = [int]$Matches[1]
+            if (-not $seenT.ContainsKey($n)) {
+                $seenT[$n] = $true
+                $tested++
+            }
+        }
+    }
+    return @{ Done = $done; Tested = $tested }
 }
 
 # What the gates $Gates lack together: one label, or a pool whose sections all
@@ -682,7 +735,11 @@ function Get-Findings {
             if ($m) { $mis.Add($m) }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '4 (Plan approval)' $mis $adv)) }
 
-            # REF-G5: Tests green per batch.
+            # REF-G5: Tests green per batch. Every batch is a new pass, so once
+            # the brief records Gate 4 (the run that planned the batches wrote
+            # it), each finished batch needs its own approving section. The
+            # newest batch's test output may be waiting at its gate, so it does
+            # not count as finished (ADR 0035).
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
             if ($taskDone) { $adv.Add('a task in 02-tasks.md is done') }
@@ -691,6 +748,19 @@ function Get-Findings {
             }
             $m = Get-BriefMissing $b 5
             if ($m) { $mis.Add($m) }
+            if ($b.Gates['4'].Seen -and $b.Gates['5'].Ok) {
+                $counts = Get-RefBatchCounts $tasks $Dir
+                $okn = $b.Gates['5'].OkSections
+                $fin = [Math]::Max($counts.Done, $counts.Tested - 1)
+                if ($fin -gt $okn) {
+                    $adv.Clear()
+                    if ($counts.Done -gt $okn) { $adv.Add("done tasks in 02-tasks.md span $($counts.Done) batches") }
+                    if (($counts.Tested - 1) -gt $okn) {
+                        $adv.Add("04-artifacts/batches/ holds test output for $($counts.Tested) batches")
+                    }
+                    $mis.Add("an approving Reply: line in a ## Gate 5 section of gate-briefs.md for every finished batch ($okn approved, $fin finished)")
+                }
+            }
             if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Tests green per batch)' $mis $adv)) }
 
             # Gate Re-plan (ADR 0029).

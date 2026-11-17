@@ -404,7 +404,8 @@ $bPayload = "{`"session_id`":`"smoke-stop-brief`",`"cwd`":`"$bgEsc`",`"transcrip
 
 # Set-BriefState <type> <status> <files> <briefs>
 # <files> is a space-separated subset of: decisions failing closeout plan
-# plan-r1 tasks-done. <briefs> is '-' for no gate-briefs.md, else gate=reply
+# plan-r1 tasks-done tasks-2batches (two done tasks in batches 1 and 2).
+# <briefs> is '-' for no gate-briefs.md, else gate=reply
 # pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
 function Set-BriefState {
     param([string]$Type, [string]$Status, [string]$Files, [string]$Briefs)
@@ -460,6 +461,11 @@ function Set-BriefState {
                 Set-Content -LiteralPath (Join-Path $bd '02-tasks.md') -Encoding UTF8 -NoNewline `
                     -Value "### T01 - Extract`n`n- **Status**: done`n"
             }
+            'tasks-2batches' {
+                Set-Content -LiteralPath (Join-Path $bd '02-tasks.md') -Encoding UTF8 -NoNewline `
+                    -Value ("### T01 - Extract`n`n- **Parallel batch**: 1`n- **Status**: done`n`n" +
+                        "### T02 - Move`n`n- **Parallel batch**: 2`n- **Status**: done`n")
+            }
         }
     }
     if ($Briefs -eq '-') { return }
@@ -506,6 +512,13 @@ Test-BriefCase 'refactor Re-plan revise only - blocks' 'Gate Re-plan R1' `
 Test-BriefCase 'refactor Re-plan approved - silent' 'silent' 'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes R1=approve'
 Test-BriefCase 'refactor revision with no Re-plan section - silent' 'silent' `
     'refactor' 'in-progress' 'decisions plan-r1' '1=yes 2=yes 4=yes'
+# SW-115 (ADR 0035): refactor Gate 5 is approved once per batch.
+Test-BriefCase 'refactor two batches done, one Gate 5 approval - blocks' '(1 approved, 2 finished)' `
+    'refactor' 'in-progress' 'decisions plan tasks-2batches' '1=yes 2=yes 4=yes 5=yes'
+Test-BriefCase 'refactor two batches done, two Gate 5 approvals - silent' 'silent' `
+    'refactor' 'in-progress' 'decisions plan tasks-2batches' '1=yes 2=yes 4=yes 5=yes 5=yes'
+Test-BriefCase 'refactor two batches done, brief starts at Gate 5 - silent' 'silent' `
+    'refactor' 'in-progress' 'decisions plan tasks-2batches' '5=yes'
 
 # ---- stop-gate: /sd:rca, /sd:perf and /sd:port gate replies (SW-114) --------
 Test-BriefCase 'rca Gate 3 dig deeper only - blocks' '(last reply: dig)' 'rca' 'in-progress' '' '1=yes 2=yes 3=dig'

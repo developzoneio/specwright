@@ -10,7 +10,7 @@
 - Supersedes: none. Extends ADR 0016's BUG-G2 row, and reverses ADR 0021's "Gate Re-plan has no
   rule", which ADR 0025 reaffirmed.
 - Extended by: ADR 0032 (the `/sd:rca`, `/sd:perf` and `/sd:port` entries of the order table;
-  SW-114)
+  SW-114); ADR 0035 (REF-G5 approved once per batch; SW-115)
 
 ## Context
 
@@ -119,6 +119,7 @@ are kept as they are.
     earlier approval still counts after work went back, and a refusal in the conversation language
     approves.
   - Refactor Gate 5 is approved once for every batch: a skip at batch 2 or later is not caught.
+    ADR 0035 lifts this once the brief records Gate 4.
   - A run that skips a Re-plan entirely, writing a revision with no section, is caught only when an
     earlier Re-plan section exists.
   - Bug Gate 3a `abort` sets `in-progress` then `done`; a turn that stops between the two edits

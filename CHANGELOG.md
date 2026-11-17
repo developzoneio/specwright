@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **stop-gate approves `/sd:refactor` Gate 5 once per batch (SW-115, ADR 0035)** - with
+  `hooks.stopGate.enabled`, a refactor spec is now blocked when more batches have finished than
+  `## Gate 5` sections hold an approving `Reply:`. Before, one approval in any Gate 5 section
+  covered every batch, so a session that approved batch 1 and ran the rest without stopping was
+  not caught (the known limit of ADR 0029).
+  - **Finished batches.** The larger of two counts: distinct `Parallel batch` numbers among done
+    tasks, with each done `solo` task as a batch of one; and the saved
+    `04-artifacts/batches/batch-<b>-tests.txt` files minus one, since the newest may be waiting at
+    its gate. Phase 5 checks tasks off only on `yes`, so a skipped gate often leaves only the test
+    output behind.
+  - **When it applies.** Only when the brief records Gate 4 and some Gate 5 section approves. A
+    brief that starts at Gate 5 or later (a resumed spec) keeps the any-pass rule. A `revert` or
+    `fix` section does not count, and a section counts once however many replies it holds.
+  - **Tests.** 10 new conformance fixtures (both twins, identical decisions; no existing fixture
+    changed; 343 of 343 pass) and 3 `smoke-hooks` cases per script. The three refactor fixtures
+    whose `coverage/after-refactor.txt` the old `coverage/` ignore rule kept out of SW-108 now
+    track it, as SW-118 did for a fourth; no decision changes. One new fixture joins the latency
+    selection. Latency (30 iterations, one Windows workstation): stop-gate p95 648 ms under pwsh
+    and 735 ms under PowerShell 5.1, against budgets of 1300 and 1000 ms. The 5.1 figure is above
+    SW-114's 548 ms, but per case the count path is no slower than the existing refactor cases
+    (mean of 15 runs: 558 ms against 641 ms under 5.1, 905 ms against 1003 ms under Git Bash).
 - **e2e scenario for an off-option gate reply (SW-125)** - `24-rca-off-option-reply` proves the
   model side of ADR 0033. Until now only the stop-gate side had tests, in the hook fixtures. The
   scenario runs the `15` incident through `/sd:rca`, and its `replies.txt` sends `sure, go ahead`
