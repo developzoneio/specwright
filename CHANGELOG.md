@@ -314,6 +314,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `02-feature-happy` asserts it.
 
 ### Changed
+- **`/sd:bug` Gate 2 says when a reproduction was traced, not run (SW-127, ADR 0034)** - in a live
+  run of e2e `13-bug-gate-brief`, the HARD Gate 2 brief said `confirmed locally` for a bug that
+  had only been traced through the code, and `yes` approved it. The value list had nothing
+  honest to pick.
+  - **New value.** The brief's `Reproduction:` line gains `traced, not run`. `confirmed locally`
+    now needs a run the session made, with its output saved under
+    `04-artifacts/repro-evidence/` and named on `Evidence:`; `intermittent` needs that run or the
+    saved log evidence.
+  - **Phase 2 runs the trigger when it can**, through a project command or a Reproduction step,
+    and saves the output. When nothing can run, it does not write a test into the source tree to
+    get one; Phase 4's failing test is the first run.
+  - **Unchanged:** the Gate 2 options, the meaning of `yes` (the user's own confirmation), the
+    stop-gate rules and `contractLint`. Gate 4 already requires a failing test before any fix.
+  - **Live:** e2e 13 green, 20/20, $1.22, 289 s (`claude` 2.1.325, Windows). Its Gate 2 brief now
+    reads `Reproduction: traced, not run - the allowed test command exercises no 200-character
+    title`, and its `transcript-contains-section` check, red in the SW-124 run, passed.
 - **Quiet `/sd:feature` close-out - at most one question (SW-91)** - Phase 6 collects AC
   evidence itself: an `AC-<n>` box is ticked, with a citation in `05-retro.md`, only when every
   covering task is `done`, has an existing witness test and the Gate 3 suite was green; otherwise

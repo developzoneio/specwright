@@ -306,11 +306,17 @@ Shown lines, replacing lines 1-5 of "Brief shape":
   shape". The decisions are the calls the architect made alone (the severity, where the affected
   scope ends, the expected behavior when the report leaves it open), each stated in `00-spec.md`.
   With none: `Decisions: none - the spec only restates the report.`
-- **Reproduction confirmed** - `Reproduction: <confirmed locally | intermittent, about <n>% | not
-  reproduced> - <how it was tried, one clause>`, `Trigger: <the exact input or condition>`,
-  `Observed: <what happened, against what was expected>`, `Evidence: <paths under 04-artifacts/>`
-  or `Evidence: the steps in 00-spec.md only`, `Environment: <where it reproduces>`, `Risk:`. The
-  brief states what the session ran; the reply is the user's own confirmation.
+- **Reproduction confirmed** - `Reproduction: <confirmed locally | intermittent, about <n>% |
+  traced, not run | not reproduced> - <how it was tried, one clause>`, `Trigger: <the exact input
+  or condition>`, `Observed: <what happened, against what was expected>`, `Evidence: <paths under
+  04-artifacts/>` or `Evidence: the steps in 00-spec.md only`, `Environment: <where it
+  reproduces>`, `Risk:`. The brief states what the session ran; the reply is the user's own
+  confirmation (ADR 0034). `confirmed locally` needs a run this session made, with its output
+  saved under `04-artifacts/repro-evidence/` and named on the `Evidence:` line; `intermittent`
+  needs that run or the saved log evidence of Phase 2.
+  A reproduction read from the code, with nothing run, is `traced, not run`, never `confirmed`;
+  its `Observed:` line says what the code would do, and its `Risk:` line says the first run is
+  the Phase 4 failing test.
 - **Hypothesis tree exhausted** - `No root cause yet: <N> hypotheses checked, <r> ruled out, <i>
   inconclusive.`, then up to 3 lines `Ruled out: H<n> <plain statement> - <why, one clause>`,
   highest score first, then `<n> more ruled out - reply details to list them.` when there are
