@@ -38,13 +38,19 @@ No other assertion may read the transcript, and no assertion may match model-wri
 with one exception.
 
 **The exception: `transcript-not-matches` (SW-113).** `sd-gate-brief` "User-facing text" forbids
-internal IDs (`ESC-*`, lint and verify codes, `path:line`) in every line the user reads, not only
-in the brief file, and no file holds the narration. The assertion fails when a regex matches any
-main-thread assistant text block of any turn. It stays inside the rule because:
+internal IDs (`ESC-*`, lint and verify codes, `SC-`/`AC-` criterion references, `path:line`) in
+every line the user reads, not only in the brief file, and no file holds the narration. The
+assertion fails when a regex matches any main-thread assistant text block of any turn. It stays
+inside the rule because:
 
-- **It is negative and names an ID class, not a phrasing.** Scenarios 02 and 13 to 17 reuse the
-  patterns their `file-not-matches` on `gate-briefs.md` already use. A different wording in the
-  next run cannot trip it; only a rule ID or a `path:line` in the reply can.
+- **It is negative and names an ID class, not a phrasing.** Scenarios 02 and 13 to 17 assert four
+  classes on the reply text: `ESC-[A-Z]+-\d+`, `\b(SL|VF|CL)\d{3}\b`, `path:line`
+  (`[\w./-]+\.[A-Za-z]{1,5}:\d+`, the pattern 13 to 17 also use on `gate-briefs.md`) and, since
+  SW-120, `\b(SC|AC)-\d+\b`; 17 adds a bare `D<NN>`. A different wording in the next run cannot
+  trip it; only an ID of one of those classes in the reply can. The allowed handles of
+  `sd-gate-brief` (spec ID, `T<NN>`, `H<n>`, `P0`-`P3`, a bare file path) match none of them. Known
+  limit: a dotted host with a port (`api.example.com:443`) has the `path:line` shape; the fixture
+  apps never print one.
 - **It shares one extraction with `transcript-contains-section`.** Main-thread text blocks only:
   tool calls, tool results, thinking blocks and subagent transcripts are not read, because they
   legitimately carry IDs (the `escalation:` lines in `05-retro.md`, reviewer `file:line` citations).
@@ -597,21 +603,22 @@ the check costs nothing:
 
 `write-only` is the SW-88 / SW-89 F1 pattern. If any case behaves otherwise, `-SelfTest` exits 1.
 
-`-SelfTest` checks `transcript-not-matches` the same way (SW-113), with the three ID patterns of
-scenarios 13 and 14 (`ESC-*`, `SL/VF/CL` + 3 digits, `path:line`). A case marked "all 3" runs
-against each pattern:
+`-SelfTest` checks `transcript-not-matches` the same way (SW-113, SW-120), with the four ID
+patterns of scenarios 02 and 13 to 17 (`ESC-*`, `SL/VF/CL` + 3 digits, `path:line`, `SC-`/`AC-`).
+A case marked "all 4" runs against each pattern:
 
 | Case | Transcript | Must |
 |---|---|---|
-| `esc-id-in-text`, `lint-id-in-text`, `path-line-in-text` | the ID in a main-thread text block | fail, naming turn 1 |
+| `esc-id-in-text`, `lint-id-in-text`, `path-line-in-text`, `criterion-id-in-text` | the ID in a main-thread text block | fail, naming turn 1 |
 | `leak-in-turn-2` | a clean turn 1, then the ID in turn 2; tool results and subagent notices (`origin`) do not start a turn | fail, naming turn 2 |
 | `leak-in-forked-session` | the ID in a second session file the run names | fail, naming turn 2 |
 | `leak-in-unnamed-session` | the ID in a session file the run does not name | pass |
-| `allowed-handles` (all 3) | spec ID, `T02` with its title, `H1`, `P1`, `Gate 2` and a bare file path | pass |
-| `ids-in-tool-use`, `ids-in-tool-result`, `ids-in-thinking` (all 3) | every ID class only in that content | pass |
-| `ids-in-sidechain-entry`, `ids-in-subagent-transcript` (all 3) | every ID class only in subagent text | pass |
-| `no-transcript` (all 3) | no session file at all | fail |
-| `zero-text-blocks` (all 3) | only tool calls and a tool result | fail |
+| `allowed-handles` (all 4) | spec ID, `T02` with its title, `H1`, `P1`, `Gate 2` and a bare file path | pass |
+| `near-misses` (all 4) | `MAC-1`, `ACK`, `SC1`, `localhost:8080`, `10:30` and a bare file path | pass |
+| `ids-in-tool-use`, `ids-in-tool-result`, `ids-in-thinking` (all 4) | every ID class only in that content | pass |
+| `ids-in-sidechain-entry`, `ids-in-subagent-transcript` (all 4) | every ID class only in subagent text | pass |
+| `no-transcript` (all 4) | no session file at all | fail |
+| `zero-text-blocks` (all 4) | only tool calls and a tool result | fail |
 
 First of all, before the preflight, `-SelfTest` checks the auth plan offline (SW-106). It needs no
 `claude` CLI and no auth, and a failure exits 1 before any paid run. Each case sets the two auth

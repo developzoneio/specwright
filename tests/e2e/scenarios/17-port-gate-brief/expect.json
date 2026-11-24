@@ -25,6 +25,7 @@
   { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "transcript-not-matches", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SC|AC)-\\d+\\b" },
   { "type": "transcript-not-matches", "pattern": "(?m)^(?!.*->).*\\bD\\d{2}\\b" },
   { "type": "file-matches", "path": ".claude/project-config.json", "pattern": "PORT-title-format-\\d{8}/04-artifacts/source/MANIFEST\\.md" },
   { "type": "file-matches", "path": "src/legacy/title-format.js", "pattern": "const _WHITESPACE = " },

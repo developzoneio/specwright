@@ -17,6 +17,7 @@
   { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "transcript-not-matches", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SC|AC)-\\d+\\b" },
   { "type": "file-matches", "path": "src/application/todo-service.js", "pattern": "#\\w+\\(id\\)" },
   { "type": "file-matches", "path": ".specs/index.md", "pattern": "REF-extract-todo-lookup-\\d{8}\\s*\\|\\s*refactor\\s*\\|\\s*done" },
   { "type": "file-not-matches", "path": ".specs/_metrics/events.jsonl", "pattern": "\"gate\":\"shell-write\"" }

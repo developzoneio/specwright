@@ -1164,9 +1164,9 @@ function Invoke-TranscriptAssertionSelfCheck {
 }
 
 function Invoke-TranscriptNotMatchesSelfCheck {
-    # -SelfTest, offline (SW-113): transcript-not-matches against transcripts
-    # built here, with the three ID patterns scenarios 02, 13 and 14 assert on
-    # their briefs. An ID in main-thread text must fail and name its turn; the
+    # -SelfTest, offline (SW-113, SW-120): transcript-not-matches against
+    # transcripts built here, with the four ID patterns scenarios 02 and 13 to
+    # 17 assert on their reply text. An ID in main-thread text must fail and name its turn; the
     # same ID in a tool call, a tool result, a thinking block or a subagent
     # transcript must pass; no transcript and zero text blocks must fail, never
     # pass empty. Returns $true when every case behaved as expected.
@@ -1176,11 +1176,15 @@ function Invoke-TranscriptNotMatchesSelfCheck {
         'ESC-[A-Z]+-\d+'
         '\b(SL|VF|CL)\d{3}\b'
         '[\w./-]+\.[A-Za-z]{1,5}:\d+'
+        '\b(SC|AC)-\d+\b'
     )
     $leakEsc = 'Phase 4 - applying ESC-REF-04 to the plan'
     $leakLint = 'The spec check reports SL069 on the task list'
     $leakLine = 'The fix is in src/domain/todo.js:12 now'
-    $allIds = 'ESC-REF-04 SL069 VF001 CL200 src/domain/todo.js:12'
+    $leakCriterion = 'Gate 2 covers AC-3 and SC-1 now'
+    $allIds = 'ESC-REF-04 SL069 VF001 CL200 src/domain/todo.js:12 AC-3 SC-1'
+    # Shapes that look close to an ID class but are not one (SW-120).
+    $nearMiss = 'MAC-1 address, ACK received, SC1 flag, localhost:8080 at 10:30, see src/service.js.'
     $clean = 'Phase 3 - FEAT-selftest: T02 Count todos by status (src/service.js), H1 stale cache, P1, Gate 2 passed.'
 
     function New-Entry {
@@ -1221,6 +1225,8 @@ function Invoke-TranscriptNotMatchesSelfCheck {
            Main = @((New-Prompt), (New-Entry @((New-Text $leakLint)))) }
         @{ Name = 'path-line-in-text'; Pattern = 2; Expect = $false; Status = 'hit'; Turn = 1
            Main = @((New-Prompt), (New-Entry @((New-Text $leakLine)))) }
+        @{ Name = 'criterion-id-in-text'; Pattern = 3; Expect = $false; Status = 'hit'; Turn = 1
+           Main = @((New-Prompt), (New-Entry @((New-Text $leakCriterion)))) }
         # Tool results and subagent notices are user entries that do not start a turn: the leak is in turn 2.
         @{ Name = 'leak-in-turn-2'; Pattern = 0; Expect = $false; Status = 'hit'; Turn = 2
            Main = @((New-Prompt), (New-Entry @($toolUse)), (New-ToolResult 'ok'), (New-TaskNotification),
@@ -1236,6 +1242,8 @@ function Invoke-TranscriptNotMatchesSelfCheck {
            Main2 = @((New-Prompt), (New-Entry @((New-Text $leakEsc)))) }
         @{ Name = 'allowed-handles'; Pattern = -1; Expect = $true; Status = 'clean'
            Main = @((New-Prompt), (New-Entry @((New-Text $clean)))) }
+        @{ Name = 'near-misses'; Pattern = -1; Expect = $true; Status = 'clean'
+           Main = @((New-Prompt), (New-Entry @((New-Text $nearMiss)))) }
         @{ Name = 'ids-in-tool-use'; Pattern = -1; Expect = $true; Status = 'clean'
            Main = @((New-Prompt), (New-Entry @($toolUse, (New-Text $clean)))) }
         @{ Name = 'ids-in-tool-result'; Pattern = -1; Expect = $true; Status = 'clean'
