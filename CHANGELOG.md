@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **stop-gate approves `/sd:port` Gate 5 once per batch (SW-133, ADR 0036)** - with
+  `hooks.stopGate.enabled`, a port spec is now blocked when more batches have finished than
+  `## Gate 5` sections hold an approving `Reply:`. Before, one approval in any Gate 5 section
+  covered every batch (ADR 0032's any-pass rule), so a session that answered `continue` for batch 1
+  and ran the rest without stopping was not caught.
+  - **Finished batches.** The saved `04-artifacts/batches/batch-<n>-tests.txt` files, minus one
+    while the newest may be waiting at its gate; all of them once Phase 8 has written
+    `04-artifacts/parity/INDEX.md`. Done tasks are not read: port checks tasks off before Gate 5.
+  - **When it applies.** Only when the brief records Gate 4; a brief that starts at Gate 5 or later
+    keeps the any-pass rule. A `revert batch` section does not count, and a retried batch rewrites
+    its own file. Unlike refactor, the count also runs with no approving Gate 5, so a run in
+    Phase 7 that never stopped at Gate 5 is now caught too.
+  - **Tests.** 8 new conformance fixtures (both twins, identical decisions; no existing fixture
+    changed; 351 of 351 pass) and 3 `smoke-hooks` cases per script; the bash `brief_state` helper
+    now builds port specs. One new fixture joins the latency selection. Latency (30 iterations,
+    Linux container, pwsh only): stop-gate p95 619 ms against a budget of 1300 ms.
 - **stop-gate approves `/sd:refactor` Gate 5 once per batch (SW-115, ADR 0035)** - with
   `hooks.stopGate.enabled`, a refactor spec is now blocked when more batches have finished than
   `## Gate 5` sections hold an approving `Reply:`. Before, one approval in any Gate 5 section

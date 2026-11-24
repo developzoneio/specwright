@@ -77,7 +77,7 @@ finished)". Its evidence lists whichever count exceeds approved: "done tasks in 
   session waiting at batch 2 would be blocked.
 - **Apply the count to port Gate 5 too.** `/sd:port` Gate 5 also repeats per batch (ADR 0032, rule
   6). Not done here: port tasks have no `Parallel batch` field, so only the test-output signal
-  would apply, and port's batch flow needs its own check. It is a follow-up.
+  would apply, and port's batch flow needs its own check. Done in ADR 0036 (SW-133).
 
 ## Consequences
 
