@@ -404,7 +404,8 @@ $bPayload = "{`"session_id`":`"smoke-stop-brief`",`"cwd`":`"$bgEsc`",`"transcrip
 
 # Set-BriefState <type> <status> <files> <briefs>
 # <files> is a space-separated subset of: decisions failing closeout plan
-# plan-r1 tasks-done tasks-2batches (two done tasks in batches 1 and 2).
+# plan-r1 tasks-done tasks-2batches (two done tasks in batches 1 and 2)
+# batches2 batches3 (batch-<n>-tests.txt for batches 1..2 or 1..3).
 # <briefs> is '-' for no gate-briefs.md, else gate=reply
 # pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
 function Set-BriefState {
@@ -460,6 +461,13 @@ function Set-BriefState {
             'tasks-done' {
                 Set-Content -LiteralPath (Join-Path $bd '02-tasks.md') -Encoding UTF8 -NoNewline `
                     -Value "### T01 - Extract`n`n- **Status**: done`n"
+            }
+            { $_ -in 'batches2', 'batches3' } {
+                $bdir = Join-Path $art 'batches'
+                New-Item -ItemType Directory -Force -Path $bdir | Out-Null
+                foreach ($n in 1..([int]$f.Substring(7))) {
+                    Set-Content -LiteralPath (Join-Path $bdir "batch-$n-tests.txt") -Encoding UTF8 -Value 'PASS'
+                }
             }
             'tasks-2batches' {
                 Set-Content -LiteralPath (Join-Path $bd '02-tasks.md') -Encoding UTF8 -NoNewline `
@@ -519,6 +527,13 @@ Test-BriefCase 'refactor two batches done, two Gate 5 approvals - silent' 'silen
     'refactor' 'in-progress' 'decisions plan tasks-2batches' '1=yes 2=yes 4=yes 5=yes 5=yes'
 Test-BriefCase 'refactor two batches done, brief starts at Gate 5 - silent' 'silent' `
     'refactor' 'in-progress' 'decisions plan tasks-2batches' '5=yes'
+# SW-133 (ADR 0036): port Gate 5 is approved once per batch.
+Test-BriefCase 'port three batches tested, one Gate 5 approval - blocks' '(1 approved, 2 finished)' `
+    'port' 'in-progress' 'manifest batches3' '1=yes 2=yes 3=yes 4=yes 5=continue'
+Test-BriefCase 'port waiting at batch 2 - silent' 'silent' `
+    'port' 'in-progress' 'manifest batches2' '1=yes 2=yes 3=yes 4=yes 5=continue 5='
+Test-BriefCase 'port three batches tested, brief starts at Gate 5 - silent' 'silent' `
+    'port' 'in-progress' 'manifest batches3' '5=continue'
 
 # ---- stop-gate: /sd:rca, /sd:perf and /sd:port gate replies (SW-114) --------
 Test-BriefCase 'rca Gate 3 dig deeper only - blocks' '(last reply: dig)' 'rca' 'in-progress' '' '1=yes 2=yes 3=dig'

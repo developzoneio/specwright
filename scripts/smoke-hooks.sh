@@ -384,17 +384,24 @@ bpayload="$(printf '{"session_id":"smoke-stop-brief","cwd":"%s","transcript_path
 
 # brief_state <type> <status> <files> <briefs>
 # <files> is a space-separated subset of: decisions failing closeout plan
-# plan-r1 tasks-done tasks-2batches (two done tasks in batches 1 and 2).
+# plan-r1 tasks-done tasks-2batches (two done tasks in batches 1 and 2)
+# manifest batches2 batches3 (batch-<n>-tests.txt for batches 1..2 or 1..3).
 # <briefs> is '-' for no gate-briefs.md, else gate=reply
 # pairs; R<n> is a Gate Re-plan section; an empty reply leaves it open.
 brief_state() {
-    local id g lab f
-    [[ "$1" == "bug" ]] && id="BUG-SMOKE-3" || id="REF-SMOKE-4"
+    local id g lab f b body=''
+    case "$1" in
+        bug) id="BUG-SMOKE-3" ;;
+        port) id="PORT-SMOKE-7" ;;
+        *) id="REF-SMOKE-4" ;;
+    esac
+    # port carries a frozen donor set, so only the brief rows are exercised.
+    [[ "$1" == "port" ]] && body=$'\n## Donor provenance\n\n- **Frozen**: yes\n'
     rm -rf "$bg/.specs"
     bd="$bg/.specs/$id"
     mkdir -p "$bd"
     printf '{"type":"user","message":{"content":"continue %s"}}\n' "$id" > "$bg/transcript.jsonl"
-    printf -- '---\nid: %s\ntype: %s\nstatus: %s\n---\n' "$id" "$1" "$2" > "$bd/00-spec.md"
+    printf -- '---\nid: %s\ntype: %s\nstatus: %s\n---\n%s' "$id" "$1" "$2" "$body" > "$bd/00-spec.md"
     for f in $3; do
         case "$f" in
             decisions) printf '# Decisions\n' > "$bd/03-decisions.md" ;;
@@ -403,6 +410,10 @@ brief_state() {
             plan) printf '# Plan\n' > "$bd/01-plan.md" ;;
             plan-r1) printf '# Plan\n\n## Revisions\n\n### R1 - 2026-10-29T10:00:00Z\n' > "$bd/01-plan.md" ;;
             tasks-done) printf -- '### T01 - Extract\n\n- **Status**: done\n' > "$bd/02-tasks.md" ;;
+            manifest) mkdir -p "$bd/04-artifacts/source"; printf '# Manifest\n' > "$bd/04-artifacts/source/MANIFEST.md" ;;
+            batches2 | batches3)
+                mkdir -p "$bd/04-artifacts/batches"
+                for b in $(seq 1 "${f#batches}"); do printf 'PASS\n' > "$bd/04-artifacts/batches/batch-$b-tests.txt"; done ;;
             tasks-2batches)
                 printf -- '### T01 - Extract\n\n- **Parallel batch**: 1\n- **Status**: done\n\n### T02 - Move\n\n- **Parallel batch**: 2\n- **Status**: done\n' \
                     > "$bd/02-tasks.md" ;;
@@ -460,6 +471,13 @@ brief_case "refactor two batches done, two Gate 5 approvals - silent" silent \
     refactor in-progress "decisions plan tasks-2batches" "1=yes 2=yes 4=yes 5=yes 5=yes"
 brief_case "refactor two batches done, brief starts at Gate 5 - silent" silent \
     refactor in-progress "decisions plan tasks-2batches" "5=yes"
+# SW-133 (ADR 0036): port Gate 5 is approved once per batch.
+brief_case "port three batches tested, one Gate 5 approval - blocks" "(1 approved, 2 finished)" \
+    port in-progress "manifest batches3" "1=yes 2=yes 3=yes 4=yes 5=continue"
+brief_case "port waiting at batch 2 - silent" silent \
+    port in-progress "manifest batches2" "1=yes 2=yes 3=yes 4=yes 5=continue 5="
+brief_case "port three batches tested, brief starts at Gate 5 - silent" silent \
+    port in-progress "manifest batches3" "5=continue"
 
 section "stop-gate (bash): bug/refactor re-fire with stop_hook_active - silent"
 brief_state refactor in-progress "decisions plan-r1" "1=yes 2=yes 4=yes R1=revise"

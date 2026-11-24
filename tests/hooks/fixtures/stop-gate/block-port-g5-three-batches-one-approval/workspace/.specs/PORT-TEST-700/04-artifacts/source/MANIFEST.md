@@ -1,0 +1,3 @@
+# Manifest
+
+- src/slug.js

@@ -19,9 +19,9 @@
       4. By the frontmatter type:, evaluate the invariant table of ADR 0016
          (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan:
          ADR 0029; rca, perf and port gate replies: ADR 0032; refactor Gate 5
-         per batch: ADR 0035; all read from gate-briefs.md). A rule fires only when
-         later-phase evidence exists AND the HARD gate's own evidence is
-         missing.
+         per batch: ADR 0035; port Gate 5 per batch: ADR 0036; all read
+         from gate-briefs.md). A rule fires only when later-phase evidence
+         exists AND the HARD gate's own evidence is missing.
       5. On a hit, print {"decision":"block","reason":...} to stdout. That
          blocks Stop exactly like exit 2 (ADR 0015) while this hook still
          exits 0.
@@ -437,12 +437,31 @@ function Get-BriefState {
     return $state
 }
 
+# Batches with saved test output (ADR 0035, ADR 0036): the distinct numeric
+# <b> among 04-artifacts/batches/batch-<b>-tests.txt under $Dir. Only file
+# names are read. Mirrors batch_tested_units in the .sh.
+function Get-BatchTestedUnits {
+    param([string]$Dir)
+    $tested = 0
+    $seenT = @{}
+    $files = @(Get-ChildItem -LiteralPath (Join-Path $Dir '04-artifacts/batches') -File -ErrorAction SilentlyContinue)
+    foreach ($f in $files) {
+        if ($f.Name -cmatch '^batch-([0-9]{1,6})-tests\.txt$') {
+            $n = [int]$Matches[1]
+            if (-not $seenT.ContainsKey($n)) {
+                $seenT[$n] = $true
+                $tested++
+            }
+        }
+    }
+    return $tested
+}
+
 # Batches past refactor Gate 5 (ADR 0035). Done: the distinct numeric
 # `Parallel batch` values among done tasks in $Tasks, plus one per done `solo`
-# task (a solo task runs as a batch of one). Tested: the distinct numeric <b>
-# among 04-artifacts/batches/batch-<b>-tests.txt under $Dir. A task is the
-# lines from one `## ` or `### ` heading to the next; a task with no readable
-# batch counts for nothing. Mirrors ref_batch_counts in the .sh.
+# task (a solo task runs as a batch of one). Tested: Get-BatchTestedUnits. A
+# task is the lines from one `## ` or `### ` heading to the next; a task with
+# no readable batch counts for nothing. Mirrors ref_batch_counts in the .sh.
 function Get-RefBatchCounts {
     param([string]$Tasks, [string]$Dir)
     $done = 0
@@ -468,19 +487,7 @@ function Get-RefBatchCounts {
         if ($l -cmatch '^- \*\*Parallel batch\*\*:[ \t]*([0-9]{1,6}|solo)([^A-Za-z0-9_]|$)') { $b = $Matches[1] }
         if ($l -cmatch '^- \*\*Status\*\*:[ \t]*done([^A-Za-z0-9_]|$)') { $st = $true }
     }
-    $tested = 0
-    $seenT = @{}
-    $files = @(Get-ChildItem -LiteralPath (Join-Path $Dir '04-artifacts/batches') -File -ErrorAction SilentlyContinue)
-    foreach ($f in $files) {
-        if ($f.Name -cmatch '^batch-([0-9]{1,6})-tests\.txt$') {
-            $n = [int]$Matches[1]
-            if (-not $seenT.ContainsKey($n)) {
-                $seenT[$n] = $true
-                $tested++
-            }
-        }
-    }
-    return @{ Done = $done; Tested = $tested }
+    return @{ Done = $done; Tested = (Get-BatchTestedUnits $Dir) }
 }
 
 # What the gates $Gates lack together: one label, or a pool whose sections all
@@ -967,14 +974,35 @@ function Get-Findings {
                 if ($m) { $mis.Add($m) }
                 if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '4 (Plan approval)' $mis $adv)) }
 
-                # PORT-G5: Batch tests green.
+                # PORT-G5: Batch tests green. Every batch is a new pass, so once
+                # the brief records Gate 4, each finished batch needs its own
+                # approving section. Tasks are checked off before Gate 5, so
+                # only the saved test output counts; the newest batch may be
+                # waiting at its gate until Phase 8 writes parity/INDEX.md
+                # (ADR 0036).
                 $adv = New-Object System.Collections.Generic.List[string]
                 $mis = New-Object System.Collections.Generic.List[string]
-                if (Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/parity/INDEX.md') -PathType Leaf) {
-                    $adv.Add('04-artifacts/parity/INDEX.md exists')
-                }
+                $hasIndex = Test-Path -LiteralPath (Join-Path $Dir '04-artifacts/parity/INDEX.md') -PathType Leaf
+                if ($hasIndex) { $adv.Add('04-artifacts/parity/INDEX.md exists') }
                 $m = Get-BriefMissing $b 5
                 if ($m) { $mis.Add($m) }
+                if ($b.Gates['4'].Seen) {
+                    $tested = Get-BatchTestedUnits $Dir
+                    $okn = $b.Gates['5'].OkSections
+                    $fin = $tested - 1
+                    if ($hasIndex) { $fin = $tested }
+                    # With no approving Gate 5, Get-BriefMissing already names
+                    # the gate; the test output is added only when nothing else
+                    # is later-phase evidence (mid-Phase 7).
+                    if ($fin -gt $okn) {
+                        if ($b.Gates['5'].Ok) {
+                            $adv.Add("04-artifacts/batches/ holds test output for $tested batches")
+                            $mis.Add("an approving Reply: line in a ## Gate 5 section of gate-briefs.md for every finished batch ($okn approved, $fin finished)")
+                        } elseif ($adv.Count -eq 0) {
+                            $adv.Add("04-artifacts/batches/ holds test output for $tested batches")
+                        }
+                    }
+                }
                 if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Batch tests green)' $mis $adv)) }
             }
 

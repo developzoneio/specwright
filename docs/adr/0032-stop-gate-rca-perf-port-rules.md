@@ -7,7 +7,7 @@
   ADR layers on); ADR 0021 (coverage, any-pass approval and the parse contract, reused unchanged);
   ADR 0029 (the label-generic reader, and the rule that an answer which only moves the run forward
   approves); ADR 0026, ADR 0027 and ADR 0028 (the `/sd:rca`, `/sd:perf` and `/sd:port` briefs);
-  ADR 0012 (hook latency budget)
+  ADR 0012 (hook latency budget); ADR 0036 (port Gate 5 approved once per batch; SW-133)
 - Supersedes: none. Extends ADR 0016 with eleven rows and adds a reply check to six of its rows.
 
 ## Context
@@ -114,7 +114,8 @@ Gate 2 Case A), `continue` (perf Gate 5 Face B and port Gate 5 Face A), `keep`, 
   fixtures. The 7 rca, perf and port fixtures from before this ADR are unchanged.
 - **Known limits:**
   - Any-pass across repeats. Approving one attempt or batch covers the later ones. Counting per
-    hotspot, attempt or batch is the follow-up ADR 0029 named for refactor Gate 5.
+    hotspot, attempt or batch is the follow-up ADR 0029 named for refactor Gate 5. ADR 0036 lifts
+    this for port Gate 5 once the brief records Gate 4.
   - `keep-with-reason` given without a reason still reads as approving. The command refuses it,
     but the reply line only shows the token.
   - `done` specs are not checked, as in ADR 0016.

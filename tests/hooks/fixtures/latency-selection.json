@@ -33,7 +33,8 @@
     "block-ref-replan-revise-details",
     "block-ref-g5-tests-ahead-no-checkoff",
     "block-perf-g8-address",
-    "block-port-g6-rerun-only"
+    "block-port-g6-rerun-only",
+    "block-port-g5-three-batches-one-approval"
   ],
   "handoff-integrity": [
     "silent-default-off",

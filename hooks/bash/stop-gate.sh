@@ -15,7 +15,8 @@
 #   4. By the frontmatter type:, evaluate the invariant table of ADR 0016
 #      (feature rows: ADR 0021; bug and refactor rows and Gate Re-plan: ADR
 #      0029; rca, perf and port gate replies: ADR 0032; refactor Gate 5 per
-#      batch: ADR 0035; all read from gate-briefs.md). A rule fires only when later-phase
+#      batch: ADR 0035; port Gate 5 per batch: ADR 0036; all read from
+#      gate-briefs.md). A rule fires only when later-phase
 #      evidence exists AND the HARD gate's own evidence is missing.
 #   5. On a hit, print {"decision":"block","reason":...} to stdout. That blocks
 #      Stop exactly like exit 2 (ADR 0015) while this hook still exits 0.
@@ -460,19 +461,36 @@ read_brief() {
     done <<< "$1"
 }
 
+# Batches with saved test output (ADR 0035, ADR 0036). From the spec folder
+# $1, sets batch_tested: the distinct numeric <b> among
+# 04-artifacts/batches/batch-<b>-tests.txt. Only file names are read. Mirrors
+# Get-BatchTestedUnits in the .ps1.
+batch_tested_units() {
+    local f n seen=' '
+    batch_tested=0
+    for f in "$1"/04-artifacts/batches/batch-*-tests.txt; do
+        [[ -f "${f}" ]] || continue
+        n="${f##*/batch-}"
+        n="${n%-tests.txt}"
+        [[ "${n}" =~ ^[0-9]{1,6}$ ]] || continue
+        n=$((10#${n}))
+        [[ "${seen}" == *" ${n} "* ]] && continue
+        seen+="${n} "
+        batch_tested=$((batch_tested + 1))
+    done
+}
+
 # Batches past refactor Gate 5 (ADR 0035). From the tasks text $1, sets
 # ref_done_units: the distinct numeric `Parallel batch` values among done
 # tasks, plus one per done `solo` task (a solo task runs as a batch of one).
-# From the spec folder $2, sets ref_tested_units: the distinct numeric <b>
-# among 04-artifacts/batches/batch-<b>-tests.txt. A task is the lines from one
-# `## ` or `### ` heading to the next; a task with no readable batch counts
-# for nothing. Mirrors Get-RefBatchCounts in the .ps1.
+# From the spec folder $2, sets ref_tested_units (batch_tested_units). A task
+# is the lines from one `## ` or `### ` heading to the next; a task with no
+# readable batch counts for nothing. Mirrors Get-RefBatchCounts in the .ps1.
 ref_batch_counts() {
-    local l b='' st=0 seen=' ' f n rx_b rx_s
+    local l b='' st=0 seen=' ' rx_b rx_s
     rx_b='^- \*\*Parallel batch\*\*:[[:blank:]]*([0-9]{1,6}|solo)([^A-Za-z0-9_]|$)'
     rx_s='^- \*\*Status\*\*:[[:blank:]]*done([^A-Za-z0-9_]|$)'
     ref_done_units=0
-    ref_tested_units=0
     while IFS= read -r l || [[ -n "${l}" ]]; do
         if [[ "${l}" == "## "* || "${l}" == "### "* ]]; then
             ref_count_task
@@ -484,17 +502,8 @@ ref_batch_counts() {
         [[ "${l}" =~ ${rx_s} ]] && st=1
     done <<< "$1"
     ref_count_task
-    seen=' '
-    for f in "$2"/04-artifacts/batches/batch-*-tests.txt; do
-        [[ -f "${f}" ]] || continue
-        n="${f##*/batch-}"
-        n="${n%-tests.txt}"
-        [[ "${n}" =~ ^[0-9]{1,6}$ ]] || continue
-        n=$((10#${n}))
-        [[ "${seen}" == *" ${n} "* ]] && continue
-        seen+="${n} "
-        ref_tested_units=$((ref_tested_units + 1))
-    done
+    batch_tested_units "$2"
+    ref_tested_units=${batch_tested}
 }
 
 # Counts the task ref_batch_counts just finished reading; uses its b, st and
@@ -955,10 +964,32 @@ case "${spec_type}" in
             brief_missing 4
             add_finding "4 (Plan approval)" "${mis}" "${adv}"
 
-            # PORT-G5: Batch tests green.
+            # PORT-G5: Batch tests green. Every batch is a new pass, so once
+            # the brief records Gate 4, each finished batch needs its own
+            # approving section. Tasks are checked off before Gate 5, so only
+            # the saved test output counts; the newest batch may be waiting at
+            # its gate until Phase 8 writes parity/INDEX.md (ADR 0036).
             adv=""; mis=""
-            [[ -f "${dir}/04-artifacts/parity/INDEX.md" ]] && push adv "04-artifacts/parity/INDEX.md exists"
+            has_index=0
+            [[ -f "${dir}/04-artifacts/parity/INDEX.md" ]] && has_index=1
+            [[ ${has_index} -eq 1 ]] && push adv "04-artifacts/parity/INDEX.md exists"
             brief_missing 5
+            if [[ ${brief_4_seen} -eq 1 ]]; then
+                batch_tested_units "${dir}"
+                fin=$((batch_tested - 1))
+                [[ ${has_index} -eq 1 ]] && fin=${batch_tested}
+                # With no approving Gate 5, brief_missing already names the
+                # gate; the test output is added only when nothing else is
+                # later-phase evidence (mid-Phase 7).
+                if [[ ${fin} -gt ${brief_5_okn} ]]; then
+                    if [[ ${brief_5_ok} -eq 1 ]]; then
+                        push adv "04-artifacts/batches/ holds test output for ${batch_tested} batches"
+                        push mis "an approving Reply: line in a ## Gate 5 section of gate-briefs.md for every finished batch (${brief_5_okn} approved, ${fin} finished)"
+                    elif [[ -z "${adv}" ]]; then
+                        push adv "04-artifacts/batches/ holds test output for ${batch_tested} batches"
+                    fi
+                fi
+            fi
             add_finding "5 (Batch tests green)" "${mis}" "${adv}"
         fi
 
