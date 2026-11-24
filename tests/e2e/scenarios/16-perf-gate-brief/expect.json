@@ -25,6 +25,7 @@
   { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "transcript-not-matches", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SC|AC)-\\d+\\b" },
   { "type": "file-not-matches", "path": ".specs/PERF-list-latency-*/00-spec.md", "pattern": "<<PHASE-[236]:" },
   { "type": "file-matches", "path": ".specs/PERF-list-latency-*/00-spec.md", "pattern": "(?m)^\\|\\s*1\\s*\\|.*\\bkept\\b" },
   { "type": "file-not-matches", "path": "src/infrastructure/store.js", "pattern": "findIndex" },

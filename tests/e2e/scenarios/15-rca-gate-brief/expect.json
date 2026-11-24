@@ -12,6 +12,7 @@
   { "type": "transcript-not-matches", "pattern": "ESC-[A-Z]+-\\d+" },
   { "type": "transcript-not-matches", "pattern": "\\b(SL|VF|CL)\\d{3}\\b" },
   { "type": "transcript-not-matches", "pattern": "[\\w./-]+\\.[A-Za-z]{1,5}:\\d+" },
+  { "type": "transcript-not-matches", "pattern": "\\b(SC|AC)-\\d+\\b" },
   { "type": "file-not-matches", "path": ".specs/RCA-e2e-brief-*/00-spec.md", "pattern": "<<PHASE-2:|<<PHASE-3: root cause" },
   { "type": "file-matches", "path": ".specs/index.md", "pattern": "RCA-e2e-brief-\\d{8}\\s*\\|\\s*rca\\s*\\|\\s*done" },
   { "type": "file-matches", "path": "src/infrastructure/store.js", "pattern": "#nextId = 1;" },

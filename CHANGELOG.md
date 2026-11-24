@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **e2e reply text is checked for criterion IDs and `path:line` everywhere (SW-120)** -
+  `sd-gate-brief` forbids `SC-<n>`, `AC-<n>` and `path:line` in any line the user reads, but
+  `transcript-not-matches` caught neither `SC-`/`AC-` in any scenario nor `path:line` in
+  `02-feature-happy`. Before SW-116, `/sd:verify` printed a traceability table full of both, and no
+  assertion would have flagged it.
+  - **Assertions.** `\b(SC|AC)-\d+\b` joins the reply-text checks of `02` and `13` to `17`, and
+    `02` gains the `path:line` pattern the other five already use, unchanged. Both stay negative
+    and name an ID class, never a wording. The allowed handles (spec ID, `T<NN>`, `H<n>`, `P0`-`P3`,
+    a bare file path) match neither.
+  - **Self-test.** `run-e2e.ps1 -SelfTest` runs its transcript cases against four patterns: a new
+    `criterion-id-in-text` case must fail on `AC-3`, and a new `near-misses` case (`MAC-1`, `ACK`,
+    `SC1`, `localhost:8080`, `10:30`, a bare path) must pass all four. Run offline: every case
+    passes, and dropping the `\b` from the new pattern makes `near-misses` fail.
+  - **Known limit.** A dotted host with a port (`api.example.com:443`) has the `path:line` shape;
+    the fixture apps never print one. Not yet run live (needs two runs of each scenario).
 - **stop-gate approves `/sd:port` Gate 5 once per batch (SW-133, ADR 0036)** - with
   `hooks.stopGate.enabled`, a port spec is now blocked when more batches have finished than
   `## Gate 5` sections hold an approving `Reply:`. Before, one approval in any Gate 5 section
