@@ -128,6 +128,25 @@ harness installs. The main thread called `sd-implementer` exactly twice for thre
 `08-resume-checkoff` passed 8/8 in the same tree, so a single-task resume is unchanged. Neither
 run kept a results file, so cost and duration were not recorded.
 
+**SW-120 / SW-133 runs, 2026-11-24** (Linux cloud container, `claude` 2.1.331, subscription
+token, commit `f29881c`): every scenario that asserts on reply text ran twice, and all 12 runs were
+green.
+
+| Scenario | Run 1 | Run 2 | Duration (run 1 / run 2) |
+|---|---|---|---|
+| `02-feature-happy` | 29/29 | 29/29 | 369 s / 317 s |
+| `13-bug-gate-brief` | 21/21 | 21/21 | 290 s / 314 s |
+| `14-refactor-gate-brief` | 22/22 | 22/22 | 341 s / 338 s |
+| `15-rca-gate-brief` | 18/18 | 18/18 | 259 s / 254 s |
+| `16-perf-gate-brief` | 32/32 | 32/32 | 347 s / 351 s |
+| `17-port-gate-brief` | 34/34 | 34/34 | 632 s / 625 s |
+
+The SW-120 `\b(SC|AC)-\d+\b` check matched no reply in any scenario, and neither did `02`'s new
+`path:line` check. `17` runs with `stopGate` enabled, so the SW-133 per-batch Gate 5 count blocked
+no legitimate port flow. No run kept a results file, so cost was not recorded. From a Claude Code
+cloud session, unset the session's `ANTHROPIC_BASE_URL` before running: the runner passes it to
+every nested `claude`, which would then talk to the session's proxy instead of the API.
+
 ## Prerequisites
 
 The runner checks all of these before it builds any sandbox. A missing one exits `2` and names the
