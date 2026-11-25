@@ -24,7 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `SC1`, `localhost:8080`, `10:30`, a bare path) must pass all four. Run offline: every case
     passes, and dropping the `\b` from the new pattern makes `near-misses` fail.
   - **Known limit.** A dotted host with a port (`api.example.com:443`) has the `path:line` shape;
-    the fixture apps never print one. Not yet run live (needs two runs of each scenario).
+    the fixture apps never print one.
+  - **Live.** `02` and `13` to `17` ran twice each on 2026-11-24, 12 of 12 green (record in
+    `tests/e2e/README.md`).
 - **stop-gate approves `/sd:port` Gate 5 once per batch (SW-133, ADR 0036)** - with
   `hooks.stopGate.enabled`, a port spec is now blocked when more batches have finished than
   `## Gate 5` sections hold an approving `Reply:`. Before, one approval in any Gate 5 section
@@ -40,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Tests.** 8 new conformance fixtures (both twins, identical decisions; no existing fixture
     changed; 351 of 351 pass) and 3 `smoke-hooks` cases per script; the bash `brief_state` helper
     now builds port specs. One new fixture joins the latency selection. Latency (30 iterations,
-    Linux container, pwsh only): stop-gate p95 619 ms against a budget of 1300 ms.
+    Linux container, pwsh only): stop-gate p95 619 ms against a budget of 1300 ms. e2e `17`
+    passed twice live with `stopGate` enabled (2026-11-24).
 - **stop-gate approves `/sd:refactor` Gate 5 once per batch (SW-115, ADR 0035)** - with
   `hooks.stopGate.enabled`, a refactor spec is now blocked when more batches have finished than
   `## Gate 5` sections hold an approving `Reply:`. Before, one approval in any Gate 5 section
