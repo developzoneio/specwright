@@ -727,7 +727,11 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
   the phase and what it does, not the step number of a rule.
 - **Cite evidence by name, not by line.** The closing summary and any progress line name a test
   by its name and code by its file. The `path:line` citations that close-out gathers belong in
-  `05-retro.md` and `06-verify.md`; the summary may name those files instead.
+  `05-retro.md` and `06-verify.md`; the summary may name those files instead. A line number or
+  range is not a name in any form: `path:line`, a bare "line 12" or "lines 5-7", or "the first
+  ten lines". The user cannot see the lines it points at. In `/sd:port`, name the donor member a
+  task reproduces ("`slugify` matches the donor"); a snapshot range stays in the task's
+  `Pattern refs` and in a `details` excerpt.
 - **A `details` excerpt is not brief text.** It is an artifact the user asked to see, printed
   verbatim, so it keeps the IDs and the English it has on disk.
 
@@ -737,6 +741,8 @@ records in other artifacts (for example the `escalation:` lines in `05-retro.md`
 - Writing the brief and not printing it: treating the Write call, or a sentence such as "Gate 1
   presented", as the print. Saying a gate was shown when its body is not in reply text.
 - Copying a `path:line` citation from the retro or the verify report into the closing summary.
+- Pointing at code by line number without a path (`Lines 5-7 match the donor`) instead of naming
+  the member or the file.
 - Glossing a deviation ID in prose (`D01 renames _WHITESPACE to WHITESPACE`, or `The private
   constant _WHITESPACE became WHITESPACE (D01).`) instead of its `donor -> host` form, or naming
   the constitution section that forced it.
