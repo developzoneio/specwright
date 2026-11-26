@@ -31,9 +31,9 @@ Drives an incident analysis from raw signals to a documented root cause, recorde
    it owns the Layer-2 reads and all of their messages (commands cannot load skills via
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
-2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 2 step 0; this file names only rule IDs and trigger inputs. If that file is
-   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `rca.md` beside it - not the
+   skill's other files. They own the model escalation policy applied at Phase 2 step 0; this file
+   names only rule IDs and trigger inputs. If either file is unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
 3. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
    (`gate-briefs.md`), what each gate shows (its `/sd:rca` part), the `details` option and the

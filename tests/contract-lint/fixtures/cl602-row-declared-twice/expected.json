@@ -1,0 +1,12 @@
+{
+  "note": "ESC-ALPHA-01 is declared both in SKILL.md and in a per-workflow file beside it: one rule must have one row, so the second declaration is a finding (SW-97)",
+  "findings": [
+    {
+      "rule": "CL602",
+      "severity": "BLOCK",
+      "file": "skills/sd-model-escalation/alpha.md",
+      "anchor": "seed",
+      "seed": "row-twice"
+    }
+  ]
+}

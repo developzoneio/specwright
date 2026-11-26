@@ -366,16 +366,18 @@ bytes on Windows. A raw count would make the two twins disagree.
 
 ### CL6xx -- escalation policy
 
-`skills/sd-model-escalation/SKILL.md` owns the model escalation policy in prose: the ladder, the
-trigger table, the precedence rules and the `05-retro.md` line format. `contractLint.escalationTriggers`
-is the table's assertable copy, one row per rule ID (`id`, `command`, `phase`, `agent`, `from`,
+`skills/sd-model-escalation/` owns the model escalation policy in prose. `SKILL.md` holds the
+ladder, the precedence rules and the `05-retro.md` line format; since SW-97 each workflow's trigger
+rows sit in a file of their own beside it (`feature.md`, `bug.md`, ...), each under `## Trigger
+table`, and CL602 reads the rows from all of them. `contractLint.escalationTriggers` is the rows'
+assertable copy, one row per rule ID (`id`, `command`, `phase`, `agent`, `from`,
 `to`), and `contractLint.escalationPolicy` declares the ladder, the alias set and CL605's phrase
 vocabulary. Added by SW-63; the decision record is [ADR 0014](adr/0014-escalation-policy-lint.md).
 
 | Rule | Severity | Fires when |
 |---|---|---|
 | `CL601` | BLOCK | a command invokes an agent but no `escalationTriggers` row targets it and no `allow CL601` comment covers the first invocation; or it has rows but never references `sd-model-escalation`; or it never names one of its own rows (a row is live only when its command cites it) |
-| `CL602` | BLOCK | the manifest rows and the skill's trigger table disagree: an id in one and not the other, a shared id whose command, agent, from or to differ, a `phase` whose leading digits differ from the id's, a duplicate id; or a scan-scope file outside the skill cites an `ESC-` id no row declares; or the skill exists and `escalationTriggers` is absent or empty |
+| `CL602` | BLOCK | the manifest rows and the skill's trigger rows disagree: an id in one and not the other, a shared id whose command, agent, from or to differ, a `phase` whose leading digits differ from the id's, a duplicate id, a row id declared in two of the skill's files; or a scan-scope file outside the skill cites an `ESC-` id no row declares; or the skill exists and `escalationTriggers` is absent or empty |
 | `CL603` | BLOCK | a row's `from` or `to` is not in `escalationPolicy.aliases` -- a full model ID entering through the escalation path |
 | `CL604` | BLOCK | `escalationPolicy.ladder` differs from the skill's `## Ladder` line, or a row's tiers are not exactly one rung apart on it (`inherit` is an alias, not a rung) |
 | `CL605` | BLOCK | a command line contains an `escalationPolicy.restatePhrases` entry: the ladder, the retro line format or a precedence rule restated instead of cited |

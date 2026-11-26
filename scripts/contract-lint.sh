@@ -1761,14 +1761,19 @@ esc_ladder_index() { # alias -> ESC_IDX (0-based position, -1 if not a rung)
 rule_CL601_CL605() {
     [[ $ESC_ACTIVE -eq 1 ]] || return 0
     local _i _j _s _t _sec _line _row _c _n _ncell _skill_ladder=""
-    local _skill_rows=""   # id \x1f command \x1f agent \x1f from \x1f to \x1f line
-    local _cells _sid _scmd _sag _sfr _sto _sln
+    local _skill_rows=""   # id \x1f command \x1f agent \x1f from \x1f to \x1f line \x1f file
+    local _cells _sid _scmd _sag _sfr _sto _sln _sfile _tfile _row_ids=""
     local _eid _ecmd _eph _eag _efr _eto _seen_ids="" _found _nn _pd _fi _ti
     local _mladder _rel _name _agent _has_rows _first _raw _lno _tok _cur _nxt _phrase _hit
     local _esc_refs=""     # "file:id" set - ids a scan file names outside fences
 
-    # -- skill side: the ladder line and the trigger table.
-    load_file "$ESC_SKILL_REL"
+    # -- skill side: the ladder line (SKILL.md only) and the trigger rows. Since
+    # SW-97 the rows live in one file per workflow beside SKILL.md, each under
+    # its own '## Trigger table'. SKILL.md is read too, so a skill kept in one
+    # file still lints. A row ID declared in two files is a finding.
+    while IFS= read -r _tfile; do
+    [[ -z "$_tfile" ]] && continue
+    load_file "$_tfile"
     _sec=""
     for ((_i = 0; _i < CUR_N; _i++)); do
         [[ "${CUR_FENCE[$_i]}" == "1" ]] && continue
@@ -1778,7 +1783,7 @@ rule_CL601_CL605() {
             _sec="${_sec%"${_sec##*[![:blank:]]}"}"
             continue
         fi
-        if [[ "$_sec" == "Ladder" && -z "$_skill_ladder" ]]; then
+        if [[ "$_tfile" == "$ESC_SKILL_REL" && "$_sec" == "Ladder" && -z "$_skill_ladder" ]]; then
             if [[ "$_line" =~ ^\`([^\`]+)\` ]]; then _skill_ladder="${BASH_REMATCH[1]}"; fi
             continue
         fi
@@ -1798,12 +1803,18 @@ rule_CL601_CL605() {
         [[ "${_cells[0]}" == "Rule ID" ]] && continue
         case "${_cells[0]}" in -*) continue ;; esac
         if [[ $_ncell -ne 7 ]]; then
-            add_finding CL602 "$ESC_SKILL_REL" "$((_i + 1))" "trigger-table row has $_ncell cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
+            add_finding CL602 "$_tfile" "$((_i + 1))" "trigger-table row has $_ncell cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
             continue
         fi
+        if set_has _row_ids "${_cells[0]}"; then
+            add_finding CL602 "$_tfile" "$((_i + 1))" "trigger-table row ${_cells[0]} is declared more than once in skills/$ESC_SKILL_NAME"
+            continue
+        fi
+        set_add _row_ids "${_cells[0]}"
         _scmd="${_cells[1]#/sd:}"
-        _skill_rows="${_skill_rows}${_cells[0]}"$'\x1f'"${_scmd}"$'\x1f'"${_cells[4]}"$'\x1f'"${_cells[5]}"$'\x1f'"${_cells[6]}"$'\x1f'"$((_i + 1))"$'\n'
+        _skill_rows="${_skill_rows}${_cells[0]}"$'\x1f'"${_scmd}"$'\x1f'"${_cells[4]}"$'\x1f'"${_cells[5]}"$'\x1f'"${_cells[6]}"$'\x1f'"$((_i + 1))"$'\x1f'"${_tfile}"$'\n'
     done
+    done < <(printf '%s\n' "$ESC_SKILL_REL"; cd "$ROOT" && find "skills/$ESC_SKILL_NAME" -maxdepth 1 -type f -name '*.md' ! -name 'SKILL.md' 2>/dev/null | LC_ALL=C sort)
 
     if [[ -z "$ESC_ROWS" ]]; then
         # One error, not a pile-on: with no rows every downstream check would
@@ -1812,7 +1823,7 @@ rule_CL601_CL605() {
         return 0
     fi
     if [[ -z "$_skill_rows" ]]; then
-        add_finding CL602 "$ESC_SKILL_REL" 1 "no trigger table under '## Trigger table' - nothing to compare contractLint.escalationTriggers against"
+        add_finding CL602 "$ESC_SKILL_REL" 1 "no trigger table under '## Trigger table' in skills/$ESC_SKILL_NAME - nothing to compare contractLint.escalationTriggers against"
     fi
     [[ -z "$ESC_ALIASES" ]] && add_finding CL603 "$MANIFEST_REL" 1 "contractLint.escalationPolicy.aliases is empty - no row tier can be checked"
     [[ -z "$ESC_RESTATE_PHRASES" ]] && add_finding CL605 "$MANIFEST_REL" 1 "contractLint.escalationPolicy.restatePhrases is empty - restatement cannot be detected"
@@ -1852,7 +1863,7 @@ rule_CL601_CL605() {
             add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers id '$_eid' is not ESC-<WORKFLOW>-<NN>[suffix]"
         fi
         _found=0
-        while IFS=$'\x1f' read -r _sid _scmd _sag _sfr _sto _sln; do
+        while IFS=$'\x1f' read -r _sid _scmd _sag _sfr _sto _sln _sfile; do
             [[ "$_sid" == "$_eid" ]] || continue
             _found=1
             [[ "$_scmd" == "$_ecmd" ]] || add_finding CL602 "$MANIFEST_REL" 1 "escalationTriggers row $_eid command '$_ecmd' differs from the skill's '/sd:$_scmd'"
@@ -1887,10 +1898,10 @@ rule_CL601_CL605() {
     done <<< "$ESC_ROWS"
 
     # -- skill rows the manifest does not carry.
-    while IFS=$'\x1f' read -r _sid _scmd _sag _sfr _sto _sln; do
+    while IFS=$'\x1f' read -r _sid _scmd _sag _sfr _sto _sln _sfile; do
         [[ -z "$_sid" ]] && continue
         set_has _seen_ids "$_sid" && continue
-        add_finding CL602 "$ESC_SKILL_REL" "$_sln" "trigger-table row $_sid is absent from contractLint.escalationTriggers"
+        add_finding CL602 "$_sfile" "$_sln" "trigger-table row $_sid is absent from contractLint.escalationTriggers"
     done <<< "$_skill_rows"
 
     # -- every ESC- id cited outside the skill, outside fences. The skill's own

@@ -60,11 +60,11 @@ spec resolves on the ordinary rows (`draft`, then `approved` -> Phase 2).
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Determine state from table above.
-3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 2 step 0, Phase 3a step 0, Phase 3b step 0 and Phase 4 step 2; this file
-   names only rule IDs and trigger inputs. If that file is unreadable, STOP: "specwright install
-   incomplete - model escalation skill not found under `~/.claude/skills/sd/`. Re-run the
-   installer."
+3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `feature.md` beside it - not
+   the skill's other files. They own the model escalation policy applied at Phase 2 step 0,
+   Phase 3a step 0, Phase 3b step 0 and Phase 4 step 2; this file names only rule IDs and trigger
+   inputs. If either file is unreadable, STOP: "specwright install incomplete - model escalation
+   skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 4. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
    (`gate-briefs.md`), what each gate shows, the `details` option and the wording of every
    user-facing line; this file names only the gates it applies to. If that file is unreadable,

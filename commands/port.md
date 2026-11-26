@@ -83,9 +83,9 @@ frontmatter first and is never resumed from its task markers.
    policy" section found in .specs/constitution.md
    Scope: <scope>   Topology: <bridged|in-repo>   Snapshot mode: <contract|contract+source>
    ```
-7. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 1 and Phase 6 step 2; this file names only rule IDs and trigger inputs. If
-   that file is unreadable, STOP: "specwright install incomplete - model escalation skill not
+7. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `port.md` beside it - not the
+   skill's other files. They own the model escalation policy applied at Phase 1 and Phase 6 step
+   2; this file names only rule IDs and trigger inputs. If either file is unreadable, STOP: "specwright install incomplete - model escalation skill not
    found under `~/.claude/skills/sd/`. Re-run the installer."
 8. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
    (`gate-briefs.md`), what each gate shows (its `/sd:port` part), the `details` option and the

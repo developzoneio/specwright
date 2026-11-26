@@ -52,9 +52,10 @@ frontmatter first and is never resumed from its task markers.
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Compute UTC date for spec ID.
 3. Read coverage threshold from project-config or default to 80%.
-4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 4 step 0; this file names only rule IDs and trigger inputs. If that file is
-   unreadable, STOP: "specwright install incomplete - model escalation skill not found under
+4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `refactor.md` beside it - not
+   the skill's other files. They own the model escalation policy applied at Phase 2 step 0,
+   Phase 4 step 0 and Phase 5 step 2; this file names only rule IDs and trigger inputs. If either
+   file is unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
 5. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact
    (`gate-briefs.md`), what each gate shows (its `/sd:refactor` part), the `details` option and the

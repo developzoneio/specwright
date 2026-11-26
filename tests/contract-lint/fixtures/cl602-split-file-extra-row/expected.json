@@ -1,0 +1,12 @@
+{
+  "note": "a per-workflow file beside SKILL.md carries ESC-ALPHA-01b, which the manifest does not: the row is read from that file and the finding lands there, not on SKILL.md (SW-97)",
+  "findings": [
+    {
+      "rule": "CL602",
+      "severity": "BLOCK",
+      "file": "skills/sd-model-escalation/alpha.md",
+      "anchor": "seed",
+      "seed": "sibling-only-row"
+    }
+  ]
+}
