@@ -596,6 +596,16 @@ This command has no `skills:` frontmatter - only agents load skills that way, an
 invokes no subagent - so the rules are read at runtime instead. If either file is unreadable, say
 so and fall back to plain PASS / FAIL lines rather than inventing a format.
 
+What the user sees depends on who ran the command:
+
+- **Run on its own.** Print the report below in full, rule IDs included. `validate` writes no
+  artifact, so this report is the only record, and the `SL` rule ID is the only legal anchor for a
+  finding on the `.specs/` tree.
+- **Run as a step of a workflow** (`/sd:port` Phase 4). Print no report of its own: the reply text
+  belongs to the workflow and follows the "User-facing text" section of **sd-gate-brief**. The
+  workflow states the verdict, and each BLOCK or WARN finding in plain words (what is wrong and
+  in which file or table), with no rule ID.
+
 Structure: the taxonomy's mandated output, plus a per-spec summary table above it.
 
 ```markdown

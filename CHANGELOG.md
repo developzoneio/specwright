@@ -438,6 +438,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:spec validate` keeps rule IDs only when it runs on its own (SW-119)** - `sd-gate-brief`
+  forbids a lint code such as `SL003` in a workflow's reply text. `/sd:spec` never reads that
+  skill, but `/sd:port` Phase 4 runs `validate` inside its own session before Gate 2. "Output" in
+  `commands/spec.md` now splits the two cases. Run on its own, the full report keeps its `SL` IDs,
+  because it is the only record and the ID is the only legal anchor for a `.specs/` finding (e2e
+  `05-spec-lint-validate` is unchanged). Run as a workflow step, it prints no report of its own,
+  and the workflow states the verdict and each finding in plain words. `commands/port.md` points
+  to that rule and does not restate it. `sd-gate-brief` is unchanged, so no ADR.
 - **`/sd:verify` Output no longer promises a summary a workflow never prints (SW-121)** - "Output"
   asked for a full traceability summary in every case. In the 18 kept e2e transcripts since SW-116,
   every run called `/sd:verify` from `/sd:feature` or `/sd:port` close-out, and none printed that
