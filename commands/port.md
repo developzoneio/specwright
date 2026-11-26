@@ -242,7 +242,8 @@ No gate here - the survey is informational. The user reviews it via the tables a
    members with no Member-manifest row) + (Member-manifest rows whose `Host path` has no path-
    mapping row) + (non-`ported` rows naming a `Deviation ID` absent from the deviation table).
 3. Run `/sd:spec validate PORT-<slug>-<YYYYMMDD>`. The `SL080`-`SL083` rules must report zero
-   BLOCK.
+   BLOCK. It runs as a workflow step, so it prints no report of its own (see `/sd:spec`,
+   "Output").
 
 ### ⛔ Gate 2 - Fidelity tables complete, zero unmapped (HARD)
 
