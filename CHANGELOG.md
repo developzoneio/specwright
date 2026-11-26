@@ -369,6 +369,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `02-feature-happy` asserts it.
 
 ### Changed
+- **`sd-model-escalation` is split so a command reads only its own rows (SW-97)** - every
+  escalating command read the whole 24.6 KB skill in Phase 0, including resumes, to apply a few
+  rows, and the three agents that load it through `skills:` got all of it on every call.
+  - **Layout.** `SKILL.md` keeps the shared core: ladder, invariants, how the override is applied,
+    rule-ID format, precedence, logging contract, plus an index of the per-workflow files. Each
+    workflow's rows and decision points (per task, per round, per run) move to a file beside it:
+    `feature.md`, `bug.md`, `rca.md`, `refactor.md`, `perf.md`, `port.md` (also read by
+    `/sd:explore --port`). Why each row exists moves to `rationale.md`, which no workflow reads at
+    runtime. No rule ID, trigger, target model or decision rule changed. The text moved unchanged,
+    except that a paragraph covering two workflows was split between their files.
+  - **Reads.** `/sd:feature` Phase 0 now reads 10.9 KB (44%), and the agents load 7.9 KB (32%).
+    Each command's Phase 0 names its file; bug, refactor and perf also list every phase their rows
+    fire at (each named only one before).
+  - **contract-lint (both twins).** CL602/CL604 read the trigger rows from `SKILL.md` and every
+    `.md` file beside it, and report a finding in the file that holds the row. A row ID declared in
+    two of the skill's files is a new CL602 finding. Three fixtures: `fp-cl602-split-skill`,
+    `cl602-split-file-extra-row`, `cl602-row-declared-twice`.
+  - **validate.** The install count for `skills/sd/` counts every file of a skill folder, not only
+    `SKILL.md`; the documented skill count is unchanged (Check 7 still globs `SKILL.md`).
 - **Narration names code, not line ranges (SW-130)** - an e2e `17` run printed "Lines 5-7 match the
   donor", a citation by line number the user cannot follow. `sd-gate-brief` "Cite evidence by
   name, not by line" now says a bare "line 12" or "lines 5-7" is no more a name than `path:line`,

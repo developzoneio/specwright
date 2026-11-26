@@ -43,8 +43,9 @@ Drives an optimization from a measured baseline to a measured improvement, with 
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
 2. Compute UTC date for spec ID.
-3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 4a step 4; this file names only rule IDs and trigger inputs. If that file is
+3. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `perf.md` beside it - not the
+   skill's other files. They own the model escalation policy applied at Phase 4a step 4 and
+   Phase 4b step 1; this file names only rule IDs and trigger inputs. If either file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
 4. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact

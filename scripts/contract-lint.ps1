@@ -1530,12 +1530,24 @@ function Invoke-EscalationRules {
     $blank = [char[]]@([char]32, [char]9)
     $sectionTrim = [char[]]@([char]32, [char]9, [char]35)
 
-    # -- skill side: the ladder line and the trigger table.
-    Read-FileLines $escSkillRel
-    $lines = $fileLines[$escSkillRel]
-    $fence = $fileFence[$escSkillRel]
+    # -- skill side: the ladder line (SKILL.md only) and the trigger rows. Since
+    # SW-97 the rows live in one file per workflow beside SKILL.md, each under
+    # its own '## Trigger table'. SKILL.md is read too, so a skill kept in one
+    # file still lints. A row ID declared in two files is a finding.
     $skillLadder = ''
     $skillRows = New-Object 'System.Collections.Generic.List[object]'
+    $rowIds = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    $tableFiles = New-Object 'System.Collections.Generic.List[string]'
+    [void]$tableFiles.Add($escSkillRel)
+    $escDir = Join-Path $Root ('skills' + [System.IO.Path]::DirectorySeparatorChar + $escSkillName)
+    $siblings = @(Get-ChildItem -LiteralPath $escDir -Filter '*.md' -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -cne 'SKILL.md' } | ForEach-Object { $_.Name })
+    [Array]::Sort($siblings, [StringComparer]::Ordinal)
+    foreach ($n in $siblings) { [void]$tableFiles.Add('skills/' + $escSkillName + '/' + $n) }
+    foreach ($tfile in $tableFiles) {
+    Read-FileLines $tfile
+    $lines = $fileLines[$tfile]
+    $fence = $fileFence[$tfile]
     $sec = ''
     for ($i = 0; $i -lt $lines.Length; $i++) {
         if ($fence[$i]) { continue }
@@ -1544,7 +1556,7 @@ function Invoke-EscalationRules {
             $sec = $line.TrimStart($sectionTrim).TrimEnd($blank)
             continue
         }
-        if ($sec -ceq 'Ladder' -and $skillLadder.Length -eq 0) {
+        if ($tfile -ceq $escSkillRel -and $sec -ceq 'Ladder' -and $skillLadder.Length -eq 0) {
             $m = [regex]::Match($line, $RE_BACKTICKED)
             if ($m.Success) { $skillLadder = $m.Groups[1].Value }
             continue
@@ -1561,14 +1573,20 @@ function Invoke-EscalationRules {
         if ($cells[0] -ceq 'Rule ID') { continue }
         if ($cells[0].StartsWith('-', [StringComparison]::Ordinal)) { continue }
         if ($cells.Length -ne 7) {
-            Add-Finding 'CL602' $escSkillRel ($i + 1) "trigger-table row has $($cells.Length) cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
+            Add-Finding 'CL602' $tfile ($i + 1) "trigger-table row has $($cells.Length) cells, want 7 (Rule ID | Workflow | Where | Condition | Agent | From | To)"
+            continue
+        }
+        if (-not $rowIds.Add($cells[0])) {
+            Add-Finding 'CL602' $tfile ($i + 1) "trigger-table row $($cells[0]) is declared more than once in skills/$escSkillName"
             continue
         }
         $scmd = $cells[1]
         if ($scmd.StartsWith('/sd:', [StringComparison]::Ordinal)) { $scmd = $scmd.Substring(4) }
         [void]$skillRows.Add([PSCustomObject]@{
             Id = $cells[0]; Command = $scmd; Agent = $cells[4]; From = $cells[5]; To = $cells[6]; Line = ($i + 1)
+            File = $tfile
         })
+    }
     }
 
     if ($escRows.Count -eq 0) {
@@ -1578,7 +1596,7 @@ function Invoke-EscalationRules {
         return
     }
     if ($skillRows.Count -eq 0) {
-        Add-Finding 'CL602' $escSkillRel 1 "no trigger table under '## Trigger table' - nothing to compare contractLint.escalationTriggers against"
+        Add-Finding 'CL602' $escSkillRel 1 "no trigger table under '## Trigger table' in skills/$escSkillName - nothing to compare contractLint.escalationTriggers against"
     }
     if ($escAliases.Count -eq 0) {
         Add-Finding 'CL603' $manifestRel 1 "contractLint.escalationPolicy.aliases is empty - no row tier can be checked"
@@ -1658,7 +1676,7 @@ function Invoke-EscalationRules {
     # -- skill rows the manifest does not carry.
     foreach ($s in $skillRows) {
         if ($seenIds.Contains($s.Id)) { continue }
-        Add-Finding 'CL602' $escSkillRel $s.Line "trigger-table row $($s.Id) is absent from contractLint.escalationTriggers"
+        Add-Finding 'CL602' $s.File $s.Line "trigger-table row $($s.Id) is absent from contractLint.escalationTriggers"
     }
 
     # -- every ESC- id cited outside the skill, outside fences. The skill's own

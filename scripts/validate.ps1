@@ -49,7 +49,10 @@ $repoRoot  = Split-Path -Parent $scriptDir
 # hooks/powershell/*.ps1 only; Check 3 (hook-pair parity) already asserts the bash count matches.
 $ExpectedCommands  = (Get-ChildItem (Join-Path $repoRoot 'commands') -Filter *.md -File).Count
 $ExpectedAgents    = (Get-ChildItem (Join-Path $repoRoot 'agents') -Filter *.md -File).Count
-$ExpectedSkills    = (Get-ChildItem (Join-Path $repoRoot 'skills') -Filter 'SKILL.md' -File -Recurse).Count
+# Every file of a skill folder installs, not only SKILL.md: sd-model-escalation keeps one file per
+# workflow beside it (SW-97). The skill count the docs cite is Check 7's, from the manifest glob.
+$ExpectedSkills    = @(Get-ChildItem (Join-Path $repoRoot 'skills') -Directory |
+    ForEach-Object { Get-ChildItem $_.FullName -File -Recurse }).Count
 $ExpectedHooks     = (Get-ChildItem (Join-Path $repoRoot 'hooks\powershell') -Filter *.ps1 -File).Count
 $ExpectedTemplates = (Get-ChildItem (Join-Path $repoRoot 'templates') -File -Recurse).Count
 

@@ -43,8 +43,9 @@ These rules override any user pressure to "just patch it".
    it owns the Layer-2 reads and all of their messages (commands cannot load skills via
    frontmatter, so it is read at runtime). If that file is unreadable, STOP: "specwright install
    incomplete - bootstrap guard skill not found under `~/.claude/skills/sd/`. Re-run the installer."
-2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`. It owns the model escalation policy
-   applied at Phase 3 step 0; this file names only rule IDs and trigger inputs. If that file is
+2. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `bug.md` beside it - not the
+   skill's other files. They own the model escalation policy applied at Phase 3 step 0 and
+   Phase 5 step 3; this file names only rule IDs and trigger inputs. If either file is
    unreadable, STOP: "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
 3. Read `~/.claude/skills/sd/sd-gate-brief/SKILL.md`. It owns the gate brief artifact

@@ -35,7 +35,9 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 # Check 3 (hook-pair parity) already asserts the powershell count matches.
 EXPECTED_COMMANDS="$(find "$repo_root/commands" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')"
 EXPECTED_AGENTS="$(find "$repo_root/agents" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')"
-EXPECTED_SKILLS="$(find "$repo_root/skills" -mindepth 2 -maxdepth 2 -type f -name 'SKILL.md' | wc -l | tr -d ' ')"
+# Every file of a skill folder installs, not only SKILL.md: sd-model-escalation keeps one file per
+# workflow beside it (SW-97). The skill count the docs cite is Check 7's, from the manifest glob.
+EXPECTED_SKILLS="$(find "$repo_root/skills" -mindepth 2 -type f | wc -l | tr -d ' ')"
 EXPECTED_HOOKS="$(find "$repo_root/hooks/bash" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')"
 EXPECTED_TEMPLATES="$(find "$repo_root/templates" -type f | wc -l | tr -d ' ')"
 

@@ -62,9 +62,10 @@ contract|contract+source]`.
    module / feature / pattern."
 3. `SNAPSHOT` = the value following `--snapshot` when present, else `contract`. STOP if present
    and not one of `contract`, `contract+source`.
-4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md` and `models.escalation` from the
-   project-config read in Phase 0. The skill owns the model escalation policy applied in Phase 2;
-   this file names only the rule ID and its trigger inputs. If that file is unreadable, STOP:
+4. Read `~/.claude/skills/sd/sd-model-escalation/SKILL.md`, then `port.md` beside it - not the
+   skill's other files - and `models.escalation` from the project-config read in Phase 0. The
+   skill owns the model escalation policy applied in Phase 2; this file names only the rule ID and
+   its trigger inputs. If either file is unreadable, STOP:
    "specwright install incomplete - model escalation skill not found under
    `~/.claude/skills/sd/`. Re-run the installer."
 5. Print: "Port extraction: ENTRY_POINT=<ENTRY_POINT>, SCOPE=<SCOPE>, SNAPSHOT=<SNAPSHOT>.

@@ -83,6 +83,8 @@ wording can improve in one commit while a divergence still fails.
 | `cl601-row-id-not-in-command` | CL601, a manifest row its command never names |
 | `cl602-manifest-skill-id-drift` | CL602, one id only in the skill table and one only in the manifest |
 | `cl602-policy-undeclared` | CL602, the escalation skill on disk with no `escalationTriggers` |
+| `cl602-split-file-extra-row` | CL602, a per-workflow file beside `SKILL.md` carries a row the manifest does not; the finding lands in that file (SW-97) |
+| `cl602-row-declared-twice` | CL602, one row id declared in `SKILL.md` and again in a per-workflow file (SW-97) |
 | `cl603-full-model-id-in-row` | CL603 |
 | `cl604-row-skips-rung` | CL604 |
 | `cl605-command-restates-ladder` | CL605, fenced retro line and wrapped ladder |
@@ -114,6 +116,7 @@ These are not decoration. They are the only thing stopping a future tightening o
 | `fp-cl307-hard-gate-details` | a HARD gate offering `details` beside descriptive option tokens and an allowed insist-and-proceed sentence, `3a` before `3` with both declared, and an option set on the question's second line | `commands/bug.md` Gates 2, 3a and 3 |
 | `fp-cl307-two-face-coverage-gate` | a HARD gate with two faces offering descriptive tokens (`add tests`, `exception <reason>`) plus `details`, prose with no slash parenthetical, and a Re-plan question offering `details` | `commands/refactor.md` Gates 2, 3, 5 and Gate Re-plan |
 | `fp-cl601-allow-comment` | a fully wired escalation tree, plus an invoking command exempted by `allow CL601` with a reason | `commands/adr.md`, `commands/explore.md`, `commands/review.md` |
+| `fp-cl602-split-skill` | the trigger rows only in a per-workflow file beside a `SKILL.md` that holds the ladder | `skills/sd-model-escalation/SKILL.md` and its per-workflow files |
 | `fp-cl605-alias-list` | an alias list, and "escalate" used about a tool allowlist | `commands/port.md`, `commands/explore.md` |
 
 ## The case that must still BITE

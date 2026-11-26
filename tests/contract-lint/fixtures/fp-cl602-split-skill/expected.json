@@ -1,0 +1,4 @@
+{
+  "note": "the trigger rows live only in a per-workflow file beside a SKILL.md that holds the ladder (SW-97): the rows are read from that file, so the fully wired policy lints clean",
+  "findings": []
+}
