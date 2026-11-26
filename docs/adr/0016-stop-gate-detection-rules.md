@@ -50,7 +50,7 @@ progress.
 | PORT-G1 | `/sd:port` Gate 1 - Donor set frozen | status `approved` or `in-progress`; `02-tasks.md` exists | no `04-artifacts/source/MANIFEST.md`; the `**Frozen**:` line does not say `yes` |
 | PORT-G2 | `/sd:port` Gate 2 - Fidelity tables complete | status `approved` or `in-progress` | the spec body still holds an author-fill `<<...>>` token |
 | PORT-G3 | `/sd:port` Gate 3 - Behavior pinned | `02-tasks.md` exists | `03-decisions.md` has no `## Behavior pinning` section |
-| PORT-G6 | `/sd:port` Gate 6 - Justified-diff parity | `06-verify.md` exists | no `04-artifacts/parity/INDEX.md` |
+| PORT-G6 | `/sd:port` Gate 6 - Justified-diff parity | `06-verify.md` records `result: pass` (was: exists; ADR 0037) | no `04-artifacts/parity/INDEX.md` |
 
 ADR 0021 adds three `/sd:feature` rows (FEAT-G1..G3), whose evidence is the gate's section and
 `Reply:` line in `gate-briefs.md`.

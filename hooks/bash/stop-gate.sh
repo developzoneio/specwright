@@ -309,7 +309,7 @@ brief_order() {
         refactor) printf '%s' '1 2 3 4 5 R 6' ;;
         rca) printf '%s' '1 2 3' ;;
         perf) printf '%s' '1 2 3 4 5 6 7 8' ;;
-        port) printf '%s' '1 2 3 4 5 6' ;;
+        port) printf '%s' '1 2 3 4 5 6 R' ;;
     esac
 }
 
@@ -991,11 +991,17 @@ case "${spec_type}" in
                 fi
             fi
             add_finding "5 (Batch tests green)" "${mis}" "${adv}"
+
+            # Gate Re-plan, reached from close-out (ADR 0029, ADR 0037).
+            plan="$(doc_text "${dir}/01-plan.md")" || plan=""
+            replan_findings "${plan}"
         fi
 
-        # PORT-G6: Justified-diff parity.
+        # PORT-G6: Justified-diff parity. A failing 06-verify.md is not
+        # evidence: close-out re-plans from it and removes parity/ (ADR 0037).
         adv=""; mis=""
-        [[ -f "${dir}/06-verify.md" ]] && push adv "06-verify.md exists"
+        verify="$(doc_text "${dir}/06-verify.md")" || verify=""
+        has_line "${verify}" '^result:[[:blank:]]*pass[[:blank:]]*$' && push adv "06-verify.md records result: pass"
         if [[ -n "${brief}" ]]; then
             has_line "${retro}" '^## PR description block[[:blank:]]*$' \
                 && push adv "05-retro.md has a ## PR description block section"

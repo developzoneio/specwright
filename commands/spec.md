@@ -513,9 +513,9 @@ common case, an original plan never re-planned - produces no `SL07x` finding. Th
 check: the `## Revisions` log lives in `01-plan.md`, its markers in `02-tasks.md`, and the two must
 agree. Parse task blocks with the same tolerant **Field label grammar** used for `SL060`.
 
-The `## Revisions` log is written only by the Gate Re-plan of `/sd:feature` and `/sd:refactor` via the
-**sd-replan-loop** skill. Each entry is `### R<n> - <timestamp>` followed by `Trigger`, `Phase`,
-`Gate: re-plan`, `Affected tasks`, `Delta`, and `revised-from` lines. Checks:
+The `## Revisions` log is written only by the Gate Re-plan of `/sd:feature`, `/sd:refactor` and
+`/sd:port` via the **sd-replan-loop** skill. Each entry is `### R<n> - <timestamp>` followed by
+`Trigger`, `Phase`, `Gate: re-plan`, `Affected tasks`, `Delta`, and `revised-from` lines. Checks:
 
 - **`SL070` - dangling marker.** A task carrying `Revised-by: R<n>` with no `### R<n>` entry in
   `01-plan.md`. Cite the task's `Revised-by` line; name the absent entry in the finding.

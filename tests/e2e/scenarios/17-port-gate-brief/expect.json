@@ -8,6 +8,7 @@
   { "type": "file-exists", "path": ".specs/PORT-title-format-*/04-artifacts/parity/INDEX.md" },
   { "type": "file-exists", "path": ".specs/PORT-title-format-*/04-artifacts/parity/REPORT.md" },
   { "type": "file-exists", "path": ".specs/PORT-title-format-*/gate-briefs.md" },
+  { "type": "file-matches", "path": ".specs/PORT-title-format-*/06-verify.md", "pattern": "(?m)^result:\\s*pass\\s*$" },
   { "type": "file-matches", "path": ".specs/PORT-title-format-*/gate-briefs.md", "pattern": "(?m)^## Gate 1 - " },
   { "type": "file-matches", "path": ".specs/PORT-title-format-*/gate-briefs.md", "pattern": "(?m)^## Gate 2 - " },
   { "type": "file-matches", "path": ".specs/PORT-title-format-*/gate-briefs.md", "pattern": "(?m)^## Gate 3 - " },
