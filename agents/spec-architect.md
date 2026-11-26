@@ -70,7 +70,7 @@ read it before filling them. **sd-spec-templates** covers what else the template
 ## Mode 2: `TASK = plan`
 
 Inputs (required): SPEC, IMPACT
-Inputs (optional): MODE, REPLAN_SCOPE, REVISION, STEP, LANE
+Inputs (optional): MODE, REPLAN_SCOPE, REVISION, STEP, LANE, UNCOVERED
 
 Inputs: `SPEC` (path to `00-spec.md`), `IMPACT` (path to `03-decisions.md` from code-explorer), optionally `MODE` (`feature` | `refactor`). A scoped re-plan invocation (see below) passes `REPLAN_SCOPE` and `REVISION` instead of `SPEC`/`IMPACT`. `/sd:feature` passes `STEP` (`outline` | `expand`) to plan in two steps - see "Two-step feature plan" below; with no `STEP` you plan in one step, as `/sd:refactor` does. The S lane of `/sd:feature` passes `STEP = outline` with `LANE = s` and no `IMPACT` (Phase 2 is skipped) - see "S-lane outline" below.
 
@@ -130,6 +130,30 @@ decompose decided - before a full task block exists.
   `STEP = outline` (full path, with `IMPACT`) treats it as a starting point: reuse its approach and
   rows where `IMPACT` supports them, then rewrite the whole file. The draft heading must not
   survive the rewrite.
+
+### Coverage revision (`UNCOVERED`)
+
+The main thread counts criterion coverage after your plan returns, before it presents the plan
+gate (`/sd:feature` Gate 2 and Face S of Gate 1, `/sd:port` Gate 4; ADR 0037, ADR 0038). When it
+finds criteria no task covers, it invokes Mode 2 once more with `UNCOVERED` = those criteria,
+verbatim, plus the same `SPEC`, `IMPACT`, `STEP` and `LANE` as the first call. The plan file
+already exists: revise it, never start over.
+
+- **With `STEP = outline`** (`LANE = s` included): edit the `## Outline` table so every listed
+  criterion appears in at least one row's `Covers`. Widen the `Covers` of the row whose work proves
+  it, adding the test file that witnesses it to that row's `Files` when the row has none, or add a
+  row when no existing row does that work. Leave the other rows and the plan prose alone, except for
+  a risk line a new row needs. Then run the "Complexity self-assessment" again on the revised
+  outline, measuring the S limits with `LANE = s`, so a breach still returns `STATUS =
+  s-lane-breach`. End with the `GATE_BRIEF` block, as any outline return does.
+- **With no `STEP`** (a one-step plan, as `/sd:port` Phase 6 writes): revise only the blocks of
+  `02-tasks.md` that must change, in a single Write. On a port spec, widen the `Covers` of an
+  existing member task under the whole-port rule the main thread passed. Never add a block with no
+  member range.
+- Never edit `00-spec.md`: an uncovered criterion means the plan is incomplete, not the spec. A
+  criterion you cannot cover without changing the spec is an Open question; name it in your return.
+- `UNCOVERED` is never passed once the plan is approved. After approval, the outline is immutable
+  and a coverage gap goes through Gate Re-plan (**sd-replan-loop**).
 
 ### S-lane outline (`STEP = outline` with `LANE = s`)
 

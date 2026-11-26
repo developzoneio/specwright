@@ -84,6 +84,12 @@ presented a gate without printing a line of it.
   verbatim>` to the open section, the same way as above, print one line naming this gate's
   options, and ask the same question again. The section stays open, and the stop-gate counts the
   marker as no approval.
+- **A valid reply the gate refuses is recorded as refused (ADR 0038).** Some gates permit `yes`
+  only while a count is 0 (criteria with no task, unmapped members, a dirty pin). When the count
+  is above 0, append `Reply: refused - <reply verbatim> (<the count, in plain words>)` to the open
+  section the same way, never `Reply: <reply>`, then refuse and ask again as the command says. The
+  stop-gate counts `refused` as no approval, so a refused `yes` on disk is never read as a passed
+  gate.
 - Subagents never write this file. `sd-spec-architect` and `sd-reviewer` return blocks (below);
   the main thread renders and writes.
 
@@ -145,16 +151,21 @@ Per gate, for `/sd:feature`:
   could reasonably prefer. **A decision the approved `00-spec.md` already settles is not a plan
   decision**: the `yes` at spec approval took it, shown or collapsed. List only the decisions the
   plan adds; `N` counts those alone. The architect applies this when it builds the block; the
-  main thread drops any such decision that still arrives before it writes the section. The
-  Complexity face uses the same shape and the same rule,
-  and its `What changes` line states the measured reason the plan is over threshold.
+  main thread drops any such decision that still arrives before it writes the section. After
+  `Risk:`, the coverage line from the Phase 3 Coverage count: `Criteria with no task: none` or,
+  when the count is above 0, `Blocking: <n> criteria with no task - approval refused until 0.` and
+  one line per scenario or criterion, `Blocking: <what it requires, in plain words> - no task
+  covers it`, never by its `SC-` or `AC-` ID. The Complexity face uses the same shape and the
+  same rule, except that it shows the coverage lines only when the count is above 0, and its
+  `What changes` line states the measured reason the plan is over threshold.
 - **Spec and outline approval (S lane)** - the Gate 2 shape, one gate for both artifacts. Decisions
   come from the spec **and** the outline, ranked together: nothing is approved yet, so no decision
   is "already settled". `What changes` is the user-visible effect of the whole change. With no
   decision at all, the single line is `Decisions: none - the spec only restates the request.` The
-  task table comes from the outline. Every decision in the block, shown or collapsed, is stated in
-  `00-spec.md` or `01-plan.md`. A `yes` approves both artifacts and every default, shown and
-  collapsed; the brief says so by saying "defaults taken".
+  task table comes from the outline. The coverage line follows `Risk:`, as at plan approval. Every
+  decision in the block, shown or collapsed, is stated in `00-spec.md` or `01-plan.md`. A `yes`
+  approves both artifacts and every default, shown and collapsed; the brief says so by saying
+  "defaults taken".
 - **Integration and review** - no task table. Lines: `Tests: <summary>. Lint: <summary>.`,
   `Review: <n> blocking, <n> warnings, <n> suggestions.`, then one line per blocking finding
   (`Blocking: <plain title> - <file> - <direction>`, or `Blocking: none`), then

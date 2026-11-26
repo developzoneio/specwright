@@ -387,10 +387,12 @@ the same question; the empty-diff proof is never skipped.
    matches, as Phase 4 step 2 counts `unmapped`, and never judges whether a task really proves a
    criterion. Compute `uncovered` = the `AC-<n>` lines of `00-spec.md` whose ID is listed in no
    task block's `Covers` in `02-tasks.md` (parsing shapes as in `/sd:verify`). When `uncovered` is
-   above 0, invoke `sd-spec-architect` once with:
-   - `TASK = refine`
+   above 0, invoke `sd-spec-architect` once more in plan mode (ADR 0038: `refine` edits only
+   `00-spec.md`, and the gap is in the plan) with:
+   - `TASK = plan`
    - `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
-   - `FEEDBACK = <the uncovered criteria, verbatim, with step 3's whole-port rule>`
+   - `IMPACT = .specs/PORT-<slug>-<YYYYMMDD>/03-decisions.md`
+   - `UNCOVERED = <the uncovered criteria, verbatim, with step 3's whole-port rule>`
 
    Then re-run step 3's planning-defect check and count again. The count that stands goes to
    Gate 4.
@@ -404,7 +406,8 @@ architect's `GATE_BRIEF` block, the port decompose metric of step 1 with its ver
 > Approve plan for PORT-<slug>? (<N> tasks, <D> deviation rows requiring adaptation, <C> criteria with no task) (yes / refine <feedback> / details <target> / abort)
 
 - `yes` -> permitted only when `<C>` is 0. Set status=`in-progress` in `00-spec.md` and
-  `.specs/index.md`; proceed to Phase 7. While `<C>` is above 0, refuse it in one line that names
+  `.specs/index.md`; proceed to Phase 7. While `<C>` is above 0, record the reply as refused per
+  **sd-gate-brief**, refuse it in one line that names
   each uncovered criterion in plain words, then ask again: the plan is incomplete, and `refine` is
   how it gets a covering task.
 - `refine <feedback>` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop. The next pass is a new brief section.

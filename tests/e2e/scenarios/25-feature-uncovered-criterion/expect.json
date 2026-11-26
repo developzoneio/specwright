@@ -1,0 +1,13 @@
+[
+  { "type": "file-not-exists", "path": ".specs/FEAT-e2e-uncovered/02-tasks.md" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-uncovered/00-spec.md", "pattern": "(?m)^status:\\s*approved\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-uncovered/01-plan.md", "pattern": "(?m)^## Outline\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-uncovered/01-plan.md", "pattern": "(?m)^\\|\\s*T\\d+\\s*\\|.*\\bAC-2\\b[^|]*\\|\\s*$" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-uncovered/gate-briefs.md", "pattern": "(?m)^## Gate 2 - Plan approval" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-uncovered/gate-briefs.md", "pattern": "\\b0 criteria with no task\\b" },
+  { "type": "file-matches", "path": ".specs/FEAT-e2e-uncovered/gate-briefs.md", "pattern": "(?m)^Criteria with no task: none" },
+  { "type": "file-not-matches", "path": ".specs/FEAT-e2e-uncovered/gate-briefs.md", "pattern": "(?m)^Reply:" },
+  { "type": "transcript-contains-section", "path": ".specs/FEAT-e2e-uncovered/gate-briefs.md", "section": "^## Gate " },
+  { "type": "transcript-not-matches", "pattern": "\\b(SC|AC)-\\d+\\b" },
+  { "type": "file-not-matches", "path": "src/application/todo-service.js", "pattern": "countTodos\\s*\\(|countDone\\s*\\(" }
+]
