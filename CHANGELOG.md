@@ -369,6 +369,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `02-feature-happy` asserts it.
 
 ### Changed
+- **Narration names code, not line ranges (SW-130)** - an e2e `17` run printed "Lines 5-7 match the
+  donor", a citation by line number the user cannot follow. `sd-gate-brief` "Cite evidence by
+  name, not by line" now says a bare "line 12" or "lines 5-7" is no more a name than `path:line`,
+  and that `/sd:port` names the donor member a task reproduces; a snapshot range stays in
+  `Pattern refs` and `details` excerpts. A matching anti-pattern is added.
+  - **No e2e assertion.** "Lines 5-7" is wording, not an ID class: a pattern for it would also
+    match ordinary prose ("3 lines changed"), which `tests/e2e/README.md` forbids. The `path:line`
+    pattern keeps covering `file.ext:N` and `file.ext:N-M`.
 - **`/sd:bug` Gate 2 says when a reproduction was traced, not run (SW-127, ADR 0034)** - in a live
   run of e2e `13-bug-gate-brief`, the HARD Gate 2 brief said `confirmed locally` for a bug that
   had only been traced through the code, and `yes` approved it. The value list had nothing
