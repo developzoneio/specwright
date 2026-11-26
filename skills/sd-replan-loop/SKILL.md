@@ -2,8 +2,9 @@
 
 Sanctioned mid-execution re-plan protocol for specwright. Lets a workflow adapt when execution (or
 the batch review) reveals that `02-tasks.md` is wrong, **without** violating spec immutability or
-skipping a gate. Referenced at runtime by `/sd:feature` and `/sd:refactor` - the only two workflows
-that produce a `01-plan.md` + `02-tasks.md` pair to re-plan.
+skipping a gate. Referenced at runtime by `/sd:feature`, `/sd:refactor` and `/sd:port` - the
+workflows that produce a `01-plan.md` + `02-tasks.md` pair to re-plan. `/sd:port` reaches it from
+close-out only (its Phase 9, `Phase: verify`; SW-134, ADR 0037).
 
 Not used by `/sd:bug`, `/sd:perf`, or `/sd:rca`: bug and rca produce no atomic task list, and perf
 already carries its own adaptive loop (Phase 4 reverts a failed hypothesis and re-selects at Gate 4).
@@ -31,7 +32,9 @@ task block is written.
 A fourth entry point is `/sd:feature` Phase 6 (SW-105). `/sd:verify` can report a success or
 acceptance criterion that no task `Covers`. The plan is not wrong there, it is incomplete, and the
 approved outline is immutable, so adding the task is a revision and goes through this gate with
-`Phase: verify`.
+`Phase: verify`. `/sd:port` Phase 9 reaches the gate the same way (SW-134): a port criterion is
+covered by widening an existing member task's `Covers`, since every port task needs a snapshot
+member range.
 
 ---
 
@@ -50,8 +53,9 @@ implementation adjustment. Trigger the loop when:
   `01-plan.md`, per `sd-atomic-task-format` "Outline row"): a row whose expanded block needs a
   different `Files` set or `Covers` set, a row that has to be split, merged or dropped, or a task the
   outline lacks. Rewording a title or filling the block's other fields is expansion, not divergence.
-- `/sd:feature` Phase 6 (`/sd:verify` FAIL) finds a criterion that no task `Covers`, so a task has to
-  be added after Gate 2. Widening an existing task's `Covers` or `Files` for it is the same case.
+- `/sd:feature` Phase 6 or `/sd:port` Phase 9 (`/sd:verify` FAIL) finds a criterion that no task
+  `Covers`, so a task has to be added after plan approval. Widening an existing task's `Covers` or
+  `Files` for it is the same case, and the only form `/sd:port` uses.
 
 Do **not** trigger the loop for work that stays inside one task's contract (a rename, a helper reuse,
 a test tweak). That is ordinary implementation, handled by the implementer's own scope. Re-planning
@@ -102,6 +106,8 @@ and waits for explicit user approval; silence is not approval, and there is no o
    revision. From Phase 3b, the Execute phase starts at
    its first task, as it would after any expansion. From Phase 6, the Execute phase starts at the new
    task, and Phase 5, Gate 3 (a new pass) and Phase 6 then run again as after any Execute phase.
+   From `/sd:port` Phase 9, the stale parity artifacts are removed first, then the batch holding
+   the regenerated task, Gate 5, Phase 8 and Gate 6 run again, each a new pass, then Phase 9.
 
 ---
 
@@ -127,10 +133,10 @@ here. Create the `## Revisions` header on the first revision.
 Rules:
 
 - **`Phase` names where the gate was entered.** `execute` (Phase 4 self-check), `review` (batch
-  review finds the plan wrong), `expand` (Phase 3b divergence), `verify` (`/sd:feature` Phase 6,
-  an uncovered criterion; no other workflow runs `/sd:verify`). `verify` is distinct from `review`
-  because there the plan is incomplete, not wrong. `/sd:spec validate` checks that the line is
-  present (`SL073`), not its value.
+  review finds the plan wrong), `expand` (Phase 3b divergence), `verify` (`/sd:feature` Phase 6 or
+  `/sd:port` Phase 9, an uncovered criterion; no other workflow runs `/sd:verify`). `verify` is
+  distinct from `review` because there the plan is incomplete, not wrong. `/sd:spec validate`
+  checks that the line is present (`SL073`), not its value.
 - **Contiguous numbering.** Revisions are `R1`, `R2`, `R3` ... with no gaps and no reuse. `R<n>`
   never appears twice.
 - **Append-only.** A prior `R<k>` entry is never edited or deleted. A later correction is a new

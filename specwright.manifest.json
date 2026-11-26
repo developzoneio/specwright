@@ -391,7 +391,7 @@
       "commands/rca.md":      { "quantity": "gatesRca",      "hard": 3, "conditional": [] },
       "commands/refactor.md": { "quantity": "gatesRefactor", "hard": 6, "conditional": ["Re-plan"] },
       "commands/perf.md":     { "quantity": "gatesPerf",     "hard": 8, "conditional": [] },
-      "commands/port.md":     { "quantity": "gatesPort",     "hard": 6, "conditional": [] },
+      "commands/port.md":     { "quantity": "gatesPort",     "hard": 6, "conditional": ["Re-plan"] },
       "commands/setup.md":    { "quantity": "gatesSetup",    "hard": 2, "conditional": [] },
       "commands/release.md":  { "quantity": "gatesRelease",  "hard": 1, "conditional": [] },
       "commands/adr.md":      { "quantity": "gatesAdr",      "hard": 1, "conditional": [] },
@@ -402,16 +402,19 @@
     "$gatesComment": [
       "quantity is the Check 7 name this gate count is published under. null means the gate",
       "block is real but nothing in the docs cites a number for it - the Re-plan protocol is",
-      "defined once in the skill and reached from commands/feature.md and commands/refactor.md,",
-      "so its count belongs to those workflows, not to the skill. Check 7's seeding loop skips",
-      "null quantities; CL302 and CL304 do not care either way."
+      "defined once in the skill and reached from commands/feature.md, commands/refactor.md and",
+      "commands/port.md, so its count belongs to those workflows, not to the skill. Check 7's",
+      "seeding loop skips null quantities; CL302 and CL304 do not care either way."
     ],
 
     "gateBriefs": {
       "commands/feature.md":  { "briefs": ["1", "2", "3", "Re-plan"], "details": ["1", "2", "3", "Re-plan"] },
       "commands/bug.md":      { "briefs": ["1", "2", "3a", "3", "4", "5"], "details": ["1", "2", "3a", "3", "4", "5"] },
       "commands/rca.md":      { "briefs": ["1", "2", "3"], "details": ["1", "2", "3"] },
-      "commands/port.md":     { "briefs": ["1", "2", "3", "4", "5", "6"], "details": ["1", "2", "3", "4", "5", "6"] },
+      "commands/port.md": {
+        "briefs": ["1", "2", "3", "4", "5", "6", "Re-plan"],
+        "details": ["1", "2", "3", "4", "5", "6", "Re-plan"]
+      },
       "commands/perf.md": {
         "briefs": ["1", "2", "3", "4", "5", "6", "7", "8"],
         "details": ["1", "2", "3", "4", "5", "6", "7", "8"]

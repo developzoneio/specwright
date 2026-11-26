@@ -305,7 +305,7 @@ $script:BriefOrder = @{
     refactor = @('1', '2', '3', '4', '5', 'R', '6')
     rca      = @('1', '2', '3')
     perf     = @('1', '2', '3', '4', '5', '6', '7', '8')
-    port     = @('1', '2', '3', '4', '5', '6')
+    port     = @('1', '2', '3', '4', '5', '6', 'R')
 }
 
 # The option tokens that keep gate <type>:<label> open or leave it, plus a bare
@@ -1004,12 +1004,17 @@ function Get-Findings {
                     }
                 }
                 if ($adv.Count -gt 0 -and $mis.Count -gt 0) { $out.Add((New-Finding '5 (Batch tests green)' $mis $adv)) }
+
+                # Gate Re-plan, reached from close-out (ADR 0029, ADR 0037).
+                Add-ReplanFindings $b (Get-DocText -Path (Join-Path $Dir '01-plan.md')) $out
             }
 
-            # PORT-G6: Justified-diff parity.
+            # PORT-G6: Justified-diff parity. A failing 06-verify.md is not
+            # evidence: close-out re-plans from it and removes parity/ (ADR 0037).
             $adv = New-Object System.Collections.Generic.List[string]
             $mis = New-Object System.Collections.Generic.List[string]
-            if (Test-Path -LiteralPath (Join-Path $Dir '06-verify.md') -PathType Leaf) { $adv.Add('06-verify.md exists') }
+            $verify = Get-DocText -Path (Join-Path $Dir '06-verify.md')
+            if (Test-LineMatch $verify '^result:[ \t]*pass[ \t]*$') { $adv.Add('06-verify.md records result: pass') }
             if ($script:BriefRead) {
                 if (Test-LineMatch $retro '^## PR description block[ \t]*$') {
                     $adv.Add('05-retro.md has a ## PR description block section')

@@ -438,6 +438,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:port` counts criterion coverage before Gate 4 and re-plans at close-out (SW-134)** -
+  e2e `17-port-gate-brief` run 1 passed all 6 gates, then failed `/sd:verify`. The run had a
+  criterion about the port as a whole (the donor left untouched, imported by nothing) that no task
+  covered, and close-out had no route out. ADR 0037.
+  - **Gate 4.** Phase 6 step 5 has the main thread count the criteria listed in no task's
+    `Covers`, as Phase 4 counts `unmapped`. On a miss the architect gets one `refine` call. Gate 4
+    shows the count, the brief names each gap in plain words, and `yes` is refused while it is
+    above 0. Gate 4 stays an ordinary gate. A new `SL` rule was rejected because it overlaps the
+    deferred SW-90.
+  - **Whole-port criteria.** Phase 6 step 3 puts them on the last task of the last batch, whose
+    `Acceptance` names a pinned test or the parity index as the witness.
+  - **Close-out.** Phase 9 step 2 routes an uncovered criterion to Gate Re-plan (`Phase: verify`,
+    `sd-replan-loop`), a conditional gate like feature's and refactor's. The manifest adds
+    `Re-plan` to port's `conditional`, `briefs` and `details`. The always-on count stays at 6. On
+    approval the stale `04-artifacts/parity/` is removed, so the re-run batch, Gate 5, Phase 8 and
+    Gate 6 run again.
+  - **stop-gate (both twins).** Port specs now get the Gate Re-plan check. PORT-G6's later-phase
+    evidence is `06-verify.md records result: pass` (was: exists), the same as FEAT-G3, and
+    port's brief label order gains `R`. Three fixtures change that text, and two new ones cover
+    the port re-plan (`block-port-replan-no-reply`, `allow-port-replan-approved-rerun`).
+  - e2e `17` asserts `06-verify.md` records `result: pass`.
 - **`/sd:spec validate` keeps rule IDs only when it runs on its own (SW-119)** - `sd-gate-brief`
   forbids a lint code such as `SL003` in a workflow's reply text. `/sd:spec` never reads that
   skill, but `/sd:port` Phase 4 runs `validate` inside its own session before Gate 2. "Output" in

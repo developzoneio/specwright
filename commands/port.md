@@ -362,6 +362,13 @@ the same question; the empty-diff proof is never skipped.
      - Anything not on that list is reproduced as-is from the cited member range.
      ```
    - **`Covers`** cites `AC-1` plus any `AC-<n>` the task proves.
+   - **A whole-port criterion goes on the last task of the last batch.** A criterion about the
+     port as a whole, not about one member (the donor left untouched, nothing imports it), has no
+     member task of its own. List it in the `Covers` of the last task of the last batch: that
+     batch's full-suite run and the Phase 8 parity review are what prove it. That task's
+     `Acceptance` names the evidence path: a pinned test that asserts the criterion, or else the
+     parity index `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/parity/INDEX.md`, which Phase 9 cites
+     as it does for `AC-1`. Never add a task with no member range just to carry a criterion.
    - **A pinning-file edit is never a task of its own.** When the Phase 5 mechanism needs one
      (re-pointing a characterization test's construction-seam factory from donor to host), the
      pinning file goes in the `Files` of the last task of the batch whose `Host path` the seam
@@ -376,22 +383,37 @@ the same question; the empty-diff proof is never skipped.
    path-mapping row order. A pinning file is not a `Host path` and never forms a batch: its edit
    rides in the batch of the host path it pins, so that batch's full-suite run checks the pinned
    suite against the host.
+5. **Main thread counts criterion coverage mechanically** (SW-134, ADR 0037) - it counts and
+   matches, as Phase 4 step 2 counts `unmapped`, and never judges whether a task really proves a
+   criterion. Compute `uncovered` = the `AC-<n>` lines of `00-spec.md` whose ID is listed in no
+   task block's `Covers` in `02-tasks.md` (parsing shapes as in `/sd:verify`). When `uncovered` is
+   above 0, invoke `sd-spec-architect` once with:
+   - `TASK = refine`
+   - `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`
+   - `FEEDBACK = <the uncovered criteria, verbatim, with step 3's whole-port rule>`
+
+   Then re-run step 3's planning-defect check and count again. The count that stands goes to
+   Gate 4.
 
 ### ⛔ Gate 4 - Plan approval
 
 STOP. The main thread writes the Gate 4 brief to `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` from the
-architect's `GATE_BRIEF` block and the port decompose metric of step 1 with its verdict, per
-**sd-gate-brief**, then shows it verbatim. Ask:
+architect's `GATE_BRIEF` block, the port decompose metric of step 1 with its verdict and the
+`uncovered` count of step 5, per **sd-gate-brief**, then shows it verbatim. Ask:
 
-> Approve plan for PORT-<slug>? (<N> tasks, <D> deviation rows requiring adaptation) (yes / refine <feedback> / details <target> / abort)
+> Approve plan for PORT-<slug>? (<N> tasks, <D> deviation rows requiring adaptation, <C> criteria with no task) (yes / refine <feedback> / details <target> / abort)
 
-- `yes` -> set status=`in-progress` in `00-spec.md` and `.specs/index.md`; proceed to Phase 7.
+- `yes` -> permitted only when `<C>` is 0. Set status=`in-progress` in `00-spec.md` and
+  `.specs/index.md`; proceed to Phase 7. While `<C>` is above 0, refuse it in one line that names
+  each uncovered criterion in plain words, then ask again: the plan is incomplete, and `refine` is
+  how it gets a covering task.
 - `refine <feedback>` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/PORT-<slug>-<YYYYMMDD>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop. The next pass is a new brief section.
 - `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
 - `abort` -> stop the workflow. Leave the spec at status `approved`.
 
 This is the standard plan approval - the same shape as `/sd:feature` Gate 2 Face A. It is not one
-of the four no-override gates.
+of the four no-override gates. Refusing `yes` on an uncovered criterion is a count, like Gate 2's
+`unmapped`, not a judgment of the plan.
 
 ---
 
@@ -505,6 +527,15 @@ a resolution - it makes the diff justify itself.
    the clean parity report - cite `04-artifacts/parity/INDEX.md` and the reviewer verdict. Never
    tick a box just to make a verification check pass.
 2. Run `/sd:verify PORT-<slug>-<YYYYMMDD>`. It must report `result: pass`.
+   - On FAIL: address the findings, then re-run until it passes. Do NOT proceed on fail.
+     - Uncovered criterion (a criterion no task `Covers`, which Phase 6 step 5 should have
+       caught): the plan is incomplete, so enter **Gate Re-plan** below with `Phase: verify`,
+       scoped to the task that will cover it - per Phase 6 step 3, the last task of the last batch
+       for a whole-port criterion. Never edit `02-tasks.md` by hand and never tick the box.
+     - Failing tests -> back to Phase 7, at the batch whose host path fails.
+     - Unchecked criterion whose evidence is already in hand but not cited (a pinned test, the
+       parity report) -> cite it in `05-retro.md` per step 1 and check the box.
+     - Unchecked criterion with no evidence yet -> route back to the phase that produces it.
 3. Write to `05-retro.md` under `## PR description block`: the deviation table copied verbatim
    (each row is already PR-ready), the Donor + Commit lines from `MANIFEST.md`, the license
    obligation from Donor provenance, and `<n>/<total>` members ported.
@@ -518,6 +549,36 @@ a resolution - it makes the diff justify itself.
 6. Set status=`done` in `00-spec.md` and `.specs/index.md`.
 7. Print the closing summary in the shape **sd-gate-brief** gives it (its `/sd:port` part).
 
+### Gate Re-plan (HARD) - an uncovered criterion at close-out
+
+Reachable from Phase 9 step 2 only, when the verify report names an uncovered criterion
+(`Phase: verify`). Follow the **sd-replan-loop** skill - the same protocol `/sd:feature` uses,
+defined there once. In brief:
+
+1. STOP. The main thread writes the Re-plan brief (trigger, affected tasks, proposed delta) to
+   `.specs/PORT-<slug>-<YYYYMMDD>/gate-briefs.md` per **sd-gate-brief**, then shows it verbatim. Ask:
+
+   > Re-plan PORT-<slug>? Discovery: <trigger>. Affects <task IDs>. (approve / revise <feedback> / details <target> / abort task)
+
+   - `approve` -> proceed. `revise` -> adjust the delta and re-ask. `abort task` -> leave the spec
+     at status `in-progress` and stop; the criterion stays unchecked.
+   - `details <target>` -> print what the target names per **sd-gate-brief**, then ask again.
+<!-- contract-lint: allow CL102 - scoped re-plan passes REPLAN_SCOPE/REVISION instead of SPEC/IMPACT, per the Scoped re-plan sub-path documented in agents/spec-architect.md -->
+2. Invoke `sd-spec-architect` with `TASK = plan`, `REPLAN_SCOPE = <affected task IDs>`,
+   `REVISION = R<n>` (next contiguous number). It appends the `## Revisions` entry to `01-plan.md`
+   (append-only; the plan prose and `## Complexity triage (port mode)` are never edited),
+   regenerates ONLY the affected task blocks in `02-tasks.md` and marks each `Revised-by: R<n>`. A
+   regenerated block meets every Phase 6 step 3 requirement; one that does not is a planning
+   defect, returned to the architect the same way.
+3. **The parity artifacts are stale.** Remove `.specs/PORT-<slug>-<YYYYMMDD>/04-artifacts/parity/`:
+   it describes a changeset that is about to change, and nothing under it is frozen. The state
+   machine then reads the spec as `in-progress`, and Phase 8 regenerates the folder.
+4. Resume Phase 7 at the batch holding the first regenerated task; the tasks the revision did not
+   touch stay checked. That batch, Gate 5, Phase 8 and Gate 6 run again, each a new brief pass,
+   then Phase 9.
+
+This gate runs only while the spec is `in-progress` - it never re-plans a `done` spec.
+
 ---
 
 ## Rules (hard constraints)
@@ -528,6 +589,10 @@ a resolution - it makes the diff justify itself.
 - Phase 0 always runs, even on resume.
 - Gates 1, 2, 3, and 6 are HARD - no override path. Gates 4 and 5 are ordinary approvals; the
   workflow still declares 6 total gates.
+- **Gate Re-plan is a conditional gate, not a seventh always-on gate.** It fires only on an
+  uncovered criterion at close-out (Phase 9); a run that never hits one never sees it. It is HARD
+  when it fires. A criterion found uncovered at close-out reaches `02-tasks.md` only through it
+  (the `sd-replan-loop` skill), never by a hand-edit, and never on a `done` spec.
 - `--scope` is never inferred. `--from`'s form (bridged artifact vs in-repo path) selects topology
   only - every phase after Phase 1 is identical regardless of which one was used.
 - Port policy is Layer 2. This file never states one; it reads and reports the host's, or the

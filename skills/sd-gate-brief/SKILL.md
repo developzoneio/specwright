@@ -581,6 +581,7 @@ Section headings, the titles of the gates in `commands/port.md`:
 ## Gate 6 - Justified-diff parity (pass <n>)
 ```
 
+Gate Re-plan, reached from close-out only, uses the shared heading above.
 `re-capture`, `refine`, `re-pin`, each batch and each parity run (`re-run parity`, and the
 re-review after `revert-to-snapshot` or `add-deviation`) present their gate as a new pass.
 Sources. Gate 4 comes from the architect's `gate: plan` block and Gate 6 from the reviewer's
@@ -649,9 +650,12 @@ Shown lines, replacing lines 1-5 of "Brief shape". Gates 1, 3 and 5 are checks a
 - **Plan approval** - the `/sd:refactor` "Plan approval" lines and batch table, with `What
   changes: <N> tasks in <B> batches, one per host file - <D> deviations to adapt, threshold 8
   (<under | over: split along <k> host paths>).` The main thread writes that line from the metric
-  it computed; the architect's other lines are kept. A deviation is not a plan decision: Gate 2
-  approved it. A task's snapshot range and licensed deviations are not shown in the table:
-  `details <task ID>` prints its block.
+  it computed; the architect's other lines are kept. Then `Criteria with no task: none` or, when
+  the Phase 6 coverage count is above 0, `Blocking: <n> criteria with no task - approval refused
+  until 0.` and one line per criterion, `Blocking: <the criterion in plain words> - no task covers
+  it`. A criterion is named by what it requires, never by its `AC-` ID. A deviation is not a plan
+  decision: Gate 2 approved it. A task's snapshot range and licensed deviations are not shown in
+  the table: `details <task ID>` prints its block.
 - **Batch tests green** - the `/sd:refactor` "Tests green per batch" lines, both faces, with
   `Pinned suite: <passed> of <total> pass.` or `Pinned suite: <n> failed.` after the `Tests:`
   line. A red pinned suite is a red batch.
