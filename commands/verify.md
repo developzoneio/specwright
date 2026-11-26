@@ -119,13 +119,20 @@ whether `/sd:verify` runs on its own or inside a workflow close-out, and is not 
 The `VF0xx` IDs, the `SC-<n>` / `AC-<n>` IDs and the `file:line` citations stay in
 `06-verify.md`, the machine record.
 
-Print to the user: a traceability summary (each scenario and criterion by its plain title, the
-tasks that cover it, the tests by name), the findings in plain words (what was checked and what
-failed), the artifact path as the place the full record lives, and one of:
+What the user sees depends on who ran the command:
 
-- `[OK] <ID> verified - result: pass recorded in <spec.dir>/<ID>/06-verify.md`
-- `[FAIL] <ID> verification failed (<n> BLOCK findings) - result: fail recorded. Close-out is
-  blocked until /sd:verify passes.`
+- **Run on its own.** Print a traceability summary (each scenario and criterion by its plain
+  title, the tasks that cover it, the tests by name), the findings in plain words (what was
+  checked and what failed), the artifact path as the place the full record lives, and one of:
+  - `[OK] <ID> verified - result: pass recorded in <spec.dir>/<ID>/06-verify.md`
+  - `[FAIL] <ID> verification failed (<n> BLOCK findings) - result: fail recorded. Close-out is
+    blocked until /sd:verify passes.`
+- **Run as a close-out step of a workflow** (`/sd:feature` Phase 6, `/sd:port` Phase 9). Print
+  no summary of its own: the workflow's closing summary has a fixed shape and length, and the
+  traceability detail would not fit in it. Report the verdict in one plain line that names the
+  artifact path. On fail, also say in plain words which criterion has no covering task or test,
+  or which tests fail, because that decides where the workflow goes next. The full traceability
+  stays in `06-verify.md`.
 
 ## Hard constraints
 

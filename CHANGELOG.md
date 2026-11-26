@@ -438,6 +438,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     exercise the lean format; `07` stays legacy on purpose.
 
 ### Fixed
+- **`/sd:verify` Output no longer promises a summary a workflow never prints (SW-121)** - "Output"
+  asked for a full traceability summary in every case. In the 18 kept e2e transcripts since SW-116,
+  every run called `/sd:verify` from `/sd:feature` or `/sd:port` close-out, and none printed that
+  summary: the verdict and the `06-verify.md` path went into the workflow's closing summary, whose
+  shape is fixed at 5 lines in both workflows. "Output" now splits the two cases. Run on its own,
+  the command keeps the full summary and the `[OK]`/`[FAIL]` line. Run as a close-out step, it
+  prints no summary of its own, only one verdict line with the artifact path, and on fail the
+  uncovered criterion or failing tests in plain words. The `06-verify.md` format and the hooks are
+  unchanged.
 - **spec-gate denies a copy or move onto a protected path (SW-132)** - the shell-write rule knew
   only `sed -i`, `perl -i`, `>`, `tee`, `Set-Content`, `Add-Content` and `Out-File`, so
   `cp x .specs/index.md` or `Copy-Item x -Destination .specs/constitution.md` passed. Both twins
