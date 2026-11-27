@@ -24,9 +24,11 @@
     A behavioral divergence in only one implementation fails the suite
     and prints all three decision objects for a clear diff.
 
-    -SelfTest substitutes a stub bash spec-gate hook that always allows,
-    then asserts the harness DETECTS the divergence. Proves the
-    comparison would notice real drift (mirror of scripts/selftest-docs).
+    -SelfTest substitutes stub bash spec-gate hooks and asserts the harness
+    DETECTS each divergence: one stub always allows, one changes the case of
+    a single character in the real hook's output (SW-137). Proves the
+    comparison would notice real drift, including case-only drift (mirror of
+    scripts/selftest-docs).
 
 .NOTES
     PURE ASCII ONLY (see hooks/powershell/prompt-router.ps1 for why).
@@ -416,7 +418,7 @@ function ConvertTo-SpecGateDecision {
                 # Without hookEventName the CLI drops the whole block, and the
                 # deny stops overriding an allow rule (SW-80). No golden carries
                 # this value, so a hook that omits the field fails every case.
-                if ($obj.hookSpecificOutput.hookEventName -ne 'PreToolUse') {
+                if ($obj.hookSpecificOutput.hookEventName -cne 'PreToolUse') {
                     $permission = 'MISSING-HOOK-EVENT-NAME'
                 }
             }
@@ -427,7 +429,7 @@ function ConvertTo-SpecGateDecision {
             $nestedReason = if ($obj.hookSpecificOutput -and $obj.hookSpecificOutput.permissionDecisionReason) {
                 [string]$obj.hookSpecificOutput.permissionDecisionReason
             } else { $null }
-            if ($topReason -ne $nestedReason) {
+            if ($topReason -cne $nestedReason) {
                 $reason = 'REASON-MISMATCH-BETWEEN-SCHEMA-HALVES'
             } else {
                 $reason = $topReason
@@ -458,23 +460,25 @@ function ConvertTo-PromptRouterDecision {
     $specFolders = [System.Collections.Generic.List[string]]::new()
     $inProgress  = [System.Collections.Generic.List[string]]::new()
     $section = ''
+    # -cmatch throughout: these patterns read hook output, so a header or item
+    # that drifts in case must stop matching instead of parsing as identical.
     foreach ($line in ($Run.Stdout -split "`n")) {
-        if ($line -match '^Workflow keyword matches:') { $section = 'workflows'; continue }
-        if ($line -match '^Ticket IDs detected: (.*)$') {
+        if ($line -cmatch '^Workflow keyword matches:') { $section = 'workflows'; continue }
+        if ($line -cmatch '^Ticket IDs detected: (.*)$') {
             $section = 'tickets'
             foreach ($t in ($Matches[1] -split ', ')) {
                 if ($t.Trim()) { $ticketIds.Add($t.Trim()) }
             }
             continue
         }
-        if ($line -match '^Matching spec folders') { $section = 'folders'; continue }
-        if ($line -match '^No matching spec folder') { $section = ''; continue }
-        if ($line -match '^Specs currently in-progress') { $section = 'inprogress'; continue }
-        if ($line -match '^\s+-\s+(.+)$') {
+        if ($line -cmatch '^Matching spec folders') { $section = 'folders'; continue }
+        if ($line -cmatch '^No matching spec folder') { $section = ''; continue }
+        if ($line -cmatch '^Specs currently in-progress') { $section = 'inprogress'; continue }
+        if ($line -cmatch '^\s+-\s+(.+)$') {
             $item = $Matches[1].Trim()
             switch ($section) {
                 'workflows' {
-                    if ($item -match '^/sd:([a-z]+)') { $workflows.Add($Matches[1]) }
+                    if ($item -cmatch '^/sd:([a-z]+)') { $workflows.Add($Matches[1]) }
                 }
                 'folders'    { $specFolders.Add($item) }
                 'inprogress' { $inProgress.Add($item) }
@@ -500,11 +504,11 @@ function ConvertTo-SubagentRetroDecision {
         # The measured age and the threshold it was compared against are part of
         # the decision - dropping them would let the two implementations disagree
         # on arithmetic (truncate vs round) while still looking identical.
-        if ($line -match '^\s+-\s+([A-Za-z0-9_\-]+): 05-retro\.md missing$') {
+        if ($line -cmatch '^\s+-\s+([A-Za-z0-9_\-]+): 05-retro\.md missing$') {
             $stale.Add([pscustomobject][ordered]@{
                 id = $Matches[1]; reason = 'missing'; ageMinutes = $null; thresholdMinutes = $null
             })
-        } elseif ($line -match '^\s+-\s+([A-Za-z0-9_\-]+): 05-retro\.md last touched (\d+) min ago \(threshold (\d+) min\)$') {
+        } elseif ($line -cmatch '^\s+-\s+([A-Za-z0-9_\-]+): 05-retro\.md last touched (\d+) min ago \(threshold (\d+) min\)$') {
             $stale.Add([pscustomobject][ordered]@{
                 id = $Matches[1]; reason = 'stale'
                 ageMinutes = [int]$Matches[2]; thresholdMinutes = [int]$Matches[3]
@@ -683,7 +687,9 @@ function Invoke-ConformanceCase {
     $bashJson     = Get-CanonicalJson (& $normalizer $bashRun)
     $pwshJson     = Get-CanonicalJson (& $normalizer $pwshRun)
     $expectedJson = Get-CanonicalJson $expected
-    $match = ($bashJson -eq $expectedJson) -and ($pwshJson -eq $expectedJson)
+    # Ordinal, case-sensitive (SW-137): -eq ignores case, so a twin whose output
+    # differs from the golden only in case ("Block" vs "block") would pass.
+    $match = ($bashJson -ceq $expectedJson) -and ($pwshJson -ceq $expectedJson)
 
     $caseName = Split-Path -Leaf $CaseDir
     $leakNote = $null
@@ -725,7 +731,7 @@ function Invoke-ConformanceCase {
             if (@($bashRun.RotatedEvents).Count -eq 0 -or @($pwshRun.RotatedEvents).Count -eq 0) {
                 $match = $false
                 $rotationNote = "expected a rolled events.jsonl.1 but it was empty/absent (bash=$(@($bashRun.RotatedEvents).Count), pwsh=$(@($pwshRun.RotatedEvents).Count))"
-            } elseif ($bashRot -ne $rotExpectedJson -or $pwshRot -ne $rotExpectedJson) {
+            } elseif ($bashRot -cne $rotExpectedJson -or $pwshRot -cne $rotExpectedJson) {
                 $match = $false
                 $rotationNote = "rolled .1 content mismatch`n         rot-expected: $rotExpectedJson`n         bash .1     : $bashRot`n         pwsh .1     : $pwshRot"
             }
@@ -791,27 +797,55 @@ if ($null -eq (Get-Command jq -ErrorAction SilentlyContinue)) {
 
 if ($SelfTest) {
     Write-Host '=== conformance self-test: harness must DETECT divergence ==='
-    $stubName = 'sd-selftest-' + [System.Guid]::NewGuid().ToString('N').Substring(0, 8) + '.sh'
-    $stub = Join-Path ([System.IO.Path]::GetTempPath()) $stubName
-    "#!/usr/bin/env bash`nexit 0`n" | Set-Content -LiteralPath $stub -NoNewline -Encoding ascii
-    try {
-        $caseDir = Join-Path $fixturesDir 'spec-gate' 'block-code-no-spec'
-        $result = Invoke-ConformanceCase -HookName 'spec-gate' -CaseDir $caseDir `
-            -BashHook $stub -PwshHook (Join-Path $repoRoot 'hooks' 'powershell' 'spec-gate.ps1')
-    } finally {
-        Remove-Item -LiteralPath $stub -Force -ErrorAction SilentlyContinue
+    $caseDir = Join-Path $fixturesDir 'spec-gate' 'block-code-no-spec'
+    $pwshHook = Join-Path $repoRoot 'hooks' 'powershell' 'spec-gate.ps1'
+    $realBashHook = (Join-Path $repoRoot 'hooks' 'bash' 'spec-gate.sh').Replace('\', '/')
+    # SW-137: the real bash hook's output with one character's case changed
+    # ("block" -> "Block" in the top-level decision only). A case-insensitive
+    # comparison passes it, so this stub proves the golden match is ordinal.
+    $caseSed = 's/"decision":"block"/"decision":"Block"/'
+    $caseStub = "#!/usr/bin/env bash`nset -o pipefail`nbash '" + $realBashHook + "' | sed '" + $caseSed + "'`n"
+    # Each stub is a bash spec-gate that diverges from the real one in one way.
+    # CaseOnly marks a stub whose output must differ from the golden in case
+    # alone, so a broken stub (no output at all) cannot pass as "detected".
+    $stubs = @(
+        [pscustomobject]@{
+            Label = 'an always-allow bash stub'; Body = "#!/usr/bin/env bash`nexit 0`n"; CaseOnly = $false
+        }
+        [pscustomobject]@{
+            Label = 'a case-only drift in the bash decision'; Body = $caseStub; CaseOnly = $true
+        }
+    )
+    $isSelfTestFailed = $false
+    foreach ($s in $stubs) {
+        $stubName = 'sd-selftest-' + [System.Guid]::NewGuid().ToString('N').Substring(0, 8) + '.sh'
+        $stub = Join-Path ([System.IO.Path]::GetTempPath()) $stubName
+        $s.Body | Set-Content -LiteralPath $stub -NoNewline -Encoding ascii
+        try {
+            $result = Invoke-ConformanceCase -HookName 'spec-gate' -CaseDir $caseDir `
+                -BashHook $stub -PwshHook $pwshHook
+        } finally {
+            Remove-Item -LiteralPath $stub -Force -ErrorAction SilentlyContinue
+        }
+        if ($result.Pwsh -cne $result.Expected) {
+            Write-Bad 'self-test precondition: real pwsh impl no longer matches the golden'
+            Write-CaseDiff $result
+            exit 1
+        }
+        if ($s.CaseOnly -and (($result.Bash -ne $result.Expected) -or ($result.Bash -ceq $result.Expected))) {
+            Write-Bad "self-test precondition: $($s.Label) must differ from the golden in case only"
+            Write-CaseDiff $result
+            exit 1
+        }
+        if ($result.Match) {
+            Write-Bad "self-test: harness did NOT detect $($s.Label)"
+            Write-CaseDiff $result
+            $isSelfTestFailed = $true
+            continue
+        }
+        Write-Ok "self-test: detected $($s.Label)"
     }
-    if ($result.Pwsh -ne $result.Expected) {
-        Write-Bad 'self-test precondition: real pwsh impl no longer matches the golden'
-        Write-CaseDiff $result
-        exit 1
-    }
-    if ($result.Match) {
-        Write-Bad 'self-test: harness did NOT detect an always-allow bash stub'
-        Write-CaseDiff $result
-        exit 1
-    }
-    Write-Ok 'self-test: divergence in one implementation was detected'
+    if ($isSelfTestFailed) { exit 1 }
     exit 0
 }
 

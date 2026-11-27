@@ -479,6 +479,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a note; `historicalExclusions` drops the path.
 
 ### Fixed
+- **The hook conformance harness compares case-sensitively (SW-137)** - `run-conformance.ps1`
+  matched each twin's normalized decision against the golden with `-eq`, which ignores case, so a
+  twin that printed `"Block"` where the golden says `"block"` passed. The golden match, the rotated
+  `.1` match, the `hookEventName` and reason-halves checks now use `-ceq`/`-cne`, and the
+  prompt-router and subagent-retro normalizers read hook output with `-cmatch`. `-SelfTest` gains a
+  second stub: the real bash spec-gate with one character's case changed, which must fail. Every
+  existing fixture still passes unchanged.
 - **`/sd:port` counts criterion coverage before Gate 4 and re-plans at close-out (SW-134)** -
   e2e `17-port-gate-brief` run 1 passed all 6 gates, then failed `/sd:verify`. The run had a
   criterion about the port as a whole (the donor left untouched, imported by nothing) that no task
