@@ -1,0 +1,4 @@
+# Commands this scenario needs on PATH (checked by the run-e2e.ps1 preflight).
+# The fixture is a Node project: setup detects it and the workflow runs its tests.
+node
+npm

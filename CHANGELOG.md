@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`/sd:feature` counts criterion coverage before Gate 2 (SW-90, ADR 0038)** - an outline that
+  left a scenario or criterion with no task passed Gate 2 and was caught only by `/sd:verify` in
+  Phase 6, after the code was written. SW-134 saw the same gap in `/sd:port`.
+  - **Count.** A `Coverage count` step in Phase 3 lists the `SC-`/`AC-` IDs of `00-spec.md` that no
+    `## Outline` row covers. It runs before every Gate 2 face and before the S-lane Face S, resumes
+    included. When the count is above 0, the architect is invoked once more with the new Mode 2
+    input `UNCOVERED`, then the count is taken again.
+  - **Gate.** The questions show `<C> criteria with no task`. `yes` (and `no-split` on the
+    Complexity face) is refused while it is above 0. The brief names each criterion in plain words.
+    The gate count does not change.
+  - **Port.** Phase 6 step 5 calls `TASK = plan` with `UNCOVERED` instead of `TASK = refine`, which
+    may edit only `00-spec.md`.
+  - **`refused` marker.** A valid reply that a gate refuses by count is recorded as
+    `Reply: refused - <reply> (<count>)`. Both stop-gate twins treat `refused` as no approval.
+    Before, a refused `yes` recorded as `Reply: yes` read as a passed gate. 3 new fixtures.
 - **e2e reply text is checked for criterion IDs and `path:line` everywhere (SW-120)** -
   `sd-gate-brief` forbids `SC-<n>`, `AC-<n>` and `path:line` in any line the user reads, but
   `transcript-not-matches` caught neither `SC-`/`AC-` in any scenario nor `path:line` in

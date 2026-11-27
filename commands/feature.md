@@ -104,13 +104,16 @@ Gate 1 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BR
 **Face S - spec and outline approval (S lane).** Presented instead of the ordinary question above
 when Phase 1S produced an outline within the S limits. The main thread writes the Face S brief to
 `.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block (`gate: s-lane`: spec and
-outline in one brief, task rows from the outline), per **sd-gate-brief**, then shows it verbatim.
+outline in one brief, task rows from the outline) and the `uncovered` count, per **sd-gate-brief**,
+then shows it verbatim.
 Ask:
 
-> Approve spec and outline for FEAT-<arg>? (<N> tasks, complexity S) (yes / refine <feedback> / details <target> / abort)
+> Approve spec and outline for FEAT-<arg>? (<N> tasks, complexity S, <C> criteria with no task) (yes / refine <feedback> / details <target> / abort)
 
-- `yes` -> append the `Reply:` line to the section, then change the status with the Edit tool in two
-  steps: `approved`, then `in-progress`, each in `00-spec.md` and `index.md`. Two steps, because
+- `yes` -> permitted only when `<C>`, the Coverage count of Phase 3, is 0; while it is above 0,
+  refuse it as Gate 2 Face A does. Append the `Reply:` line to the section, then change the
+  status with the Edit tool in two steps: `approved`, then `in-progress`, each in `00-spec.md`
+  and `index.md`. Two steps, because
   `draft` -> `in-progress` is not a legal transition for spec-gate. Proceed to Phase 3b. One reply
   approves the spec, the outline and every default, shown and collapsed.
 - `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Then run Phase 1S again, because the outline may no longer fit the spec; a breach falls back. The next pass is a new brief section.
@@ -134,7 +137,9 @@ of **sd-model-escalation** that read `complexity` fire on `L`, and this lane run
    - `SPEC = .specs/FEAT-<arg>/00-spec.md`
 2. The architect runs its own bounded discovery, writes `01-plan.md` (a `## Discovery` section and
    the `## Outline` table) and measures the outline against the S limits. It returns one of:
-   - a normal report with a `GATE_BRIEF` block `gate: s-lane` -> present **Face S** of Gate 1.
+   - a normal report with a `GATE_BRIEF` block `gate: s-lane` -> run the **Coverage count** (Phase
+     3, with `LANE = s` and no `IMPACT`), then present **Face S** of Gate 1. A re-invocation that
+     returns `STATUS = s-lane-breach` falls back, below.
    - `STATUS = s-lane-breach` -> **fall back**, below.
 
 **Fall back to the full path.** The decision is the workflow's and asks the user nothing. The
@@ -201,23 +206,51 @@ Not run for an S spec on the S lane: Phase 1S wrote its outline and Face S of Ga
 3. **Do not set status yet** - the Gate 2 branch below decides whether this spec executes its own
    plan or becomes an umbrella. Setting `in-progress` happens inside the resolved branch.
 
+### Coverage count (main thread)
+
+Runs before every presentation of Gate 2, on either face, and before Face S of Gate 1, including
+on a resume (SW-90, ADR 0038). The main thread counts and matches, as `/sd:port` counts
+`uncovered` before its Gate 4. It never judges whether a task really proves a criterion.
+
+1. Compute `uncovered` = the scenario and criterion IDs of `00-spec.md` that no row of the
+   `## Outline` table in `01-plan.md` lists in its `Covers`. Use the parsing shapes of `/sd:verify`
+   (scenario IDs, criterion IDs, `Covers`). A legacy plan with no `## Outline` is counted on the
+   task blocks of `02-tasks.md`.
+2. When `uncovered` is above 0, invoke `sd-spec-architect` once more with:
+   - `TASK = plan`
+   - `STEP = outline`
+   - `SPEC = .specs/FEAT-<arg>/00-spec.md`
+   - `IMPACT = .specs/FEAT-<arg>/03-decisions.md` (on the S lane, `LANE = s` in its place)
+   - `UNCOVERED = <the uncovered scenarios and criteria, verbatim from 00-spec.md>`
+
+   Then count again. Its `GATE_BRIEF` block replaces the first one. One re-invocation only: the
+   count that stands goes to the gate, and the gate's `refine` stays open to the user. A legacy
+   plan with no `## Outline` gets no re-invocation; its count goes straight to the gate.
+3. Any line the user reads about this step names a scenario or criterion by what it requires,
+   never by its `SC-` or `AC-` ID, per the "User-facing text" section of **sd-gate-brief**. The IDs
+   go only in the `UNCOVERED` input.
+
 ### ⛔ Gate 2 - Plan approval (with complexity triage)
 
 STOP. This gate has two faces. Which one you present is decided by the architect's self-assessment
 from Phase 3a step 2 - **not** by adding a separate always-on gate. A spec **under** the decompose
 thresholds sees only the normal plan approval below, with **zero added friction**.
 
-Either face starts the same way: the main thread writes the Gate 2 brief to
-`.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block (the plan face or the
-complexity face, per **sd-gate-brief**; its task rows come from the outline), then shows it verbatim. `details <target>` on either face prints what the target names (no
+Either face starts the same way: the main thread runs the **Coverage count** above, then writes
+the Gate 2 brief to `.specs/FEAT-<arg>/gate-briefs.md` from the architect's `GATE_BRIEF` block and
+the `uncovered` count (the plan face or the complexity face, per **sd-gate-brief**; its task rows
+come from the outline), then shows it verbatim. `details <target>` on either face prints what the target names (no
 target, a task ID, `plan` or `risks`) per **sd-gate-brief** and asks the same question again.
 
 **Face A - normal plan approval** (plan is under threshold). Show the plan brief. Ask:
 
-> Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>) (yes / refine <feedback> / details <target> / abort)
+> Approve plan for FEAT-<arg>? (<N> tasks, complexity <S|M|L>, <C> criteria with no task) (yes / refine <feedback> / details <target> / abort)
 
-- `yes` -> set status=`in-progress` in `00-spec.md` and `index.md`; proceed to Phase 3b (a legacy
-  plan that already has `02-tasks.md` proceeds to Phase 4).
+- `yes` -> permitted only when `<C>` is 0. Set status=`in-progress` in `00-spec.md` and
+  `index.md`; proceed to Phase 3b (a legacy plan that already has `02-tasks.md` proceeds to Phase
+  4). While `<C>` is above 0, record the reply as refused per **sd-gate-brief**, refuse it in one
+  line that names each uncovered criterion in plain words, then ask again: the plan is incomplete,
+  and `refine` is how it gets a covering task.
 - `refine` -> invoke `sd-spec-architect` with `TASK = refine`, `SPEC = .specs/FEAT-<arg>/00-spec.md`, `FEEDBACK = <user feedback>`. Loop back through Phase 3a.
 - `details <target>` -> print what the target names, then ask again.
 - `abort` -> set status=`archived`, exit.
@@ -252,7 +285,8 @@ If the architect returned a **decompose proposal**, ask:
   is written for a split parent. Print the child IDs and tell the user to run `/sd:feature
   <child-arg>` on each, respecting the dependency order. Exit this workflow.
 - `no-split <reason>` -> the user judges the work legitimately atomic (large but cohesive, no clean
-  partition). Treat as Face A `yes`: set status=`in-progress`, proceed to Phase 3b, whose step 0
+  partition). Treat as Face A `yes`, and so permitted only when the `uncovered` count is 0 (refused
+  as Face A refuses `yes`): set status=`in-progress`, proceed to Phase 3b, whose step 0
   escalates the expansion. Log the no-split decision and its reason to `05-retro.md`.
 - `refine` -> `sd-spec-architect` `TASK = refine`; loop back through Phase 3a and its self-assessment.
 - `details <target>` -> print what the target names, then ask again.
@@ -496,6 +530,9 @@ Close-out does its bookkeeping silently and asks at most one question (step 4).
 - **Gate Complexity is a face of Gate 2, not a fourth gate.** It fires ONLY when the plan is over
   threshold; a spec under threshold sees the normal plan approval with zero added friction. This is
   why the workflow still has 3 hard gates - do not describe it as 4.
+- **An uncovered criterion is refused by count, not by judgment (ADR 0038).** The Coverage count
+  of Phase 3 adds no gate and no face. Gate 2 and Face S refuse `yes` while a scenario or
+  criterion has no task, like `/sd:port` Gate 4, and `refine` and `abort` stay open.
 - **Face S is a face of Gate 1, not a fourth gate.** On the S lane Gate 1 approves the spec and the
   outline in one reply, and it discharges Gate 2 as well: its `## Gate 1+2` brief section is the
   evidence of both. The count stays 3. An S spec that breaches the S limits falls back to the full
