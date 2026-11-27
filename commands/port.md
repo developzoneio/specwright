@@ -395,7 +395,8 @@ the same question; the empty-diff proof is never skipped.
    - `UNCOVERED = <the uncovered criteria, verbatim, with step 3's whole-port rule>`
 
    Then re-run step 3's planning-defect check and count again. The count that stands goes to
-   Gate 4.
+   Gate 4. Any line the user reads about this step names a criterion by what it requires, never by
+   its `AC-` ID (**sd-gate-brief**, "User-facing text").
 
 ### ⛔ Gate 4 - Plan approval
 

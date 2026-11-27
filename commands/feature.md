@@ -226,6 +226,9 @@ on a resume (SW-90, ADR 0038). The main thread counts and matches, as `/sd:port`
    Then count again. Its `GATE_BRIEF` block replaces the first one. One re-invocation only: the
    count that stands goes to the gate, and the gate's `refine` stays open to the user. A legacy
    plan with no `## Outline` gets no re-invocation; its count goes straight to the gate.
+3. Any line the user reads about this step names a scenario or criterion by what it requires,
+   never by its `SC-` or `AC-` ID, per the "User-facing text" section of **sd-gate-brief**. The IDs
+   go only in the `UNCOVERED` input.
 
 ### ⛔ Gate 2 - Plan approval (with complexity triage)
 
