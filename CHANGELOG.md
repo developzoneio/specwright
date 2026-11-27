@@ -456,6 +456,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `spec-lint-fixture` matched pair for the narrowed `SL060`. e2e `02`, `05`, `06` and `08`
     exercise the lean format; `07` stays legacy on purpose.
 
+### Removed
+- **`docs/superpowers/` (third-party plugin plans and design specs)** - the plans for shipped work
+  had become copies of the code. The design rationale, hook bash/pwsh parity rules and open
+  follow-ups found nowhere else (re-checked against the current hooks) move to the new
+  `docs/engineering-notes.md`, linked from the Hooks section of `CONTRIBUTING.md`. ADR 0010 gains
+  a note; `historicalExclusions` drops the path.
+
 ### Fixed
 - **`/sd:port` counts criterion coverage before Gate 4 and re-plans at close-out (SW-134)** -
   e2e `17-port-gate-brief` run 1 passed all 6 gates, then failed `/sd:verify`. The run had a

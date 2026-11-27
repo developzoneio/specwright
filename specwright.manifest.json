@@ -92,7 +92,6 @@
 
   "historicalExclusions": [
     "docs/history/",
-    "docs/superpowers/",
     "CHANGELOG.md",
     "_bmad/",
     "_bmad-output/",
