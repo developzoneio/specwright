@@ -15,6 +15,10 @@ directory, no `.specs/constitution.md` and no `.claude/project-config.json`. Eng
 tracked in Jira, in `docs/superpowers/plans/`, and in this `docs/adr/` directory - not through
 `/sd:feature`, `/sd:bug` or `/sd:refactor`.
 
+> Note (2026-11-27): `docs/superpowers/` was removed. The rationale and open follow-ups it held
+> that were recorded nowhere else moved to `docs/engineering-notes.md`. The decision is unchanged:
+> engine work is tracked in Jira and in this directory.
+
 Until this ADR that decision existed only as an absence (ADR 0004 mentions it in passing), so a new
 reader could not tell whether it was deliberate or neglected. It is deliberate, for the reasons
 below.

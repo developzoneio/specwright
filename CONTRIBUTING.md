@@ -80,8 +80,7 @@ What this means in practice:
   nothing fails as a *vacuous claim* rather than passing quietly - otherwise a reword would turn
   the check into a no-op that still reports green.
 - **Writing intentionally historical docs** (superseded counts as a past-state record): put the
-  path in `historicalExclusions`. `docs/history/`, `docs/superpowers/` and `CHANGELOG.md` are
-  already excluded. Never "fix" their numbers to match today's disk state.
+  path in `historicalExclusions`. `docs/history/` and `CHANGELOG.md` are already excluded. Never "fix" their numbers to match today's disk state.
 - **Publishing the current released version**: add a `versionClaims` entry (`file` + a `pattern`
   with one capture group, no `equals`). It is checked against the newest dated
   `## [x.y.z] - <date>` heading in `CHANGELOG.md`, not against a manifest quantity - CHANGELOG is
@@ -446,6 +445,10 @@ Inputs (optional): MODE, REPLAN_SCOPE
 ### Hooks
 
 Hooks come in pairs. If you change `hooks/powershell/foo.ps1`, you also update `hooks/bash/foo.sh`. The repo CI runs `scripts/validate.{ps1,sh}`, which refuses PRs where the pair drifts (along with the other engine-invariant checks).
+
+Before porting logic between the twins, read the parity rules in
+[`docs/engineering-notes.md`](docs/engineering-notes.md#hook-parity-rules): the known bash/pwsh
+pitfalls, and why a green conformance suite proves agreement rather than correctness.
 
 **PowerShell (`*.ps1`) - critical encoding rule:**
 
