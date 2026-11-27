@@ -98,9 +98,10 @@ repo and asserting the validator catches it. CI runs it on all three OSes.
 `tests/hooks/run-conformance.ps1` (pwsh-only by design, see
 [Why the parity harnesses are pwsh-only](#why-the-parity-harnesses-are-pwsh-only)) pipes every
 golden fixture under `tests/hooks/fixtures/` into the bash and PowerShell implementation of each
-hook and fails if their normalized decisions diverge from each other or from the golden. Add a
-fixture case whenever you add hook behavior; `-SelfTest` proves the harness still detects
-divergence.
+hook and fails if their normalized decisions diverge from each other or from the golden. The
+comparison is case-sensitive, so `"Block"` never matches a golden `"block"`. Add a fixture case
+whenever you add hook behavior; `-SelfTest` proves the harness still detects divergence, including
+a drift in case alone.
 
 In a fixture's `input.json`, `{{ROOT}}` is the workspace (the project root) and `{{CWD}}` is the
 session cwd. The session cwd is the root unless `setup.json` names a `"cwd"` subdirectory of the
