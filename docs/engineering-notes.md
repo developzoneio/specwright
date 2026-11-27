@@ -117,10 +117,10 @@ or rule rather than a line number so they survive edits.
 
 ### Worth a ticket first
 
-| Item | Where | Effect |
-|---|---|---|
-| Rule 0 and Rule 0b match a literal `FEAT-` instead of the configured `spec.prefixes.feature` | `spec-gate.{ps1,sh}`, Rule 0 done-ID extraction and Rule 0b; the configured `$featurePrefix` is read but not used there | With a custom feature prefix, an `in-progress -> done` move is a legal Rule 0b edge, so the verify gate is silently off. Both impls agree, so the harness cannot see it |
-| The harness compares canonical JSON with `-eq` | `run-conformance.ps1`, the `$match` line | A case-only drift in a reason string passes. Use `-ceq` |
+| Ticket | Item | Where | Effect |
+|---|---|---|---|
+| SW-136 | Rule 0 and Rule 0b match a literal `FEAT-` instead of the configured `spec.prefixes.feature` | `spec-gate.{ps1,sh}`, Rule 0 done-ID extraction and Rule 0b; the configured `$featurePrefix` is read but not used there. Same root cause: bash `emit_complexity_split_metrics` filters on a literal `FEAT-*` while the pwsh twin takes `-FeaturePrefix` | With a custom feature prefix, an `in-progress -> done` move is a legal Rule 0b edge, so the verify gate is silently off. Both impls agree, so the harness cannot see it |
+| SW-137 | The harness compares canonical JSON with `-eq` | `run-conformance.ps1`, the `$match` line | A case-only drift in a reason string passes. Use `-ceq` |
 
 ### `spec-gate` path handling
 
